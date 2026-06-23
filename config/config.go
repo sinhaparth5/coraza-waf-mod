@@ -12,6 +12,7 @@ type Config struct {
 	Apps          []App       `yaml:"apps"`
 	WAF           WAFConfig   `yaml:"waf"`
 	TLS           TLSConfig   `yaml:"tls"`
+	Geo           GeoConfig   `yaml:"geo"`
 	DB            DBConfig    `yaml:"db"`
 	Admin         AdminConfig `yaml:"admin"`
 }
@@ -47,6 +48,10 @@ type AutoTLSConfig struct {
 type CustomTLSConfig struct {
 	CertFile string `yaml:"cert_file"` // path to PEM certificate
 	KeyFile  string `yaml:"key_file"`  // path to PEM private key
+}
+
+type GeoConfig struct {
+	DBPath string `yaml:"db_path"` // path to GeoLite2-Country.mmdb; empty = geo blocking disabled
 }
 
 type DBConfig struct {

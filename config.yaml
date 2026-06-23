@@ -22,6 +22,13 @@ tls:
   #   cert_file: "./certs/cert.pem"
   #   key_file:  "./certs/key.pem"
 
+# ─── Geo Blocking ────────────────────────────────────────────────────────────
+# Download free DB: https://dev.maxmind.com/geoip/geolite2-free-geolocation-data
+# Place GeoLite2-Country.mmdb in the project root and set the path below.
+# Leave empty to disable geo blocking.
+geo:
+  db_path: ""  # e.g. "./GeoLite2-Country.mmdb"
+
 # ─── WAF ─────────────────────────────────────────────────────────────────────
 waf:
   enabled: true

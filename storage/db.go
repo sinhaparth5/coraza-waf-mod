@@ -56,27 +56,132 @@ func (db *DB) Close() error {
 func (db *DB) migrate() error {
 	_, err := db.conn.Exec(`
 	CREATE TABLE IF NOT EXISTS requests (
-		id         INTEGER PRIMARY KEY AUTOINCREMENT,
-		ts         DATETIME NOT NULL,
-		app_name   TEXT NOT NULL,
-		real_ip    TEXT NOT NULL,
-		method     TEXT NOT NULL,
-		host       TEXT NOT NULL,
-		path       TEXT NOT NULL,
-		status     INTEGER NOT NULL,
-		blocked    INTEGER NOT NULL DEFAULT 0,
-		rule_id    INTEGER NOT NULL DEFAULT 0,
-		action     TEXT NOT NULL DEFAULT '',
-		user_agent TEXT NOT NULL DEFAULT '',
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		ts          DATETIME NOT NULL,
+		app_name    TEXT NOT NULL,
+		real_ip     TEXT NOT NULL,
+		method      TEXT NOT NULL,
+		host        TEXT NOT NULL,
+		path        TEXT NOT NULL,
+		status      INTEGER NOT NULL,
+		blocked     INTEGER NOT NULL DEFAULT 0,
+		rule_id     INTEGER NOT NULL DEFAULT 0,
+		action      TEXT NOT NULL DEFAULT '',
+		user_agent  TEXT NOT NULL DEFAULT '',
 		duration_ms INTEGER NOT NULL DEFAULT 0
 	);
-
 	CREATE INDEX IF NOT EXISTS idx_requests_ts      ON requests(ts);
 	CREATE INDEX IF NOT EXISTS idx_requests_ip      ON requests(real_ip);
 	CREATE INDEX IF NOT EXISTS idx_requests_blocked ON requests(blocked);
 	CREATE INDEX IF NOT EXISTS idx_requests_app     ON requests(app_name);
+
+	CREATE TABLE IF NOT EXISTS ip_rules (
+		id         INTEGER PRIMARY KEY AUTOINCREMENT,
+		app_name   TEXT NOT NULL DEFAULT '',
+		ip         TEXT NOT NULL,
+		rule_type  TEXT NOT NULL CHECK(rule_type IN ('block','allow')),
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(app_name, ip)
+	);
+
+	CREATE TABLE IF NOT EXISTS geo_rules (
+		id           INTEGER PRIMARY KEY AUTOINCREMENT,
+		app_name     TEXT NOT NULL DEFAULT '',
+		country_code TEXT NOT NULL,
+		rule_type    TEXT NOT NULL CHECK(rule_type IN ('block','allow')),
+		created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(app_name, country_code)
+	);
 	`)
 	return err
+}
+
+// ── IP rules ─────────────────────────────────────────────────────────────────
+
+type IPRule struct {
+	ID        int
+	AppName   string // "" = global
+	IP        string
+	RuleType  string // "block" | "allow"
+	CreatedAt time.Time
+}
+
+func (db *DB) AddIPRule(appName, ip, ruleType string) error {
+	_, err := db.conn.Exec(
+		`INSERT INTO ip_rules (app_name, ip, rule_type) VALUES (?, ?, ?)
+		 ON CONFLICT(app_name, ip) DO UPDATE SET rule_type = excluded.rule_type`,
+		appName, ip, ruleType,
+	)
+	return err
+}
+
+func (db *DB) RemoveIPRule(id int) error {
+	_, err := db.conn.Exec(`DELETE FROM ip_rules WHERE id = ?`, id)
+	return err
+}
+
+func (db *DB) ListIPRules() ([]IPRule, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, app_name, ip, rule_type, created_at FROM ip_rules ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var rules []IPRule
+	for rows.Next() {
+		var r IPRule
+		if err := rows.Scan(&r.ID, &r.AppName, &r.IP, &r.RuleType, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		rules = append(rules, r)
+	}
+	return rules, rows.Err()
+}
+
+// ── Geo rules ─────────────────────────────────────────────────────────────────
+
+type GeoRule struct {
+	ID          int
+	AppName     string // "" = global
+	CountryCode string // ISO 3166-1 alpha-2 (e.g. "CN", "RU")
+	RuleType    string // "block" | "allow"
+	CreatedAt   time.Time
+}
+
+func (db *DB) AddGeoRule(appName, countryCode, ruleType string) error {
+	_, err := db.conn.Exec(
+		`INSERT INTO geo_rules (app_name, country_code, rule_type) VALUES (?, ?, ?)
+		 ON CONFLICT(app_name, country_code) DO UPDATE SET rule_type = excluded.rule_type`,
+		appName, countryCode, ruleType,
+	)
+	return err
+}
+
+func (db *DB) RemoveGeoRule(id int) error {
+	_, err := db.conn.Exec(`DELETE FROM geo_rules WHERE id = ?`, id)
+	return err
+}
+
+func (db *DB) ListGeoRules() ([]GeoRule, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, app_name, country_code, rule_type, created_at FROM geo_rules ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var rules []GeoRule
+	for rows.Next() {
+		var r GeoRule
+		if err := rows.Scan(&r.ID, &r.AppName, &r.CountryCode, &r.RuleType, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		rules = append(rules, r)
+	}
+	return rules, rows.Err()
 }
 
 // InsertRequest writes one request log entry.

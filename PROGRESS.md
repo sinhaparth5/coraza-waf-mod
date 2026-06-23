@@ -48,16 +48,17 @@ A single-binary Go WAF + reverse proxy with embedded Coraza, SQLite storage, and
 - [x] Blocked requests flagged with WAF rule_id + action
 - [x] Query helpers ready for dashboard: `GetStats()`, `ListRequests()` with filters
 
-### Phase 4 — IP Blocking + Geo Blocking
+### Phase 4 — IP Blocking + Geo Blocking ✅ COMPLETE
 **IP Blocking**
-- [ ] Global + per-app IP blacklist / whitelist
-- [ ] In-memory map synced from SQLite (fast lookup)
-- [ ] API to add / remove IPs
+- [x] Global + per-app IP blacklist / whitelist (`blocklist/ip.go`)
+- [x] In-memory map synced from SQLite on startup (`Reload()`)
+- [x] `ip_rules` table with CRUD methods in storage
 
 **Geo Blocking**
-- [ ] MaxMind GeoLite2-Country `.mmdb` loaded via `geoip2-golang`
-- [ ] Per-app country allow-list / block-list stored in SQLite
-- [ ] Lookup on every request; block with 403 + reason
+- [x] MaxMind GeoLite2-Country `.mmdb` loaded via `geoip2-golang` (`geo/geoip.go`)
+- [x] Per-app + global country allow/block rules in `geo_rules` table
+- [x] Lookup on every request; 403 with country code in response
+- [x] Check order: IP block → Geo block → WAF (fastest checks first)
 
 ### Phase 5 — Web UI Dashboard
 - [ ] Admin routes protected (basic auth or API key)

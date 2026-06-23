@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"os"
 
+	"coraza-waf-mod/blocklist"
 	"coraza-waf-mod/config"
+	"coraza-waf-mod/geo"
 	"coraza-waf-mod/proxy"
 	"coraza-waf-mod/storage"
 	"coraza-waf-mod/waf"
@@ -38,6 +40,17 @@ func main() {
 	}
 	defer db.Close()
 
+	ipbl, err := blocklist.NewIPBlocklist(db)
+	if err != nil {
+		log.Fatalf("ip blocklist: %v", err)
+	}
+
+	geoBl, err := geo.New(cfg.Geo.DBPath, db)
+	if err != nil {
+		log.Fatalf("geo blocker: %v", err)
+	}
+	defer geoBl.Close()
+
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(middleware.Recover())
@@ -51,7 +64,7 @@ func main() {
 		},
 	}))
 
-	h := proxy.NewHandler(cfg, engine, db)
+	h := proxy.NewHandler(cfg, engine, db, ipbl, geoBl)
 	e.Any("/*", h.Handle)
 
 	switch cfg.TLS.Mode {
