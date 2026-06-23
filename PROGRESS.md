@@ -20,25 +20,26 @@ A single-binary Go WAF + reverse proxy with embedded Coraza, SQLite storage, and
 
 ## Phases
 
-### Phase 0 — Project Setup
+### Phase 0 — Project Setup ✅ COMPLETE
 - [x] Go module initialised (`go.mod`)
 - [x] Core dependencies added (Coraza v3, Echo v4, goccy/go-yaml)
-- [ ] Folder structure created (`config/`, `waf/`, `proxy/`, `geo/`, `storage/`, `ui/`)
-- [ ] `config.yaml` skeleton
+- [x] Folder structure created (`config/`, `waf/`, `proxy/`, `geo/`, `storage/`, `ui/`)
+- [x] `config.yaml` skeleton
 
-### Phase 1 — Core Reverse Proxy + Coraza
-- [ ] Echo server boots and listens
-- [ ] Single-backend reverse proxy working
-- [ ] Coraza WAF engine initialised (OWASP CRS loaded)
-- [ ] Every request runs through a Coraza transaction
-- [ ] Interrupted requests (blocked by WAF) return 403
-- [ ] Real client IP extracted: `CF-Connecting-IP` → `X-Forwarded-For` → `X-Real-IP`
+### Phase 1 — Core Reverse Proxy + Coraza (in progress)
+- [x] Echo server boots and listens
+- [x] Single-backend reverse proxy working (tested: 200 proxied through)
+- [ ] Coraza WAF engine initialised with **OWASP CRS loaded** ← next up
+- [x] Every request runs through a Coraza transaction (`waf/engine.go`)
+- [x] Interrupted requests (blocked by WAF) return 403
+- [x] Real client IP extracted: `CF-Connecting-IP` → `X-Forwarded-For` → `X-Real-IP`
+- [x] TLS support: Let's Encrypt auto (`mode: auto`) + custom cert (`mode: custom`) + plain HTTP (`mode: off`)
 
-### Phase 2 — Multi-App Support
-- [ ] `config.yaml` supports multiple `apps:` entries
-- [ ] Route by `Host` header (virtual hosting)
-- [ ] Route by path prefix (optional)
-- [ ] Hot-reload config on SIGHUP (optional, Phase 6)
+### Phase 2 — Multi-App Support (partially done)
+- [x] `config.yaml` supports multiple `apps:` entries
+- [x] Route by `Host` header (virtual hosting)
+- [x] Route by path prefix
+- [ ] Hot-reload config on SIGHUP (Phase 6)
 
 ### Phase 3 — Structured Logging to SQLite
 - [ ] SQLite DB initialised (`modernc.org/sqlite`)
@@ -108,9 +109,9 @@ coraza-waf-mod/
 
 ## Current Status
 
-**Phase 0 — in progress.** Dependencies are in `go.mod`; folder structure not yet created.
+**Phase 1 — in progress.** Core proxy + WAF engine built and tested. Binary compiles and proxies requests correctly. Real IP extraction is in place.
 
-Next up: create the folder skeleton, `config/config.go`, and `main.go`, then move into Phase 1.
+**Next up:** Download OWASP CRS rules into `rules/` and verify WAF actually blocks attack payloads (SQL injection, XSS, etc). That completes Phase 1.
 
 ---
 

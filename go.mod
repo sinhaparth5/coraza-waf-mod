@@ -3,6 +3,7 @@ module coraza-waf-mod
 go 1.25.6
 
 require (
+	github.com/corazawaf/coraza-coreruleset v0.0.0-20240226094324-415b1017abdc // indirect
 	github.com/corazawaf/coraza/v3 v3.7.0 // indirect
 	github.com/corazawaf/libinjection-go v0.3.2 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect

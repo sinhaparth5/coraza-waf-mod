@@ -8,6 +8,7 @@ import (
 
 	"coraza-waf-mod/config"
 
+	"github.com/corazawaf/coraza-coreruleset"
 	"github.com/corazawaf/coraza/v3"
 )
 
@@ -28,6 +29,7 @@ func New(cfg config.WAFConfig) (*Engine, error) {
 		return &Engine{enabled: false}, nil
 	}
 
+	// Base directives + OWASP CRS (embedded via coraza-coreruleset).
 	directives := `
 SecRuleEngine On
 SecRequestBodyAccess On
@@ -35,10 +37,16 @@ SecResponseBodyAccess Off
 SecRequestBodyLimit 13107200
 SecRequestBodyNoFilesLimit 131072
 SecDebugLogLevel 0
+Include @coraza.conf-recommended
+Include @crs-setup.conf.example
+Include @owasp_crs/*.conf
 `
 
-	wafCfg := coraza.NewWAFConfig().WithDirectives(directives)
+	wafCfg := coraza.NewWAFConfig().
+		WithRootFS(coreruleset.FS).
+		WithDirectives(directives)
 
+	// Load any extra custom rules on top of CRS.
 	if cfg.RulesDir != "" {
 		wafCfg = wafCfg.WithDirectives(fmt.Sprintf(`Include "%s/*.conf"`, cfg.RulesDir))
 	}

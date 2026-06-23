@@ -7,11 +7,13 @@ import (
 )
 
 type Config struct {
-	ListenAddr string      `yaml:"listen_addr"`
-	Apps       []App       `yaml:"apps"`
-	WAF        WAFConfig   `yaml:"waf"`
-	DB         DBConfig    `yaml:"db"`
-	Admin      AdminConfig `yaml:"admin"`
+	ListenAddr    string      `yaml:"listen_addr"`
+	ListenAddrTLS string      `yaml:"listen_addr_tls"`
+	Apps          []App       `yaml:"apps"`
+	WAF           WAFConfig   `yaml:"waf"`
+	TLS           TLSConfig   `yaml:"tls"`
+	DB            DBConfig    `yaml:"db"`
+	Admin         AdminConfig `yaml:"admin"`
 }
 
 type App struct {
@@ -24,6 +26,27 @@ type App struct {
 type WAFConfig struct {
 	Enabled  bool   `yaml:"enabled"`
 	RulesDir string `yaml:"rules_dir"`
+}
+
+// TLSConfig controls how the proxy presents TLS to clients.
+// mode: "off"    — plain HTTP only (default)
+// mode: "auto"   — Let's Encrypt via ACME; certs cached in CacheDir
+// mode: "custom" — user-provided cert + key files
+type TLSConfig struct {
+	Mode     string          `yaml:"mode"`      // "off" | "auto" | "custom"
+	CacheDir string          `yaml:"cache_dir"` // where certs are stored (default: "./certs")
+	Auto     AutoTLSConfig   `yaml:"auto"`
+	Custom   CustomTLSConfig `yaml:"custom"`
+}
+
+type AutoTLSConfig struct {
+	Domains []string `yaml:"domains"` // domains to issue certs for
+	Email   string   `yaml:"email"`   // contact email for Let's Encrypt
+}
+
+type CustomTLSConfig struct {
+	CertFile string `yaml:"cert_file"` // path to PEM certificate
+	KeyFile  string `yaml:"key_file"`  // path to PEM private key
 }
 
 type DBConfig struct {
@@ -51,7 +74,16 @@ func Load(path string) (*Config, error) {
 
 func applyDefaults(cfg *Config) {
 	if cfg.ListenAddr == "" {
-		cfg.ListenAddr = ":8080"
+		cfg.ListenAddr = ":80"
+	}
+	if cfg.ListenAddrTLS == "" {
+		cfg.ListenAddrTLS = ":443"
+	}
+	if cfg.TLS.Mode == "" {
+		cfg.TLS.Mode = "off"
+	}
+	if cfg.TLS.CacheDir == "" {
+		cfg.TLS.CacheDir = "./certs"
 	}
 	if cfg.DB.Path == "" {
 		cfg.DB.Path = "waf.db"

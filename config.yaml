@@ -1,23 +1,48 @@
-listen_addr: ":8080"
+# ─── Network ─────────────────────────────────────────────────────────────────
+listen_addr:     ":80"    # HTTP port (ACME challenge + redirect when TLS is on)
+listen_addr_tls: ":443"   # HTTPS port (only used when tls.mode is auto or custom)
 
+# ─── TLS ─────────────────────────────────────────────────────────────────────
+# mode: "off"    — plain HTTP (default, good for local dev / behind Cloudflare)
+# mode: "auto"   — Let's Encrypt; server must be publicly reachable on port 80
+# mode: "custom" — bring your own cert + key files
+tls:
+  mode: "off"
+  cache_dir: "./certs"   # Let's Encrypt certs cached here; also store custom certs here
+
+  # Uncomment for Let's Encrypt:
+  # auto:
+  #   domains:
+  #     - "example.com"
+  #     - "www.example.com"
+  #   email: "admin@example.com"
+
+  # Uncomment for custom cert:
+  # custom:
+  #   cert_file: "./certs/cert.pem"
+  #   key_file:  "./certs/key.pem"
+
+# ─── WAF ─────────────────────────────────────────────────────────────────────
 waf:
   enabled: true
-  rules_dir: ""   # set to "./rules" once you add OWASP CRS files
+  rules_dir: ""   # optional: path to extra .conf files loaded on top of OWASP CRS
 
+# ─── Database ────────────────────────────────────────────────────────────────
 db:
   path: "./waf.db"
 
+# ─── Admin UI ────────────────────────────────────────────────────────────────
 admin:
   path: "/admin"
   username: "admin"
   password: "changeme"
 
+# ─── Backend Apps ────────────────────────────────────────────────────────────
 apps:
   - name: "example"
-    host: "localhost"   # match on Host header
+    host: "localhost"     # matched against the Host header
     backend: "http://localhost:3000"
 
-  # Add more backends here:
   # - name: "api"
   #   host: "api.example.com"
   #   backend: "http://api-app:8080"
