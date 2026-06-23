@@ -1,111 +1,386 @@
-{{define "heading"}}Dashboard{{end}}
+{{define "actions"}}
+<a href="/admin/logs" class="btn-primary" style="display:flex;align-items:center;gap:6px;text-decoration:none;">
+  <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02" style="font-size:13px;"></i>
+  Live feed
+</a>
+{{end}}
 
 {{define "content"}}
 
-<!-- Stats row -->
-<div class="stats stats-horizontal shadow-sm bg-base-200 border border-base-300 w-full mb-6">
+<!-- ── Row 1: Three stat cards ── -->
+<div style="display:flex; gap:16px; margin-bottom:16px;">
 
-  <div class="stat">
-    <div class="stat-figure text-primary">
-      <i class="hgi hgi-stroke hgi-rounded hgi-activity-01 text-3xl"></i>
+  <!-- Card 1: Protected Apps -->
+  <div class="card" style="width:220px; flex-shrink:0; overflow:hidden;">
+    <!-- Gradient header with shield -->
+    <div style="height:120px; background:linear-gradient(135deg,#E4F5EC,#C8EDD8); display:flex; align-items:center; justify-content:center; position:relative;">
+      <i class="hgi hgi-stroke hgi-rounded hgi-shield-01" style="font-size:64px; color:#5DBB7B; opacity:0.45;"></i>
+      <!-- Status pill -->
+      <div style="position:absolute; bottom:12px; left:12px; display:flex; align-items:center; gap:6px; background:rgba(15,23,42,0.72); backdrop-filter:blur(4px); border-radius:999px; padding:5px 12px;">
+        <span style="width:6px; height:6px; border-radius:50%; background:#5DBB7B; display:inline-block;"></span>
+        <span style="font-size:11px; color:#fff; font-weight:500;">WAF Active</span>
+        <span style="font-size:10px; color:rgba(255,255,255,0.5);">+</span>
+      </div>
     </div>
-    <div class="stat-title text-xs opacity-60">Requests Today</div>
-    <div class="stat-value text-2xl text-primary">{{.Stats.TotalToday}}</div>
-    <div class="stat-desc opacity-50">All incoming traffic</div>
+    <!-- App list -->
+    <div style="padding:14px 16px;">
+      <p style="font-size:11px; color:#94A3B8; margin-bottom:10px;">Protected backends</p>
+      {{range .Apps}}
+      <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #F8F9FB;">
+        <div style="width:26px; height:26px; border-radius:50%; background:#E4F5EC; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01" style="font-size:11px; color:#5DBB7B;"></i>
+        </div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:12px; font-weight:600; color:#1E293B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{.Name}}</div>
+          <div style="font-size:10px; color:#94A3B8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{.Backend}}</div>
+        </div>
+        <span style="width:6px; height:6px; border-radius:50%; background:#5DBB7B; flex-shrink:0;"></span>
+      </div>
+      {{else}}
+      <div style="text-align:center; padding:16px 0; font-size:11px; color:#94A3B8;">No apps configured</div>
+      {{end}}
+    </div>
   </div>
 
-  <div class="stat">
-    <div class="stat-figure text-error">
-      <i class="hgi hgi-stroke hgi-rounded hgi-shield-ban text-3xl"></i>
+  <!-- Card 2: Traffic stats + dot matrix -->
+  <div class="card" style="flex:1; padding:20px;">
+    <div style="display:flex; align-items:flex-start; gap:10px; margin-bottom:4px;">
+      <div style="width:28px; height:28px; border-radius:50%; background:#E4F5EC; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:2px;">
+        <i class="hgi hgi-stroke hgi-rounded hgi-activity-01" style="font-size:12px; color:#5DBB7B;"></i>
+      </div>
+      <div>
+        <div style="display:flex; align-items:baseline; gap:10px;">
+          <span style="font-size:36px; font-weight:800; color:#0F172A; line-height:1;">{{.Stats.TotalToday}}</span>
+          <span style="font-size:11px; font-weight:600; background:#E4F5EC; color:#3DA05E; padding:2px 8px; border-radius:999px;">Active</span>
+        </div>
+        <p style="font-size:12px; color:#94A3B8; margin-top:2px;">requests today</p>
+      </div>
     </div>
-    <div class="stat-title text-xs opacity-60">Blocked Today</div>
-    <div class="stat-value text-2xl text-error">{{.Stats.BlockedToday}}</div>
-    <div class="stat-desc opacity-50">WAF + IP + Geo</div>
+
+    <!-- Dot activity matrix (decorative, evokes request density) -->
+    <div style="margin-top:18px; display:flex; flex-direction:column; gap:6px;">
+      <div style="display:flex; gap:6px;">
+        <div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.12;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.22;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.32;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.42;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.52;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.62;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.72;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.82;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.92;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.08;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.15;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.25;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.36;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.48;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.60;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.72;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.84;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.92;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.06;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.09;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.14;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.20;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.30;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.42;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.55;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.68;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.80;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.90;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.05;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.07;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.10;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.12;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.18;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.26;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.36;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.48;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.60;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.72;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.84;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.94;"></div>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div style="display:flex; align-items:center; gap:8px; margin-top:14px;">
+      <span style="font-size:11px; color:#94A3B8;">Low</span>
+      <div style="display:flex; gap:4px; align-items:center;">
+        <div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.15;"></div>
+        <div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.40;"></div>
+        <div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.70;"></div>
+        <div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div>
+      </div>
+      <span style="font-size:11px; color:#94A3B8;">High traffic</span>
+    </div>
   </div>
 
-  <div class="stat">
-    <div class="stat-figure text-secondary">
-      <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01 text-3xl"></i>
-    </div>
-    <div class="stat-title text-xs opacity-60">Total Requests</div>
-    <div class="stat-value text-2xl">{{.Stats.TotalAll}}</div>
-    <div class="stat-desc opacity-50">All time</div>
-  </div>
+  <!-- Card 3: Dark blocked card -->
+  <div style="width:210px; flex-shrink:0; border-radius:18px; padding:20px; display:flex; flex-direction:column; background:#2B4870;">
 
-  <div class="stat">
-    <div class="stat-figure text-warning">
-      <i class="hgi hgi-stroke hgi-rounded hgi-shield-ban text-3xl"></i>
+    <!-- Blocked today -->
+    <div style="padding-bottom:16px; margin-bottom:16px; border-bottom:1px solid rgba(255,255,255,.10);">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+        <div style="display:flex; align-items:center; gap:7px;">
+          <div style="width:22px; height:22px; border-radius:50%; background:rgba(255,255,255,.10); display:flex; align-items:center; justify-content:center;">
+            <i class="hgi hgi-stroke hgi-rounded hgi-shield-ban" style="font-size:11px; color:#fff;"></i>
+          </div>
+          <span style="font-size:11px; color:rgba(255,255,255,.55);">Blocked today</span>
+        </div>
+        <span style="font-size:11px; font-weight:600; background:rgba(93,187,123,.28); color:#7EE0A2; padding:2px 8px; border-radius:999px;">{{.BlockRate}}%</span>
+      </div>
+      <div style="font-size:40px; font-weight:800; color:#fff; line-height:1.1;">{{.Stats.BlockedToday}}</div>
+      <div style="font-size:11px; color:rgba(255,255,255,.45); margin-top:2px;">threats blocked</div>
     </div>
-    <div class="stat-title text-xs opacity-60">Total Blocked</div>
-    <div class="stat-value text-2xl text-warning">{{.Stats.BlockedAll}}</div>
-    <div class="stat-desc opacity-50">All time</div>
+
+    <!-- All-time -->
+    <div>
+      <div style="display:flex; align-items:center; gap:7px; margin-bottom:8px;">
+        <div style="width:22px; height:22px; border-radius:50%; background:rgba(255,255,255,.10); display:flex; align-items:center; justify-content:center;">
+          <i class="hgi hgi-stroke hgi-rounded hgi-earth" style="font-size:11px; color:#fff;"></i>
+        </div>
+        <span style="font-size:11px; color:rgba(255,255,255,.55);">All time</span>
+      </div>
+      <div style="font-size:26px; font-weight:800; color:#fff; line-height:1.1;">{{.Stats.BlockedAll}}</div>
+      <div style="font-size:11px; color:rgba(255,255,255,.40); margin-top:2px;">total blocked</div>
+    </div>
   </div>
 
 </div>
 
-<!-- Recent requests -->
-<div class="card bg-base-200 border border-base-300 shadow-sm">
-  <div class="card-body p-0">
-    <div class="flex items-center justify-between px-5 py-3 border-b border-base-300">
-      <h2 class="text-sm font-semibold flex items-center gap-2">
-        <i class="hgi hgi-stroke hgi-rounded hgi-activity-01 text-base text-primary"></i>
-        Recent Requests
-      </h2>
-      <a href="/admin/logs" class="btn btn-xs btn-ghost gap-1">
-        View live logs
-        <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02 text-sm"></i>
+<!-- ── Row 2: Breakdown + Recent threats ── -->
+<div style="display:flex; gap:16px; margin-bottom:16px;">
+
+  <!-- Request breakdown (donut + legend) -->
+  <div class="card" style="flex:1; padding:20px;">
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:4px;">
+      <div>
+        <p style="font-size:11px; color:#94A3B8; margin-bottom:2px;">Traffic analysis</p>
+        <h3 style="font-size:17px; font-weight:700; color:#0F172A;">Request breakdown</h3>
+      </div>
+      <a href="/admin/logs" style="width:28px; height:28px; border-radius:50%; border:1px solid #ECEEF2; display:flex; align-items:center; justify-content:center; color:#94A3B8; text-decoration:none;">
+        <i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-01" style="font-size:12px;"></i>
       </a>
     </div>
 
-    <div class="overflow-x-auto">
-      <table class="table table-sm table-zebra w-full">
-        <thead>
-          <tr class="text-xs opacity-50 uppercase">
-            <th>Time</th>
-            <th>App</th>
-            <th>IP</th>
-            <th>Method</th>
-            <th>Path</th>
-            <th>Status</th>
-            <th class="text-right">Duration</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{range .Recent}}
-          <tr class="{{if .Blocked}}bg-error/5{{end}} hover">
-            <td class="opacity-50 whitespace-nowrap text-xs tabular-nums">{{fmtTime .Timestamp}}</td>
-            <td class="font-medium text-xs">{{.AppName}}</td>
-            <td class="text-xs">
-              <div class="flex items-center gap-1.5">
-                {{if .Country}}<span class="{{flagClass .Country}} rounded-sm" style="width:14px;height:10px;background-size:cover;display:inline-block;"></span>{{end}}
-                <span class="font-mono">{{.RealIP}}</span>
-              </div>
-            </td>
-            <td><span class="badge badge-ghost badge-xs font-mono font-semibold">{{.Method}}</span></td>
-            <td class="font-mono text-xs opacity-70 max-w-[200px] truncate">{{truncate .Path 40}}</td>
-            <td>
-              <div class="flex items-center gap-1.5">
-                {{if ge .Status 500}}<span class="badge badge-error badge-xs">{{.Status}}</span>
-                {{else if ge .Status 400}}<span class="badge badge-warning badge-xs">{{.Status}}</span>
-                {{else if ge .Status 300}}<span class="badge badge-info badge-xs">{{.Status}}</span>
-                {{else}}<span class="badge badge-success badge-xs">{{.Status}}</span>{{end}}
-                {{if .Blocked}}<span class="badge badge-error badge-outline badge-xs gap-0.5"><i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-[10px]"></i> BLOCKED</span>{{end}}
-              </div>
-            </td>
-            <td class="text-right opacity-40 text-xs tabular-nums">{{fmtDur .Duration}}</td>
-          </tr>
-          {{else}}
-          <tr>
-            <td colspan="7" class="text-center py-12 opacity-40">
-              <i class="hgi hgi-stroke hgi-rounded hgi-activity-01 text-4xl block mb-2"></i>
-              No requests yet — send some traffic through the proxy
-            </td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
+    <!-- SVG donut ring -->
+    <div style="display:flex; align-items:center; justify-content:center; margin:20px 0;">
+      <div style="position:relative; width:120px; height:120px;">
+        <svg viewBox="0 0 120 120" style="width:120px;height:120px;transform:rotate(-90deg);">
+          <circle cx="60" cy="60" r="50" fill="none" stroke="#F0F2F5" stroke-width="12"/>
+          <circle cx="60" cy="60" r="50" fill="none" stroke="#5DBB7B" stroke-width="12"
+            stroke-dasharray="{{.AllowedArc}} 314" stroke-linecap="round"/>
+          <circle cx="60" cy="60" r="50" fill="none" stroke="#2B4870" stroke-width="12"
+            stroke-dasharray="{{.BlockedArc}} 314" stroke-dashoffset="-{{.AllowedArc}}"
+            stroke-linecap="round"/>
+        </svg>
+        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+          <span style="font-size:22px; font-weight:800; color:#0F172A;">{{.Stats.TotalToday}}</span>
+          <span style="font-size:10px; color:#94A3B8;">requests</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="width:10px; height:10px; border-radius:50%; background:#5DBB7B; display:inline-block;"></span>
+          <span style="font-size:12px; color:#64748B;">Allowed</span>
+        </div>
+        <span style="font-size:12px; font-weight:600; color:#1E293B;">{{sub .Stats.TotalToday .Stats.BlockedToday}}</span>
+      </div>
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="width:10px; height:10px; border-radius:50%; background:#2B4870; display:inline-block;"></span>
+          <span style="font-size:12px; color:#64748B;">Blocked</span>
+        </div>
+        <span style="font-size:12px; font-weight:600; color:#1E293B;">{{.Stats.BlockedToday}}</span>
+      </div>
     </div>
   </div>
+
+  <!-- Recent threats -->
+  <div class="card" style="flex:1; padding:20px;">
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:4px;">
+      <div>
+        <p style="font-size:11px; color:#94A3B8; margin-bottom:2px;">WAF detections</p>
+        <h3 style="font-size:17px; font-weight:700; color:#0F172A;">Recent threats</h3>
+      </div>
+      <a href="/admin/logs" style="width:28px; height:28px; border-radius:50%; border:1px solid #ECEEF2; display:flex; align-items:center; justify-content:center; color:#94A3B8; text-decoration:none;">
+        <i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-01" style="font-size:12px;"></i>
+      </a>
+    </div>
+
+    <!-- Top blocked IP avatars -->
+    <div style="display:flex; gap:8px; margin:18px 0 14px;">
+      {{range $i, $r := .TopBlocked}}{{if lt $i 3}}
+      <div style="width:56px; height:56px; border-radius:14px; background:#F5F7FA; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; overflow:hidden;">
+        {{if $r.Country}}
+        <span class="{{flagClass $r.Country}}" style="width:22px;height:16px;background-size:cover;display:block;border-radius:2px;"></span>
+        {{else}}
+        <i class="hgi hgi-stroke hgi-rounded hgi-earth" style="font-size:18px;color:#94A3B8;"></i>
+        {{end}}
+        <span class="mono" style="font-size:9px; color:#94A3B8; overflow:hidden; white-space:nowrap; max-width:52px; text-overflow:ellipsis;">{{truncate $r.RealIP 9}}</span>
+      </div>
+      {{end}}{{end}}
+      {{if .TopBlocked}}
+      <div style="width:56px; height:56px; border-radius:14px; background:#2B4870; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;">
+        <i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-02" style="font-size:14px; color:rgba(255,255,255,.65);"></i>
+        <span style="font-size:9px; color:rgba(255,255,255,.5);">More</span>
+      </div>
+      {{end}}
+    </div>
+
+    <div style="font-size:12px; color:#94A3B8; margin-bottom:12px;">
+      <span style="font-weight:600; color:#1E293B;">{{.Stats.BlockedToday}} threats</span> detected today
+    </div>
+
+    <!-- Static decorative bar chart -->
+    <div style="display:flex; gap:3px; height:28px; align-items:flex-end;">
+      <div style="flex:1;border-radius:3px 3px 0 0;background:#5DBB7B;height:35%;opacity:.5;"></div>
+      <div style="flex:1;border-radius:3px 3px 0 0;background:#5DBB7B;height:50%;opacity:.6;"></div>
+      <div style="flex:1;border-radius:3px 3px 0 0;background:#5DBB7B;height:65%;opacity:.7;"></div>
+      <div style="flex:1;border-radius:3px 3px 0 0;background:#5DBB7B;height:45%;opacity:.6;"></div>
+      <div style="flex:1;border-radius:3px 3px 0 0;background:#5DBB7B;height:80%;opacity:.8;"></div>
+      <div style="flex:1;border-radius:3px 3px 0 0;background:#5DBB7B;height:60%;opacity:.7;"></div>
+      <div style="flex:1;border-radius:3px 3px 0 0;background:#94A3B8;height:30%;opacity:.4;"></div>
+      <div style="flex:1;border-radius:3px 3px 0 0;background:#94A3B8;height:45%;opacity:.4;"></div>
+      <div style="flex:1;border-radius:3px 3px 0 0;background:#5DBB7B;height:100%;"></div>
+      <div style="flex:1;border-radius:3px 3px 0 0;background:#5DBB7B;height:70%;opacity:.85;"></div>
+      <div style="flex:1;border-radius:3px 3px 0 0;background:#94A3B8;height:25%;opacity:.35;"></div>
+      <div style="flex:1;border-radius:3px 3px 0 0;background:#94A3B8;height:40%;opacity:.4;"></div>
+    </div>
+    <div style="display:flex; gap:14px; margin-top:8px;">
+      <span style="display:flex; align-items:center; gap:4px; font-size:10px; color:#64748B;">
+        <span style="width:8px;height:8px;border-radius:50%;background:#5DBB7B;display:inline-block;"></span>Allowed
+      </span>
+      <span style="display:flex; align-items:center; gap:4px; font-size:10px; color:#64748B;">
+        <span style="width:8px;height:8px;border-radius:50%;background:#94A3B8;display:inline-block;"></span>Blocked
+      </span>
+    </div>
+  </div>
+
 </div>
 
+<!-- ── Recent requests table ── -->
+<div class="card" style="overflow:hidden;">
+  <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid #F5F7FA;">
+    <div>
+      <p style="font-size:11px; color:#94A3B8; margin-bottom:2px;">Traffic monitor</p>
+      <h3 style="font-size:15px; font-weight:700; color:#0F172A;">Recent requests</h3>
+    </div>
+    <a href="/admin/logs" style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:#5DBB7B; border:1px solid #C8EDD8; border-radius:999px; padding:5px 14px; text-decoration:none;">
+      <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02" style="font-size:12px;"></i>
+      Live feed
+    </a>
+  </div>
+  <table style="width:100%; border-collapse:collapse; font-size:12px;">
+    <thead>
+      <tr style="border-bottom:1px solid #F5F7FA;">
+        <th style="text-align:left; padding:10px 20px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Time</th>
+        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">App</th>
+        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Source</th>
+        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Method</th>
+        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Path</th>
+        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Status</th>
+        <th style="text-align:right; padding:10px 20px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Dur</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Recent}}
+      <tr style="border-bottom:1px solid #F8F9FB; {{if .Blocked}}background:#FEF2F2;{{end}} transition:background .1s;">
+        <td class="mono" style="padding:10px 20px; color:#94A3B8; white-space:nowrap;">{{fmtTime .Timestamp}}</td>
+        <td style="padding:10px 12px; font-weight:600; color:#334155;">{{.AppName}}</td>
+        <td style="padding:10px 12px;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            {{if .Country}}<span class="{{flagClass .Country}}" style="width:14px;height:10px;background-size:cover;display:inline-block;border-radius:2px;"></span>{{end}}
+            <span class="mono" style="color:#475569;">{{.RealIP}}</span>
+          </div>
+        </td>
+        <td style="padding:10px 12px;">
+          <span class="mono" style="font-size:10px; font-weight:700; background:#F1F5F9; color:#64748B; padding:2px 7px; border-radius:5px;">{{.Method}}</span>
+        </td>
+        <td class="mono" style="padding:10px 12px; color:#64748B; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{truncate .Path 36}}</td>
+        <td style="padding:10px 12px;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            {{if ge .Status 500}}<span style="font-size:12px; font-weight:700; color:#EF4444;">{{.Status}}</span>
+            {{else if ge .Status 400}}<span style="font-size:12px; font-weight:700; color:#F59E0B;">{{.Status}}</span>
+            {{else if ge .Status 300}}<span style="font-size:12px; font-weight:700; color:#3B82F6;">{{.Status}}</span>
+            {{else}}<span style="font-size:12px; font-weight:700; color:#5DBB7B;">{{.Status}}</span>{{end}}
+            {{if .Blocked}}<span style="font-size:9px; font-weight:600; background:#FEE2E2; color:#DC2626; padding:2px 7px; border-radius:999px;">BLOCKED</span>{{end}}
+          </div>
+        </td>
+        <td class="mono" style="padding:10px 20px; text-align:right; color:#CBD5E1;">{{fmtDur .Duration}}</td>
+      </tr>
+      {{else}}
+      <tr>
+        <td colspan="7" style="text-align:center; padding:48px; color:#94A3B8;">
+          <i class="hgi hgi-stroke hgi-rounded hgi-activity-01" style="font-size:32px; display:block; margin:0 auto 8px; opacity:.3;"></i>
+          No requests yet — send traffic through the proxy
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+
+{{end}}
+
+<!-- ── Right sidebar ── -->
+{{define "sidebar"}}
+<aside style="width:280px; flex-shrink:0; background:#fff; border-left:1px solid #ECEEF2; padding:24px 20px; display:flex; flex-direction:column; gap:20px; overflow-y:auto;">
+
+  <!-- Heading -->
+  <div>
+    <p style="font-size:11px; color:#94A3B8; margin-bottom:4px;">Security intel</p>
+    <h2 style="font-size:18px; font-weight:800; color:#0F172A;">Top Threats</h2>
+  </div>
+
+  <!-- Threat list -->
+  <div>
+    {{range .TopBlocked}}
+    <div style="display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid #F8F9FB;">
+      <!-- Flag/avatar -->
+      <div style="width:36px; height:36px; border-radius:50%; overflow:hidden; flex-shrink:0; background:#F5F7FA; display:flex; align-items:center; justify-content:center;">
+        {{if .Country}}
+        <span class="{{flagClass .Country}}" style="width:36px;height:36px;background-size:cover;display:block;"></span>
+        {{else}}
+        <i class="hgi hgi-stroke hgi-rounded hgi-earth" style="font-size:16px;color:#94A3B8;"></i>
+        {{end}}
+      </div>
+      <!-- Info -->
+      <div style="flex:1; min-width:0;">
+        <div class="mono" style="font-size:12px; font-weight:600; color:#1E293B; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">{{.RealIP}}</div>
+        <div style="font-size:11px; color:#94A3B8; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">{{truncate .Path 18}} · {{fmtTime .Timestamp}}</div>
+      </div>
+      <!-- Badge -->
+      <span style="font-size:10px; font-weight:600; padding:3px 8px; border-radius:999px; flex-shrink:0; display:flex; align-items:center; gap:4px;
+        {{if .RuleID}}background:#FEF3C7; color:#D97706;{{else}}background:#FEE2E2; color:#DC2626;{{end}}">
+        <span style="width:5px;height:5px;border-radius:50%;display:inline-block;
+          {{if .RuleID}}background:#D97706;{{else}}background:#DC2626;{{end}}"></span>
+        {{if .RuleID}}WAF{{else}}Block{{end}}
+      </span>
+    </div>
+    {{else}}
+    <div style="text-align:center; padding:32px 0; color:#CBD5E1;">
+      <i class="hgi hgi-stroke hgi-rounded hgi-shield-01" style="font-size:28px; display:block; margin:0 auto 8px; opacity:.35;"></i>
+      <p style="font-size:12px;">No threats detected</p>
+    </div>
+    {{end}}
+  </div>
+
+  <!-- WAF status dark card -->
+  <div style="border-radius:18px; background:#2B4870; padding:20px; margin-top:auto;">
+
+    <!-- Pills -->
+    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px;">
+      <span style="font-size:11px; font-weight:600; background:#5DBB7B; color:#fff; padding:4px 12px; border-radius:999px;">WAF Engine</span>
+      <span style="font-size:11px; font-weight:500; background:rgba(255,255,255,.12); color:rgba(255,255,255,.8); padding:4px 12px; border-radius:999px;">CRS 4.x</span>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:11px; color:rgba(255,255,255,.50);">IP Rules</span>
+        <span style="font-size:11px; font-weight:600; color:#fff;">Active</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:11px; color:rgba(255,255,255,.50);">Geo Rules</span>
+        <span style="font-size:11px; font-weight:600; color:#fff;">Active</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:11px; color:rgba(255,255,255,.50);">Protection</span>
+        <span style="font-size:15px; font-weight:800; color:#fff;">100%</span>
+      </div>
+    </div>
+
+    <div style="font-size:22px; font-weight:800; color:#fff;">Coraza v3.7</div>
+    <div style="font-size:11px; color:rgba(255,255,255,.38); margin-top:2px;">OWASP Core Rule Set</div>
+
+    <!-- Bottom icons -->
+    <div style="display:flex; align-items:center; gap:8px; margin-top:16px; padding-top:14px; border-top:1px solid rgba(255,255,255,.10);">
+      <div style="width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,.10); display:flex; align-items:center; justify-content:center;">
+        <i class="hgi hgi-stroke hgi-rounded hgi-shield-01" style="font-size:14px; color:#fff;"></i>
+      </div>
+      <div style="position:relative;">
+        <div style="width:32px; height:32px; border-radius:50%; background:#5DBB7B; display:flex; align-items:center; justify-content:center;">
+          <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01" style="font-size:14px; color:#fff;"></i>
+        </div>
+        <span style="position:absolute; top:-4px; right:-4px; width:16px; height:16px; border-radius:50%; background:#fff; color:#2B4870; font-size:8px; font-weight:800; display:flex; align-items:center; justify-content:center;">{{len .Apps}}</span>
+      </div>
+    </div>
+  </div>
+
+</aside>
 {{end}}

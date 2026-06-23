@@ -1,124 +1,88 @@
 {{define "base"}}
 <!DOCTYPE html>
-<html lang="en" data-theme="night">
+<html lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>{{block "title" .}}Coraza WAF Mod{{end}}</title>
+  <title>Coraza WAF Mod — {{.Heading}}</title>
 
-  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-
-  <!-- daisyUI + Tailwind -->
-  <link href="https://cdn.jsdelivr.net/npm/daisyui@4/dist/full.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Hugeicons -->
   <link rel="stylesheet" href="https://cdn.hugeicons.com/font/hgi-stroke-rounded.css"/>
-
-  <!-- Country flags -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7/css/flag-icons.min.css"/>
-
-  <!-- HTMX + SSE -->
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
   <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/sse.js"></script>
 
   <style>
-    body { font-family: 'Inter', system-ui, sans-serif; }
-    .font-mono, .log-feed, code { font-family: 'JetBrains Mono', monospace; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #F5F7FA; color: #1E293B; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .card { background: #fff; border-radius: 18px; box-shadow: 0 2px 14px rgba(0,0,0,0.055); }
+    .btn-primary { background: #5DBB7B; color: #fff; border: none; cursor: pointer; border-radius: 999px; padding: 6px 18px; font-size: 13px; font-weight: 500; font-family: inherit; transition: opacity .15s; }
+    .btn-primary:hover { opacity: .88; }
+    input, select { font-family: inherit; }
   </style>
 </head>
-<body class="bg-base-100 text-base-content min-h-screen">
+<body style="min-height:100vh;">
 
-<div class="flex h-screen overflow-hidden">
+<!-- ── Top Navigation ─────────────────────────────────── -->
+<header style="background:#fff; border-bottom:1px solid #ECEEF2; height:56px; display:flex; align-items:center; padding:0 24px; gap:20px; position:sticky; top:0; z-index:50;">
 
-  <!-- ── Sidebar ───────────────────────────────────────────────── -->
-  <aside class="w-60 bg-base-200 flex flex-col shrink-0 border-r border-base-300">
-
-    <!-- Brand -->
-    <div class="px-5 py-5 border-b border-base-300">
-      <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-          <i class="hgi hgi-stroke hgi-rounded hgi-shield-01 text-primary text-xl"></i>
-        </div>
-        <div>
-          <p class="text-sm font-bold leading-tight text-base-content">Coraza WAF Mod</p>
-          <p class="text-xs text-base-content/40 leading-tight">Security Dashboard</p>
-        </div>
-      </div>
+  <!-- Brand -->
+  <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
+    <div style="width:34px; height:34px; border-radius:50%; background:#5DBB7B; display:flex; align-items:center; justify-content:center;">
+      <i class="hgi hgi-stroke hgi-rounded hgi-shield-01" style="font-size:15px; color:#fff;"></i>
     </div>
-
-    <!-- Nav -->
-    <nav class="flex-1 px-3 py-4">
-      <ul class="menu menu-sm p-0 gap-0.5">
-        <li>
-          <a href="/admin" class="nav-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium">
-            <i class="hgi hgi-stroke hgi-rounded hgi-dashboard-square-02 text-lg w-5 shrink-0"></i>
-            Dashboard
-          </a>
-        </li>
-        <li>
-          <a href="/admin/logs" class="nav-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium">
-            <i class="hgi hgi-stroke hgi-rounded hgi-file-02 text-lg w-5 shrink-0"></i>
-            Live Logs
-          </a>
-        </li>
-        <li class="mt-2">
-          <p class="px-3 py-1 text-xs font-semibold text-base-content/30 uppercase tracking-wider">Firewall</p>
-        </li>
-        <li>
-          <a href="/admin/ip-rules" class="nav-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium">
-            <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-lg w-5 shrink-0"></i>
-            IP Rules
-          </a>
-        </li>
-        <li>
-          <a href="/admin/geo-rules" class="nav-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium">
-            <i class="hgi hgi-stroke hgi-rounded hgi-earth text-lg w-5 shrink-0"></i>
-            Geo Rules
-          </a>
-        </li>
-      </ul>
-    </nav>
-
-    <!-- Footer -->
-    <div class="px-5 py-3 border-t border-base-300">
-      <p class="text-xs text-base-content/30">Coraza WAF Mod · v0.1</p>
-    </div>
-  </aside>
-
-  <!-- ── Main ──────────────────────────────────────────────────── -->
-  <div class="flex-1 flex flex-col overflow-hidden">
-
-    <!-- Top bar -->
-    <header class="bg-base-200 border-b border-base-300 px-6 py-3 flex items-center justify-between shrink-0">
-      <h1 class="text-base font-semibold">{{block "heading" .}}Dashboard{{end}}</h1>
-      <div class="flex items-center gap-2 text-xs text-base-content/40">
-        <i class="hgi hgi-stroke hgi-rounded hgi-shield-01 text-primary"></i>
-        WAF Active
-      </div>
-    </header>
-
-    <!-- Page content -->
-    <main class="flex-1 overflow-y-auto p-6">
-      {{block "content" .}}{{end}}
-    </main>
-
+    <span style="font-weight:600; font-size:14px; color:#1E293B;">Coraza WAF Mod</span>
   </div>
-</div>
 
-<script>
-  // Highlight active nav link
-  const path = window.location.pathname;
-  document.querySelectorAll('.nav-link').forEach(a => {
-    const href = a.getAttribute('href');
-    const isActive = href === path || (href !== '/admin' && path.startsWith(href));
-    if (isActive) {
-      a.classList.add('bg-primary/10', 'text-primary');
-    }
-  });
-</script>
+  <!-- Nav links -->
+  <nav style="display:flex; align-items:center; gap:4px; margin-left:8px;">
+    <a href="/admin" style="padding:6px 16px; border-radius:999px; font-size:13px; font-weight:500; text-decoration:none; transition:background .15s;
+      {{if eq .Page "dashboard"}}background:#5DBB7B; color:#fff;{{else}}color:#64748B;{{end}}">Dashboard</a>
+    <a href="/admin/logs" style="padding:6px 16px; border-radius:999px; font-size:13px; font-weight:500; text-decoration:none; transition:background .15s;
+      {{if eq .Page "logs"}}background:#5DBB7B; color:#fff;{{else}}color:#64748B;{{end}}">Live Logs</a>
+    <a href="/admin/ip-rules" style="padding:6px 16px; border-radius:999px; font-size:13px; font-weight:500; text-decoration:none; transition:background .15s;
+      {{if eq .Page "ip_rules"}}background:#5DBB7B; color:#fff;{{else}}color:#64748B;{{end}}">IP Rules</a>
+    <a href="/admin/geo-rules" style="padding:6px 16px; border-radius:999px; font-size:13px; font-weight:500; text-decoration:none; transition:background .15s;
+      {{if eq .Page "geo_rules"}}background:#5DBB7B; color:#fff;{{else}}color:#64748B;{{end}}">Geo Rules</a>
+  </nav>
+
+  <div style="flex:1;"></div>
+
+  <!-- Right actions -->
+  <div style="display:flex; align-items:center; gap:10px;">
+    <div style="display:flex; align-items:center; gap:8px; background:#F8F9FB; border:1px solid #ECEEF2; border-radius:999px; padding:6px 14px; font-size:13px; color:#94A3B8; width:160px;">
+      <i class="hgi hgi-stroke hgi-rounded hgi-search-01" style="font-size:13px;"></i>
+      Search...
+    </div>
+    <button style="width:34px; height:34px; border-radius:50%; background:#F8F9FB; border:1px solid #ECEEF2; display:flex; align-items:center; justify-content:center; color:#64748B; cursor:pointer;">
+      <i class="hgi hgi-stroke hgi-rounded hgi-notification-03" style="font-size:14px;"></i>
+    </button>
+    <div style="width:34px; height:34px; border-radius:50%; background:#2B4870; display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; font-weight:700;">A</div>
+  </div>
+</header>
+
+<!-- ── Page body ──────────────────────────────────────── -->
+<div style="display:flex; min-height:calc(100vh - 56px);">
+
+  <main style="flex:1; padding:24px; min-width:0;">
+    <!-- Page header -->
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px;">
+      <div>
+        <p style="font-size:11px; color:#94A3B8; margin-bottom:4px;">Admin › {{.Heading}}</p>
+        <h1 style="font-size:24px; font-weight:800; color:#0F172A; line-height:1.2;">{{.Heading}}</h1>
+      </div>
+      {{block "actions" .}}{{end}}
+    </div>
+
+    {{block "content" .}}{{end}}
+  </main>
+
+  {{block "sidebar" .}}{{end}}
+
+</div>
 </body>
 </html>
 {{end}}

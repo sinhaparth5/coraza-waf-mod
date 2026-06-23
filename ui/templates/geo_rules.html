@@ -1,104 +1,97 @@
-{{define "heading"}}Geo Rules{{end}}
-
 {{define "content"}}
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+<div style="display:grid; grid-template-columns:280px 1fr; gap:16px;">
 
   <!-- ── Add Rule Form ── -->
-  <div class="card bg-base-200 border border-base-300 shadow-sm">
-    <div class="card-body p-5">
-      <h2 class="card-title text-sm flex items-center gap-2 mb-4">
-        <i class="hgi hgi-stroke hgi-rounded hgi-add-circle text-lg text-primary"></i>
-        Add Geo Rule
-      </h2>
+  <div style="display:flex; flex-direction:column; gap:14px;">
+    <div class="card" style="padding:22px;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:20px;">
+        <div style="width:28px; height:28px; border-radius:50%; background:#E4F5EC; display:flex; align-items:center; justify-content:center;">
+          <i class="hgi hgi-stroke hgi-rounded hgi-earth" style="font-size:13px; color:#5DBB7B;"></i>
+        </div>
+        <h2 style="font-size:15px; font-weight:700; color:#0F172A;">Add Geo Rule</h2>
+      </div>
 
-      <form hx-post="/admin/geo-rules"
-            hx-target="#geo-rules-body"
-            hx-swap="innerHTML"
-            class="space-y-4">
+      <form hx-post="/admin/geo-rules" hx-target="#geo-rules-body" hx-swap="innerHTML" style="display:flex; flex-direction:column; gap:14px;">
 
-        <div class="form-control">
-          <label class="label py-0 mb-1">
-            <span class="label-text text-xs opacity-60">Country Code <span class="opacity-50">(ISO 3166-1 α-2)</span></span>
+        <div>
+          <label style="display:block; font-size:11px; color:#94A3B8; margin-bottom:5px; font-weight:500;">
+            Country Code <span style="color:#CBD5E1;">(ISO 3166-1 α-2)</span>
           </label>
-          <input name="country_code" type="text" placeholder="CN" maxlength="2"
-            class="input input-bordered input-sm font-mono uppercase w-full tracking-widest" required/>
-          <label class="label py-0 mt-1">
-            <span class="label-text-alt opacity-40">Examples: US · CN · RU · IR · KP · DE</span>
-          </label>
+          <input name="country_code" type="text" placeholder="CN" maxlength="2" required
+            style="width:100%; border:1.5px solid #ECEEF2; border-radius:10px; padding:8px 12px; font-size:16px; font-family:monospace; font-weight:700; text-transform:uppercase; letter-spacing:.2em; outline:none; transition:border .15s; color:#1E293B; background:#fff;"
+            onfocus="this.style.borderColor='#5DBB7B'" onblur="this.style.borderColor='#ECEEF2'"/>
+          <p style="font-size:10px; color:#94A3B8; margin-top:5px;">Examples: US · CN · RU · IR · KP · DE</p>
         </div>
 
-        <div class="form-control">
-          <label class="label py-0 mb-1">
-            <span class="label-text text-xs opacity-60">Scope</span>
-          </label>
-          <select name="app_name" class="select select-bordered select-sm w-full">
+        <div>
+          <label style="display:block; font-size:11px; color:#94A3B8; margin-bottom:5px; font-weight:500;">Scope</label>
+          <select name="app_name"
+            style="width:100%; border:1.5px solid #ECEEF2; border-radius:10px; padding:8px 12px; font-size:13px; outline:none; color:#1E293B; background:#fff; transition:border .15s;"
+            onfocus="this.style.borderColor='#5DBB7B'" onblur="this.style.borderColor='#ECEEF2'">
             <option value="">Global (all apps)</option>
             {{range .Apps}}<option value="{{.Name}}">{{.Name}} only</option>{{end}}
           </select>
         </div>
 
-        <div class="form-control">
-          <label class="label py-0 mb-1">
-            <span class="label-text text-xs opacity-60">Action</span>
-          </label>
-          <div class="flex gap-4">
-            <label class="label cursor-pointer gap-2 p-0">
-              <input type="radio" name="rule_type" value="block" class="radio radio-error radio-sm" checked/>
-              <span class="label-text text-sm font-medium text-error">Block</span>
+        <div>
+          <label style="display:block; font-size:11px; color:#94A3B8; margin-bottom:8px; font-weight:500;">Action</label>
+          <div style="display:flex; gap:16px;">
+            <label style="display:flex; align-items:center; gap:7px; cursor:pointer;">
+              <input type="radio" name="rule_type" value="block" checked style="accent-color:#EF4444;"/>
+              <span style="font-size:13px; font-weight:500; color:#EF4444;">Block</span>
             </label>
-            <label class="label cursor-pointer gap-2 p-0">
-              <input type="radio" name="rule_type" value="allow" class="radio radio-success radio-sm"/>
-              <span class="label-text text-sm font-medium text-success">Allow</span>
+            <label style="display:flex; align-items:center; gap:7px; cursor:pointer;">
+              <input type="radio" name="rule_type" value="allow" style="accent-color:#5DBB7B;"/>
+              <span style="font-size:13px; font-weight:500; color:#5DBB7B;">Allow</span>
             </label>
           </div>
         </div>
 
-        <button type="submit" class="btn btn-primary btn-sm w-full gap-2">
-          <i class="hgi hgi-stroke hgi-rounded hgi-add-circle text-base"></i>
+        <button type="submit" class="btn-primary" style="width:100%; display:flex; align-items:center; justify-content:center; gap:7px; padding:9px 0;">
+          <i class="hgi hgi-stroke hgi-rounded hgi-add-circle" style="font-size:14px;"></i>
           Add Rule
         </button>
       </form>
+    </div>
 
-      <div class="divider my-3"></div>
-
-      <!-- GeoIP notice -->
-      <div class="alert alert-warning alert-sm py-2 px-3 text-xs">
-        <i class="hgi hgi-stroke hgi-rounded hgi-earth text-base shrink-0"></i>
+    <!-- GeoIP notice card -->
+    <div style="border-radius:14px; background:#FFFBEB; border:1px solid #FDE68A; padding:14px 16px;">
+      <div style="display:flex; gap:10px; align-items:flex-start;">
+        <i class="hgi hgi-stroke hgi-rounded hgi-earth" style="font-size:16px; color:#D97706; flex-shrink:0; margin-top:1px;"></i>
         <div>
-          <p class="font-semibold">GeoIP database required</p>
-          <p class="opacity-70">Download <a href="https://dev.maxmind.com/geoip/geolite2-free-geolocation-data" target="_blank" class="underline">GeoLite2-Country.mmdb</a> and set <code class="bg-base-300 px-1 rounded">geo.db_path</code> in config.yaml.</p>
+          <p style="font-size:12px; font-weight:600; color:#92400E; margin-bottom:4px;">GeoIP database required</p>
+          <p style="font-size:11px; color:#B45309; line-height:1.5;">
+            Download <a href="https://dev.maxmind.com/geoip/geolite2-free-geolocation-data" target="_blank" style="text-decoration:underline;">GeoLite2-Country.mmdb</a>
+            from MaxMind and set <code style="background:rgba(0,0,0,.06); padding:1px 5px; border-radius:4px; font-size:10px;">geo.db_path</code> in config.yaml.
+          </p>
         </div>
       </div>
     </div>
   </div>
 
   <!-- ── Rules Table ── -->
-  <div class="lg:col-span-2 card bg-base-200 border border-base-300 shadow-sm">
-    <div class="card-body p-0">
-      <div class="flex items-center justify-between px-5 py-3 border-b border-base-300">
-        <h2 class="text-sm font-semibold flex items-center gap-2">
-          <i class="hgi hgi-stroke hgi-rounded hgi-earth text-base text-base-content/60"></i>
-          Active Geo Rules
-        </h2>
-        <span class="badge badge-neutral badge-sm">{{len .Rules}} rules</span>
+  <div class="card" style="overflow:hidden;">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid #F5F7FA;">
+      <div>
+        <p style="font-size:11px; color:#94A3B8; margin-bottom:2px;">Firewall</p>
+        <h3 style="font-size:15px; font-weight:700; color:#0F172A;">Active Geo Rules</h3>
       </div>
-      <div class="overflow-x-auto">
-        <table class="table table-sm w-full">
-          <thead>
-            <tr class="text-xs opacity-40 uppercase">
-              <th>Scope</th>
-              <th>Country</th>
-              <th>Action</th>
-              <th>Added</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="geo-rules-body">
-            {{template "geo-rules-rows" .Rules}}
-          </tbody>
-        </table>
-      </div>
+      <span style="font-size:11px; font-weight:600; background:#F1F5F9; color:#64748B; padding:3px 10px; border-radius:999px;">{{len .Rules}} rules</span>
     </div>
+    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+      <thead>
+        <tr style="border-bottom:1px solid #F5F7FA;">
+          <th style="text-align:left; padding:10px 20px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Scope</th>
+          <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Country</th>
+          <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Action</th>
+          <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Added</th>
+          <th style="text-align:right; padding:10px 20px;"></th>
+        </tr>
+      </thead>
+      <tbody id="geo-rules-body">
+        {{template "geo-rules-rows" .Rules}}
+      </tbody>
+    </table>
   </div>
 
 </div>
@@ -106,43 +99,47 @@
 
 {{define "geo-rules-rows"}}
 {{range .}}
-<tr class="hover">
-  <td class="text-xs">
+<tr style="border-bottom:1px solid #F8F9FB; transition:background .1s;">
+  <td style="padding:11px 20px;">
     {{if .AppName}}
-      <span class="badge badge-neutral badge-sm">{{.AppName}}</span>
+    <span style="font-size:11px; font-weight:600; background:#EFF6FF; color:#3B82F6; padding:2px 8px; border-radius:999px;">{{.AppName}}</span>
     {{else}}
-      <span class="opacity-40 italic">global</span>
+    <span style="font-size:11px; color:#94A3B8; font-style:italic;">global</span>
     {{end}}
   </td>
-  <td>
-    <div class="flex items-center gap-2">
-      <span class="{{flagClass .CountryCode}} rounded-sm shadow-sm" style="width:18px;height:13px;background-size:cover;display:inline-block;"></span>
-      <span class="font-mono text-sm font-semibold">{{.CountryCode}}</span>
+  <td style="padding:11px 12px;">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span class="{{flagClass .CountryCode}}" style="width:20px;height:14px;background-size:cover;display:inline-block;border-radius:3px;box-shadow:0 1px 3px rgba(0,0,0,.15);"></span>
+      <span style="font-family:monospace; font-size:13px; font-weight:700; color:#334155; letter-spacing:.08em;">{{.CountryCode}}</span>
     </div>
   </td>
-  <td>
+  <td style="padding:11px 12px;">
     {{if eq .RuleType "block"}}
-      <span class="badge badge-error gap-1"><i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-xs"></i> Block</span>
+    <span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; background:#FEE2E2; color:#DC2626; padding:3px 10px; border-radius:999px;">
+      <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle" style="font-size:10px;"></i> Block
+    </span>
     {{else}}
-      <span class="badge badge-success gap-1"><i class="hgi hgi-stroke hgi-rounded hgi-checkmark-circle-02 text-xs"></i> Allow</span>
+    <span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; background:#DCFCE7; color:#16A34A; padding:3px 10px; border-radius:999px;">
+      <i class="hgi hgi-stroke hgi-rounded hgi-checkmark-circle-02" style="font-size:10px;"></i> Allow
+    </span>
     {{end}}
   </td>
-  <td class="text-xs opacity-40 whitespace-nowrap">{{fmtTime .CreatedAt}}</td>
-  <td class="text-right">
+  <td style="padding:11px 12px; font-size:11px; color:#94A3B8; white-space:nowrap;">{{fmtTime .CreatedAt}}</td>
+  <td style="padding:11px 20px; text-align:right;">
     <button hx-delete="/admin/geo-rules/{{.ID}}"
             hx-target="#geo-rules-body"
             hx-swap="innerHTML"
             hx-confirm="Remove rule for {{.CountryCode}}?"
-            class="btn btn-ghost btn-xs text-error gap-1">
-      <i class="hgi hgi-stroke hgi-rounded hgi-delete-02 text-sm"></i>
+            style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:500; color:#EF4444; background:transparent; border:1px solid #FEE2E2; border-radius:999px; padding:4px 12px; cursor:pointer; font-family:inherit; transition:background .15s;">
+      <i class="hgi hgi-stroke hgi-rounded hgi-delete-02" style="font-size:12px;"></i>
       Remove
     </button>
   </td>
 </tr>
 {{else}}
 <tr>
-  <td colspan="5" class="py-12 text-center opacity-30">
-    <i class="hgi hgi-stroke hgi-rounded hgi-earth text-4xl block mb-2"></i>
+  <td colspan="5" style="text-align:center; padding:48px; color:#94A3B8;">
+    <i class="hgi hgi-stroke hgi-rounded hgi-earth" style="font-size:32px; display:block; margin:0 auto 8px; opacity:.3;"></i>
     No geo rules yet
   </td>
 </tr>

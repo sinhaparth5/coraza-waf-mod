@@ -1,97 +1,92 @@
-{{define "heading"}}IP Rules{{end}}
-
 {{define "content"}}
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+<div style="display:grid; grid-template-columns:280px 1fr; gap:16px;">
 
   <!-- ── Add Rule Form ── -->
-  <div class="card bg-base-200 border border-base-300 shadow-sm">
-    <div class="card-body p-5">
-      <h2 class="card-title text-sm flex items-center gap-2 mb-4">
-        <i class="hgi hgi-stroke hgi-rounded hgi-add-circle text-lg text-primary"></i>
-        Add IP Rule
-      </h2>
+  <div class="card" style="padding:22px; height:fit-content;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:20px;">
+      <div style="width:28px; height:28px; border-radius:50%; background:#E4F5EC; display:flex; align-items:center; justify-content:center;">
+        <i class="hgi hgi-stroke hgi-rounded hgi-add-circle" style="font-size:13px; color:#5DBB7B;"></i>
+      </div>
+      <h2 style="font-size:15px; font-weight:700; color:#0F172A;">Add IP Rule</h2>
+    </div>
 
-      <form hx-post="/admin/ip-rules"
-            hx-target="#ip-rules-body"
-            hx-swap="innerHTML"
-            class="space-y-4">
+    <form hx-post="/admin/ip-rules" hx-target="#ip-rules-body" hx-swap="innerHTML" style="display:flex; flex-direction:column; gap:14px;">
 
-        <div class="form-control">
-          <label class="label py-0 mb-1">
-            <span class="label-text text-xs opacity-60">IP Address</span>
+      <div>
+        <label style="display:block; font-size:11px; color:#94A3B8; margin-bottom:5px; font-weight:500;">IP Address</label>
+        <input name="ip" type="text" placeholder="1.2.3.4" required
+          style="width:100%; border:1.5px solid #ECEEF2; border-radius:10px; padding:8px 12px; font-size:13px; font-family:monospace; outline:none; transition:border .15s; color:#1E293B; background:#fff;"
+          onfocus="this.style.borderColor='#5DBB7B'" onblur="this.style.borderColor='#ECEEF2'"/>
+      </div>
+
+      <div>
+        <label style="display:block; font-size:11px; color:#94A3B8; margin-bottom:5px; font-weight:500;">Scope</label>
+        <select name="app_name"
+          style="width:100%; border:1.5px solid #ECEEF2; border-radius:10px; padding:8px 12px; font-size:13px; outline:none; color:#1E293B; background:#fff; transition:border .15s;"
+          onfocus="this.style.borderColor='#5DBB7B'" onblur="this.style.borderColor='#ECEEF2'">
+          <option value="">Global (all apps)</option>
+          {{range .Apps}}<option value="{{.Name}}">{{.Name}} only</option>{{end}}
+        </select>
+      </div>
+
+      <div>
+        <label style="display:block; font-size:11px; color:#94A3B8; margin-bottom:8px; font-weight:500;">Action</label>
+        <div style="display:flex; gap:16px;">
+          <label style="display:flex; align-items:center; gap:7px; cursor:pointer;">
+            <input type="radio" name="rule_type" value="block" checked style="accent-color:#EF4444;"/>
+            <span style="font-size:13px; font-weight:500; color:#EF4444;">Block</span>
           </label>
-          <input name="ip" type="text" placeholder="1.2.3.4"
-            class="input input-bordered input-sm font-mono w-full" required/>
-        </div>
-
-        <div class="form-control">
-          <label class="label py-0 mb-1">
-            <span class="label-text text-xs opacity-60">Scope</span>
+          <label style="display:flex; align-items:center; gap:7px; cursor:pointer;">
+            <input type="radio" name="rule_type" value="allow" style="accent-color:#5DBB7B;"/>
+            <span style="font-size:13px; font-weight:500; color:#5DBB7B;">Allow</span>
           </label>
-          <select name="app_name" class="select select-bordered select-sm w-full">
-            <option value="">Global (all apps)</option>
-            {{range .Apps}}<option value="{{.Name}}">{{.Name}} only</option>{{end}}
-          </select>
         </div>
+      </div>
 
-        <div class="form-control">
-          <label class="label py-0 mb-1">
-            <span class="label-text text-xs opacity-60">Action</span>
-          </label>
-          <div class="flex gap-4">
-            <label class="label cursor-pointer gap-2 p-0">
-              <input type="radio" name="rule_type" value="block" class="radio radio-error radio-sm" checked/>
-              <span class="label-text text-sm font-medium text-error">Block</span>
-            </label>
-            <label class="label cursor-pointer gap-2 p-0">
-              <input type="radio" name="rule_type" value="allow" class="radio radio-success radio-sm"/>
-              <span class="label-text text-sm font-medium text-success">Allow</span>
-            </label>
-          </div>
+      <button type="submit" class="btn-primary" style="width:100%; display:flex; align-items:center; justify-content:center; gap:7px; padding:9px 0;">
+        <i class="hgi hgi-stroke hgi-rounded hgi-add-circle" style="font-size:14px;"></i>
+        Add Rule
+      </button>
+    </form>
+
+    <div style="margin-top:18px; padding-top:16px; border-top:1px solid #F5F7FA;">
+      <div style="display:flex; flex-direction:column; gap:7px;">
+        <div style="display:flex; align-items:center; gap:7px; font-size:11px; color:#64748B;">
+          <span style="background:#FEE2E2; color:#DC2626; padding:2px 8px; border-radius:999px; font-weight:600; font-size:10px;">Block</span>
+          deny all requests from this IP
         </div>
-
-        <button type="submit" class="btn btn-primary btn-sm w-full gap-2">
-          <i class="hgi hgi-stroke hgi-rounded hgi-add-circle text-base"></i>
-          Add Rule
-        </button>
-      </form>
-
-      <div class="divider my-3 text-xs opacity-30">How it works</div>
-      <div class="space-y-1.5 text-xs opacity-50 leading-relaxed">
-        <p><span class="badge badge-error badge-xs">Block</span> — deny all requests from this IP</p>
-        <p><span class="badge badge-success badge-xs">Allow</span> — whitelist, bypasses other blocks</p>
-        <p>Per-app rules take priority over global rules.</p>
+        <div style="display:flex; align-items:center; gap:7px; font-size:11px; color:#64748B;">
+          <span style="background:#DCFCE7; color:#16A34A; padding:2px 8px; border-radius:999px; font-weight:600; font-size:10px;">Allow</span>
+          whitelist, bypasses other blocks
+        </div>
+        <p style="font-size:11px; color:#94A3B8; margin-top:2px;">Per-app rules take priority over global.</p>
       </div>
     </div>
   </div>
 
   <!-- ── Rules Table ── -->
-  <div class="lg:col-span-2 card bg-base-200 border border-base-300 shadow-sm">
-    <div class="card-body p-0">
-      <div class="flex items-center justify-between px-5 py-3 border-b border-base-300">
-        <h2 class="text-sm font-semibold flex items-center gap-2">
-          <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-base text-base-content/60"></i>
-          Active IP Rules
-        </h2>
-        <span class="badge badge-neutral badge-sm">{{len .Rules}} rules</span>
+  <div class="card" style="overflow:hidden;">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid #F5F7FA;">
+      <div>
+        <p style="font-size:11px; color:#94A3B8; margin-bottom:2px;">Firewall</p>
+        <h3 style="font-size:15px; font-weight:700; color:#0F172A;">Active IP Rules</h3>
       </div>
-      <div class="overflow-x-auto">
-        <table class="table table-sm w-full">
-          <thead>
-            <tr class="text-xs opacity-40 uppercase">
-              <th>Scope</th>
-              <th>IP Address</th>
-              <th>Action</th>
-              <th>Added</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="ip-rules-body">
-            {{template "ip-rules-rows" .Rules}}
-          </tbody>
-        </table>
-      </div>
+      <span style="font-size:11px; font-weight:600; background:#F1F5F9; color:#64748B; padding:3px 10px; border-radius:999px;">{{len .Rules}} rules</span>
     </div>
+    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+      <thead>
+        <tr style="border-bottom:1px solid #F5F7FA;">
+          <th style="text-align:left; padding:10px 20px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Scope</th>
+          <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">IP Address</th>
+          <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Action</th>
+          <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Added</th>
+          <th style="text-align:right; padding:10px 20px;"></th>
+        </tr>
+      </thead>
+      <tbody id="ip-rules-body">
+        {{template "ip-rules-rows" .Rules}}
+      </tbody>
+    </table>
   </div>
 
 </div>
@@ -99,38 +94,42 @@
 
 {{define "ip-rules-rows"}}
 {{range .}}
-<tr class="hover">
-  <td class="text-xs">
+<tr style="border-bottom:1px solid #F8F9FB; transition:background .1s;">
+  <td style="padding:11px 20px;">
     {{if .AppName}}
-      <span class="badge badge-neutral badge-sm">{{.AppName}}</span>
+    <span style="font-size:11px; font-weight:600; background:#EFF6FF; color:#3B82F6; padding:2px 8px; border-radius:999px;">{{.AppName}}</span>
     {{else}}
-      <span class="opacity-40 text-xs italic">global</span>
+    <span style="font-size:11px; color:#94A3B8; font-style:italic;">global</span>
     {{end}}
   </td>
-  <td class="font-mono text-xs font-medium">{{.IP}}</td>
-  <td>
+  <td style="padding:11px 12px; font-family:monospace; font-size:12px; font-weight:600; color:#334155;">{{.IP}}</td>
+  <td style="padding:11px 12px;">
     {{if eq .RuleType "block"}}
-      <span class="badge badge-error gap-1"><i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-xs"></i> Block</span>
+    <span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; background:#FEE2E2; color:#DC2626; padding:3px 10px; border-radius:999px;">
+      <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle" style="font-size:10px;"></i> Block
+    </span>
     {{else}}
-      <span class="badge badge-success gap-1"><i class="hgi hgi-stroke hgi-rounded hgi-checkmark-circle-02 text-xs"></i> Allow</span>
+    <span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; background:#DCFCE7; color:#16A34A; padding:3px 10px; border-radius:999px;">
+      <i class="hgi hgi-stroke hgi-rounded hgi-checkmark-circle-02" style="font-size:10px;"></i> Allow
+    </span>
     {{end}}
   </td>
-  <td class="text-xs opacity-40 whitespace-nowrap">{{fmtTime .CreatedAt}}</td>
-  <td class="text-right">
+  <td style="padding:11px 12px; font-size:11px; color:#94A3B8; white-space:nowrap;">{{fmtTime .CreatedAt}}</td>
+  <td style="padding:11px 20px; text-align:right;">
     <button hx-delete="/admin/ip-rules/{{.ID}}"
             hx-target="#ip-rules-body"
             hx-swap="innerHTML"
             hx-confirm="Remove rule for {{.IP}}?"
-            class="btn btn-ghost btn-xs text-error gap-1">
-      <i class="hgi hgi-stroke hgi-rounded hgi-delete-02 text-sm"></i>
+            style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:500; color:#EF4444; background:transparent; border:1px solid #FEE2E2; border-radius:999px; padding:4px 12px; cursor:pointer; font-family:inherit; transition:background .15s;">
+      <i class="hgi hgi-stroke hgi-rounded hgi-delete-02" style="font-size:12px;"></i>
       Remove
     </button>
   </td>
 </tr>
 {{else}}
 <tr>
-  <td colspan="5" class="py-12 text-center opacity-30">
-    <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-4xl block mb-2"></i>
+  <td colspan="5" style="text-align:center; padding:48px; color:#94A3B8;">
+    <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle" style="font-size:32px; display:block; margin:0 auto 8px; opacity:.3;"></i>
     No IP rules yet
   </td>
 </tr>

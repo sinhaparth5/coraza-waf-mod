@@ -1,46 +1,48 @@
-{{define "heading"}}Live Logs{{end}}
+{{define "actions"}}
+<button onclick="togglePause()" id="pause-btn"
+  style="display:flex; align-items:center; gap:6px; border:1px solid #ECEEF2; background:#fff; border-radius:999px; padding:6px 16px; font-size:13px; font-weight:500; color:#64748B; cursor:pointer; font-family:inherit;">
+  <i id="pause-icon" class="hgi hgi-stroke hgi-rounded hgi-pause" style="font-size:13px;"></i>
+  <span id="pause-label">Pause</span>
+</button>
+{{end}}
 
 {{define "content"}}
 
-<!-- Toolbar -->
-<div class="flex items-center justify-between mb-4">
-  <div class="flex items-center gap-3">
-    <div class="flex items-center gap-2 text-sm font-medium text-success">
-      <span class="relative flex h-2 w-2">
-        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-        <span class="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
-      </span>
-      Live stream active
-    </div>
-    <div class="divider divider-horizontal mx-0 h-4"></div>
-    <span class="text-xs opacity-40">New entries appear at the top</span>
+<!-- Status bar -->
+<div style="display:flex; align-items:center; gap:16px; margin-bottom:16px;">
+  <div style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; color:#16A34A;">
+    <span style="position:relative; display:flex; width:8px; height:8px;">
+      <span style="position:absolute; inset:0; border-radius:50%; background:#5DBB7B; animation:ping 1.2s cubic-bezier(0,0,.2,1) infinite; opacity:.75;"></span>
+      <span style="width:8px; height:8px; border-radius:50%; background:#5DBB7B; display:block;"></span>
+    </span>
+    Live stream active
   </div>
-  <button onclick="togglePause()" id="pause-btn"
-    class="btn btn-sm btn-ghost gap-2 border border-base-300">
-    <i id="pause-icon" class="hgi hgi-stroke hgi-rounded hgi-pause text-base"></i>
-    <span id="pause-label">Pause</span>
-  </button>
+  <span style="width:1px; height:16px; background:#ECEEF2; display:block;"></span>
+  <span style="font-size:11px; color:#94A3B8;">New entries appear at the top</span>
 </div>
 
-<!-- Log terminal -->
-<div class="card bg-base-200 border border-base-300 shadow-sm overflow-hidden">
+<style>
+  @keyframes ping { 75%,100%{transform:scale(2);opacity:0} }
+</style>
+
+<!-- Log terminal card -->
+<div class="card" style="overflow:hidden;">
 
   <!-- Column headers -->
-  <div class="flex items-center gap-4 px-4 py-2 bg-base-300/50 border-b border-base-300 text-xs font-semibold uppercase tracking-wider opacity-40">
-    <span class="shrink-0 w-[5.5rem]">Time</span>
-    <span class="shrink-0 w-20">App</span>
-    <span class="shrink-0 w-32">IP</span>
-    <span class="shrink-0 w-10">Method</span>
-    <span class="flex-1">Path</span>
-    <span class="shrink-0 w-12 text-right">Status</span>
-    <span class="shrink-0 w-12 text-right">Dur</span>
-    <span class="shrink-0 w-16">Action</span>
+  <div style="display:flex; align-items:center; gap:14px; padding:8px 20px; background:#F8F9FB; border-bottom:1px solid #ECEEF2; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.06em;">
+    <span style="flex-shrink:0; width:88px;">Time</span>
+    <span style="flex-shrink:0; width:72px;">App</span>
+    <span style="flex-shrink:0; width:120px;">IP</span>
+    <span style="flex-shrink:0; width:36px;">Method</span>
+    <span style="flex:1;">Path</span>
+    <span style="flex-shrink:0; width:44px; text-align:right;">Status</span>
+    <span style="flex-shrink:0; width:44px; text-align:right;">Dur</span>
+    <span style="flex-shrink:0; width:64px;">Action</span>
   </div>
 
-  <!-- SSE-powered log feed -->
+  <!-- SSE live feed -->
   <div id="log-wrapper"
-       class="overflow-y-auto font-mono"
-       style="height: calc(100vh - 240px);"
+       style="overflow-y:auto; height:calc(100vh - 260px);"
        hx-ext="sse"
        sse-connect="/admin/logs/stream">
     <div id="log-feed"
@@ -48,19 +50,17 @@
          hx-swap="afterbegin">
       {{range .Recent}}{{template "log-row" .}}{{end}}
     </div>
-    <!-- Empty state (hidden once rows exist) -->
     {{if not .Recent}}
-    <div id="empty-state" class="flex flex-col items-center justify-center py-20 opacity-30">
-      <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02 text-5xl mb-3"></i>
-      <p class="text-sm">Waiting for requests…</p>
+    <div id="empty-state" style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:64px; color:#CBD5E1; text-align:center;">
+      <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02" style="font-size:40px; display:block; margin-bottom:10px; opacity:.4;"></i>
+      <p style="font-size:13px;">Waiting for requests…</p>
     </div>
     {{end}}
   </div>
 
 </div>
 
-<!-- Format hint -->
-<p class="text-xs opacity-30 mt-3 font-mono">
+<p style="font-size:11px; color:#CBD5E1; margin-top:10px;" class="mono">
   Format: time · app · ip · method · path · status · duration · [action]
 </p>
 
@@ -74,11 +74,11 @@ function togglePause() {
   document.getElementById('pause-label').textContent = paused ? 'Resume' : 'Pause';
   const icon = document.getElementById('pause-icon');
   icon.className = paused
-    ? 'hgi hgi-stroke hgi-rounded hgi-play text-base text-primary'
-    : 'hgi hgi-stroke hgi-rounded hgi-pause text-base';
+    ? 'hgi hgi-stroke hgi-rounded hgi-play'
+    : 'hgi hgi-stroke hgi-rounded hgi-pause';
+  document.getElementById('pause-btn').style.color = paused ? '#5DBB7B' : '#64748B';
 }
 
-// Auto-scroll to top on new SSE entries (unless paused)
 const obs = new MutationObserver(() => {
   const empty = document.getElementById('empty-state');
   if (empty) empty.remove();

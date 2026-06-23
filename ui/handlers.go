@@ -125,10 +125,30 @@ func (h *Handler) Dashboard(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	topBlocked, err := h.db.ListRequests(true, "", 5, 0)
+	if err != nil {
+		return err
+	}
+	blockRate := 0
+	if stats.TotalToday > 0 {
+		blockRate = stats.BlockedToday * 100 / stats.TotalToday
+	}
+	// SVG donut arcs: circumference of r=50 circle ≈ 314
+	const circ = 314
+	blockedArc := 0
+	allowedArc := circ
+	if stats.TotalToday > 0 {
+		blockedArc = stats.BlockedToday * circ / stats.TotalToday
+		allowedArc = circ - blockedArc
+	}
 	return h.render(c, "dashboard", map[string]any{
-		"Stats":  stats,
-		"Recent": recent,
-		"Apps":   h.cfg.Apps,
+		"Stats":      stats,
+		"Recent":     recent,
+		"TopBlocked": topBlocked,
+		"BlockRate":  blockRate,
+		"AllowedArc": allowedArc,
+		"BlockedArc": blockedArc,
+		"Apps":       h.cfg.Apps,
 	})
 }
 
@@ -279,10 +299,23 @@ func (h *Handler) DeleteGeoRule(c echo.Context) error {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-func (h *Handler) render(c echo.Context, page string, data any) error {
+func (h *Handler) render(c echo.Context, page string, data map[string]any) error {
 	t, ok := h.tmpls[page]
 	if !ok {
 		return fmt.Errorf("template %q not found", page)
+	}
+	if data == nil {
+		data = map[string]any{}
+	}
+	data["Page"] = page
+	headings := map[string]string{
+		"dashboard": "Dashboard",
+		"logs":      "Live Logs",
+		"ip_rules":  "IP Rules",
+		"geo_rules": "Geo Rules",
+	}
+	if _, ok := data["Heading"]; !ok {
+		data["Heading"] = headings[page]
 	}
 	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
 	return t.ExecuteTemplate(c.Response().Writer, "base", data)
