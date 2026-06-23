@@ -8,6 +8,7 @@ import (
 
 	"coraza-waf-mod/config"
 	"coraza-waf-mod/proxy"
+	"coraza-waf-mod/storage"
 	"coraza-waf-mod/waf"
 
 	"github.com/labstack/echo/v4"
@@ -31,6 +32,12 @@ func main() {
 		log.Fatalf("waf init: %v", err)
 	}
 
+	db, err := storage.Open(cfg.DB.Path)
+	if err != nil {
+		log.Fatalf("db: %v", err)
+	}
+	defer db.Close()
+
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(middleware.Recover())
@@ -44,7 +51,7 @@ func main() {
 		},
 	}))
 
-	h := proxy.NewHandler(cfg, engine)
+	h := proxy.NewHandler(cfg, engine, db)
 	e.Any("/*", h.Handle)
 
 	switch cfg.TLS.Mode {

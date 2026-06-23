@@ -41,11 +41,12 @@ A single-binary Go WAF + reverse proxy with embedded Coraza, SQLite storage, and
 - [x] Route by path prefix
 - [ ] Hot-reload config on SIGHUP (Phase 6)
 
-### Phase 3 — Structured Logging to SQLite
-- [ ] SQLite DB initialised (`modernc.org/sqlite`)
-- [ ] `requests` log table: `timestamp, app_name, real_ip, method, path, status, blocked, reason, user_agent`
-- [ ] Every proxied request logged
-- [ ] Blocked requests flagged with WAF reason
+### Phase 3 — Structured Logging to SQLite ✅ COMPLETE
+- [x] SQLite DB initialised (`modernc.org/sqlite`, WAL mode)
+- [x] `requests` log table: `ts, app_name, real_ip, method, host, path, status, blocked, rule_id, action, user_agent, duration_ms`
+- [x] Every proxied request logged (including status code capture via wrapped ResponseWriter)
+- [x] Blocked requests flagged with WAF rule_id + action
+- [x] Query helpers ready for dashboard: `GetStats()`, `ListRequests()` with filters
 
 ### Phase 4 — IP Blocking + Geo Blocking
 **IP Blocking**
@@ -111,7 +112,7 @@ coraza-waf-mod/
 
 **Phase 1 — in progress.** Core proxy + WAF engine built and tested. Binary compiles and proxies requests correctly. Real IP extraction is in place.
 
-**Next up:** Download OWASP CRS rules into `rules/` and verify WAF actually blocks attack payloads (SQL injection, XSS, etc). That completes Phase 1.
+**Next up:** Phase 4 — IP blocking + Geo blocking.
 
 ---
 

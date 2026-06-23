@@ -8,8 +8,10 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"time"
 
 	"coraza-waf-mod/config"
+	"coraza-waf-mod/storage"
 	"coraza-waf-mod/waf"
 
 	"github.com/labstack/echo/v4"
@@ -18,13 +20,15 @@ import (
 type Handler struct {
 	cfg     *config.Config
 	waf     *waf.Engine
+	db      *storage.DB
 	proxies map[string]*httputil.ReverseProxy
 }
 
-func NewHandler(cfg *config.Config, engine *waf.Engine) *Handler {
+func NewHandler(cfg *config.Config, engine *waf.Engine, db *storage.DB) *Handler {
 	h := &Handler{
 		cfg:     cfg,
 		waf:     engine,
+		db:      db,
 		proxies: make(map[string]*httputil.ReverseProxy),
 	}
 	for _, app := range cfg.Apps {
@@ -44,30 +48,40 @@ func NewHandler(cfg *config.Config, engine *waf.Engine) *Handler {
 }
 
 func (h *Handler) Handle(c echo.Context) error {
+	start := time.Now()
 	r := c.Request()
 	w := c.Response().Writer
 
 	clientIP := realIP(r)
+	app := h.matchApp(r)
 
+	appName := ""
+	if app != nil {
+		appName = app.Name
+	}
+
+	// WAF check.
 	result, err := h.waf.Check(r, clientIP)
 	if err != nil {
 		log.Printf("waf error: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
 	}
+
 	if result.Blocked {
 		status := result.Status
 		if status == 0 {
 			status = http.StatusForbidden
 		}
 		log.Printf("WAF blocked %s %s (rule %d, action %s)", clientIP, r.RequestURI, result.RuleID, result.Action)
+		h.logRequest(r, appName, clientIP, status, result, time.Since(start))
 		return c.JSON(status, map[string]any{
 			"error":   "request blocked",
 			"rule_id": result.RuleID,
 		})
 	}
 
-	app := h.matchApp(r)
 	if app == nil {
+		h.logRequest(r, appName, clientIP, http.StatusBadGateway, result, time.Since(start))
 		return c.JSON(http.StatusBadGateway, map[string]string{
 			"error": fmt.Sprintf("no backend configured for host %q", r.Host),
 		})
@@ -75,11 +89,38 @@ func (h *Handler) Handle(c echo.Context) error {
 
 	rp, ok := h.proxies[app.Name]
 	if !ok {
+		h.logRequest(r, appName, clientIP, http.StatusBadGateway, result, time.Since(start))
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": "proxy not initialised"})
 	}
 
-	rp.ServeHTTP(w, r)
+	// Wrap the ResponseWriter to capture the status code for logging.
+	rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
+	rp.ServeHTTP(rw, r)
+	h.logRequest(r, appName, clientIP, rw.status, result, time.Since(start))
 	return nil
+}
+
+func (h *Handler) logRequest(r *http.Request, appName, clientIP string, status int, wafResult *waf.Result, dur time.Duration) {
+	if h.db == nil {
+		return
+	}
+	entry := storage.RequestLog{
+		Timestamp: time.Now().UTC(),
+		AppName:   appName,
+		RealIP:    clientIP,
+		Method:    r.Method,
+		Host:      r.Host,
+		Path:      r.URL.Path,
+		Status:    status,
+		Blocked:   wafResult.Blocked,
+		RuleID:    wafResult.RuleID,
+		Action:    wafResult.Action,
+		UserAgent: r.UserAgent(),
+		Duration:  dur.Milliseconds(),
+	}
+	if err := h.db.InsertRequest(entry); err != nil {
+		log.Printf("db log error: %v", err)
+	}
 }
 
 // matchApp returns the first app whose Host or Prefix matches the request.
@@ -108,7 +149,6 @@ func realIP(r *http.Request) string {
 		return strings.TrimSpace(ip)
 	}
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// XFF can be a comma-separated list; take the leftmost (original client).
 		if idx := strings.Index(xff, ","); idx != -1 {
 			return strings.TrimSpace(xff[:idx])
 		}
@@ -119,4 +159,15 @@ func realIP(r *http.Request) string {
 	}
 	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
 	return ip
+}
+
+// responseWriter wraps http.ResponseWriter to capture the status code.
+type responseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.status = code
+	rw.ResponseWriter.WriteHeader(code)
 }
