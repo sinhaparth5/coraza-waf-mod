@@ -1,0 +1,27 @@
+listen_addr: ":8080"
+
+waf:
+  enabled: true
+  rules_dir: ""   # set to "./rules" once you add OWASP CRS files
+
+db:
+  path: "./waf.db"
+
+admin:
+  path: "/admin"
+  username: "admin"
+  password: "changeme"
+
+apps:
+  - name: "example"
+    host: "localhost"   # match on Host header
+    backend: "http://localhost:3000"
+
+  # Add more backends here:
+  # - name: "api"
+  #   host: "api.example.com"
+  #   backend: "http://api-app:8080"
+  #
+  # - name: "blog"
+  #   host: "blog.example.com"
+  #   backend: "http://blog-app:4000"
