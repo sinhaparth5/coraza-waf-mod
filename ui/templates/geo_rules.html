@@ -1,0 +1,150 @@
+{{define "heading"}}Geo Rules{{end}}
+
+{{define "content"}}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+  <!-- ── Add Rule Form ── -->
+  <div class="card bg-base-200 border border-base-300 shadow-sm">
+    <div class="card-body p-5">
+      <h2 class="card-title text-sm flex items-center gap-2 mb-4">
+        <i class="hgi hgi-stroke hgi-rounded hgi-add-circle text-lg text-primary"></i>
+        Add Geo Rule
+      </h2>
+
+      <form hx-post="/admin/geo-rules"
+            hx-target="#geo-rules-body"
+            hx-swap="innerHTML"
+            class="space-y-4">
+
+        <div class="form-control">
+          <label class="label py-0 mb-1">
+            <span class="label-text text-xs opacity-60">Country Code <span class="opacity-50">(ISO 3166-1 α-2)</span></span>
+          </label>
+          <input name="country_code" type="text" placeholder="CN" maxlength="2"
+            class="input input-bordered input-sm font-mono uppercase w-full tracking-widest" required/>
+          <label class="label py-0 mt-1">
+            <span class="label-text-alt opacity-40">Examples: US · CN · RU · IR · KP · DE</span>
+          </label>
+        </div>
+
+        <div class="form-control">
+          <label class="label py-0 mb-1">
+            <span class="label-text text-xs opacity-60">Scope</span>
+          </label>
+          <select name="app_name" class="select select-bordered select-sm w-full">
+            <option value="">Global (all apps)</option>
+            {{range .Apps}}<option value="{{.Name}}">{{.Name}} only</option>{{end}}
+          </select>
+        </div>
+
+        <div class="form-control">
+          <label class="label py-0 mb-1">
+            <span class="label-text text-xs opacity-60">Action</span>
+          </label>
+          <div class="flex gap-4">
+            <label class="label cursor-pointer gap-2 p-0">
+              <input type="radio" name="rule_type" value="block" class="radio radio-error radio-sm" checked/>
+              <span class="label-text text-sm font-medium text-error">Block</span>
+            </label>
+            <label class="label cursor-pointer gap-2 p-0">
+              <input type="radio" name="rule_type" value="allow" class="radio radio-success radio-sm"/>
+              <span class="label-text text-sm font-medium text-success">Allow</span>
+            </label>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-sm w-full gap-2">
+          <i class="hgi hgi-stroke hgi-rounded hgi-add-circle text-base"></i>
+          Add Rule
+        </button>
+      </form>
+
+      <div class="divider my-3"></div>
+
+      <!-- GeoIP notice -->
+      <div class="alert alert-warning alert-sm py-2 px-3 text-xs">
+        <i class="hgi hgi-stroke hgi-rounded hgi-earth text-base shrink-0"></i>
+        <div>
+          <p class="font-semibold">GeoIP database required</p>
+          <p class="opacity-70">Download <a href="https://dev.maxmind.com/geoip/geolite2-free-geolocation-data" target="_blank" class="underline">GeoLite2-Country.mmdb</a> and set <code class="bg-base-300 px-1 rounded">geo.db_path</code> in config.yaml.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Rules Table ── -->
+  <div class="lg:col-span-2 card bg-base-200 border border-base-300 shadow-sm">
+    <div class="card-body p-0">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-base-300">
+        <h2 class="text-sm font-semibold flex items-center gap-2">
+          <i class="hgi hgi-stroke hgi-rounded hgi-earth text-base text-base-content/60"></i>
+          Active Geo Rules
+        </h2>
+        <span class="badge badge-neutral badge-sm">{{len .Rules}} rules</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="table table-sm w-full">
+          <thead>
+            <tr class="text-xs opacity-40 uppercase">
+              <th>Scope</th>
+              <th>Country</th>
+              <th>Action</th>
+              <th>Added</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="geo-rules-body">
+            {{template "geo-rules-rows" .Rules}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+{{end}}
+
+{{define "geo-rules-rows"}}
+{{range .}}
+<tr class="hover">
+  <td class="text-xs">
+    {{if .AppName}}
+      <span class="badge badge-neutral badge-sm">{{.AppName}}</span>
+    {{else}}
+      <span class="opacity-40 italic">global</span>
+    {{end}}
+  </td>
+  <td>
+    <div class="flex items-center gap-2">
+      <span class="{{flagClass .CountryCode}} rounded-sm shadow-sm" style="width:18px;height:13px;background-size:cover;display:inline-block;"></span>
+      <span class="font-mono text-sm font-semibold">{{.CountryCode}}</span>
+    </div>
+  </td>
+  <td>
+    {{if eq .RuleType "block"}}
+      <span class="badge badge-error gap-1"><i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-xs"></i> Block</span>
+    {{else}}
+      <span class="badge badge-success gap-1"><i class="hgi hgi-stroke hgi-rounded hgi-checkmark-circle-02 text-xs"></i> Allow</span>
+    {{end}}
+  </td>
+  <td class="text-xs opacity-40 whitespace-nowrap">{{fmtTime .CreatedAt}}</td>
+  <td class="text-right">
+    <button hx-delete="/admin/geo-rules/{{.ID}}"
+            hx-target="#geo-rules-body"
+            hx-swap="innerHTML"
+            hx-confirm="Remove rule for {{.CountryCode}}?"
+            class="btn btn-ghost btn-xs text-error gap-1">
+      <i class="hgi hgi-stroke hgi-rounded hgi-delete-02 text-sm"></i>
+      Remove
+    </button>
+  </td>
+</tr>
+{{else}}
+<tr>
+  <td colspan="5" class="py-12 text-center opacity-30">
+    <i class="hgi hgi-stroke hgi-rounded hgi-earth text-4xl block mb-2"></i>
+    No geo rules yet
+  </td>
+</tr>
+{{end}}
+{{end}}

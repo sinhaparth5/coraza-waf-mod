@@ -14,28 +14,31 @@ import (
 	"coraza-waf-mod/config"
 	"coraza-waf-mod/geo"
 	"coraza-waf-mod/storage"
+	"coraza-waf-mod/ui"
 	"coraza-waf-mod/waf"
 
 	"github.com/labstack/echo/v4"
 )
 
 type Handler struct {
-	cfg     *config.Config
-	waf     *waf.Engine
-	db      *storage.DB
-	ipbl    *blocklist.IPBlocklist
-	geoBl   *geo.Blocker
-	proxies map[string]*httputil.ReverseProxy
+	cfg         *config.Config
+	waf         *waf.Engine
+	db          *storage.DB
+	ipbl        *blocklist.IPBlocklist
+	geoBl       *geo.Blocker
+	broadcaster *ui.LogBroadcaster
+	proxies     map[string]*httputil.ReverseProxy
 }
 
-func NewHandler(cfg *config.Config, engine *waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker) *Handler {
+func NewHandler(cfg *config.Config, engine *waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, bc *ui.LogBroadcaster) *Handler {
 	h := &Handler{
-		cfg:     cfg,
-		waf:     engine,
-		db:      db,
-		ipbl:    ipbl,
-		geoBl:   geoBl,
-		proxies: make(map[string]*httputil.ReverseProxy),
+		cfg:         cfg,
+		waf:         engine,
+		db:          db,
+		ipbl:        ipbl,
+		geoBl:       geoBl,
+		broadcaster: bc,
+		proxies:     make(map[string]*httputil.ReverseProxy),
 	}
 	for _, app := range cfg.Apps {
 		target, err := url.Parse(app.Backend)
@@ -65,17 +68,20 @@ func (h *Handler) Handle(c echo.Context) error {
 		appName = app.Name
 	}
 
+	// Country lookup (used for logging even when not geo-blocked).
+	_, _, country := h.geoBl.Check(clientIP, appName)
+
 	// 1. IP blocklist — fastest check, no inspection needed.
 	if blocked, reason := h.ipbl.Check(clientIP, appName); blocked {
 		log.Printf("IP blocked %s [%s]", clientIP, reason)
-		h.logBlocked(r, appName, clientIP, http.StatusForbidden, 0, reason, time.Since(start))
+		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, reason, time.Since(start))
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied"})
 	}
 
 	// 2. Geo blocklist — country-level block.
-	if blocked, reason, country := h.geoBl.Check(clientIP, appName); blocked {
+	if blocked, reason, _ := h.geoBl.Check(clientIP, appName); blocked {
 		log.Printf("Geo blocked %s (%s) [%s]", clientIP, country, reason)
-		h.logBlocked(r, appName, clientIP, http.StatusForbidden, 0, reason, time.Since(start))
+		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, reason, time.Since(start))
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied", "country": country})
 	}
 
@@ -91,36 +97,37 @@ func (h *Handler) Handle(c echo.Context) error {
 			status = http.StatusForbidden
 		}
 		log.Printf("WAF blocked %s %s (rule %d, action %s)", clientIP, r.RequestURI, result.RuleID, result.Action)
-		h.logBlocked(r, appName, clientIP, status, result.RuleID, result.Action, time.Since(start))
+		h.logBlocked(r, appName, clientIP, country, status, result.RuleID, result.Action, time.Since(start))
 		return c.JSON(status, map[string]any{"error": "request blocked", "rule_id": result.RuleID})
 	}
 
 	// 4. Proxy to backend.
 	if app == nil {
-		h.logRequest(r, appName, clientIP, http.StatusBadGateway, result, time.Since(start))
+		h.logRequest(r, appName, clientIP, country, http.StatusBadGateway, result, time.Since(start))
 		return c.JSON(http.StatusBadGateway, map[string]string{
 			"error": fmt.Sprintf("no backend configured for host %q", r.Host),
 		})
 	}
 	rp, ok := h.proxies[app.Name]
 	if !ok {
-		h.logRequest(r, appName, clientIP, http.StatusBadGateway, result, time.Since(start))
+		h.logRequest(r, appName, clientIP, country, http.StatusBadGateway, result, time.Since(start))
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": "proxy not initialised"})
 	}
 
 	rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 	rp.ServeHTTP(rw, r)
-	h.logRequest(r, appName, clientIP, rw.status, result, time.Since(start))
+	h.logRequest(r, appName, clientIP, country, rw.status, result, time.Since(start))
 	return nil
 }
 
 // ── Logging helpers ───────────────────────────────────────────────────────────
 
-func (h *Handler) logRequest(r *http.Request, appName, clientIP string, status int, wafResult *waf.Result, dur time.Duration) {
+func (h *Handler) logRequest(r *http.Request, appName, clientIP, country string, status int, wafResult *waf.Result, dur time.Duration) {
 	h.writeLog(storage.RequestLog{
 		Timestamp: time.Now().UTC(),
 		AppName:   appName,
 		RealIP:    clientIP,
+		Country:   country,
 		Method:    r.Method,
 		Host:      r.Host,
 		Path:      r.URL.Path,
@@ -133,11 +140,12 @@ func (h *Handler) logRequest(r *http.Request, appName, clientIP string, status i
 	})
 }
 
-func (h *Handler) logBlocked(r *http.Request, appName, clientIP string, status, ruleID int, reason string, dur time.Duration) {
+func (h *Handler) logBlocked(r *http.Request, appName, clientIP, country string, status, ruleID int, reason string, dur time.Duration) {
 	h.writeLog(storage.RequestLog{
 		Timestamp: time.Now().UTC(),
 		AppName:   appName,
 		RealIP:    clientIP,
+		Country:   country,
 		Method:    r.Method,
 		Host:      r.Host,
 		Path:      r.URL.Path,
@@ -151,11 +159,13 @@ func (h *Handler) logBlocked(r *http.Request, appName, clientIP string, status, 
 }
 
 func (h *Handler) writeLog(entry storage.RequestLog) {
-	if h.db == nil {
-		return
+	if h.db != nil {
+		if err := h.db.InsertRequest(entry); err != nil {
+			log.Printf("db log error: %v", err)
+		}
 	}
-	if err := h.db.InsertRequest(entry); err != nil {
-		log.Printf("db log error: %v", err)
+	if h.broadcaster != nil {
+		h.broadcaster.Broadcast(entry)
 	}
 }
 

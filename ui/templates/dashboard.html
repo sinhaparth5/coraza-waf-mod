@@ -1,0 +1,111 @@
+{{define "heading"}}Dashboard{{end}}
+
+{{define "content"}}
+
+<!-- Stats row -->
+<div class="stats stats-horizontal shadow-sm bg-base-200 border border-base-300 w-full mb-6">
+
+  <div class="stat">
+    <div class="stat-figure text-primary">
+      <i class="hgi hgi-stroke hgi-rounded hgi-activity-01 text-3xl"></i>
+    </div>
+    <div class="stat-title text-xs opacity-60">Requests Today</div>
+    <div class="stat-value text-2xl text-primary">{{.Stats.TotalToday}}</div>
+    <div class="stat-desc opacity-50">All incoming traffic</div>
+  </div>
+
+  <div class="stat">
+    <div class="stat-figure text-error">
+      <i class="hgi hgi-stroke hgi-rounded hgi-shield-ban text-3xl"></i>
+    </div>
+    <div class="stat-title text-xs opacity-60">Blocked Today</div>
+    <div class="stat-value text-2xl text-error">{{.Stats.BlockedToday}}</div>
+    <div class="stat-desc opacity-50">WAF + IP + Geo</div>
+  </div>
+
+  <div class="stat">
+    <div class="stat-figure text-secondary">
+      <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01 text-3xl"></i>
+    </div>
+    <div class="stat-title text-xs opacity-60">Total Requests</div>
+    <div class="stat-value text-2xl">{{.Stats.TotalAll}}</div>
+    <div class="stat-desc opacity-50">All time</div>
+  </div>
+
+  <div class="stat">
+    <div class="stat-figure text-warning">
+      <i class="hgi hgi-stroke hgi-rounded hgi-shield-ban text-3xl"></i>
+    </div>
+    <div class="stat-title text-xs opacity-60">Total Blocked</div>
+    <div class="stat-value text-2xl text-warning">{{.Stats.BlockedAll}}</div>
+    <div class="stat-desc opacity-50">All time</div>
+  </div>
+
+</div>
+
+<!-- Recent requests -->
+<div class="card bg-base-200 border border-base-300 shadow-sm">
+  <div class="card-body p-0">
+    <div class="flex items-center justify-between px-5 py-3 border-b border-base-300">
+      <h2 class="text-sm font-semibold flex items-center gap-2">
+        <i class="hgi hgi-stroke hgi-rounded hgi-activity-01 text-base text-primary"></i>
+        Recent Requests
+      </h2>
+      <a href="/admin/logs" class="btn btn-xs btn-ghost gap-1">
+        View live logs
+        <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02 text-sm"></i>
+      </a>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="table table-sm table-zebra w-full">
+        <thead>
+          <tr class="text-xs opacity-50 uppercase">
+            <th>Time</th>
+            <th>App</th>
+            <th>IP</th>
+            <th>Method</th>
+            <th>Path</th>
+            <th>Status</th>
+            <th class="text-right">Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Recent}}
+          <tr class="{{if .Blocked}}bg-error/5{{end}} hover">
+            <td class="opacity-50 whitespace-nowrap text-xs tabular-nums">{{fmtTime .Timestamp}}</td>
+            <td class="font-medium text-xs">{{.AppName}}</td>
+            <td class="text-xs">
+              <div class="flex items-center gap-1.5">
+                {{if .Country}}<span class="{{flagClass .Country}} rounded-sm" style="width:14px;height:10px;background-size:cover;display:inline-block;"></span>{{end}}
+                <span class="font-mono">{{.RealIP}}</span>
+              </div>
+            </td>
+            <td><span class="badge badge-ghost badge-xs font-mono font-semibold">{{.Method}}</span></td>
+            <td class="font-mono text-xs opacity-70 max-w-[200px] truncate">{{truncate .Path 40}}</td>
+            <td>
+              <div class="flex items-center gap-1.5">
+                {{if ge .Status 500}}<span class="badge badge-error badge-xs">{{.Status}}</span>
+                {{else if ge .Status 400}}<span class="badge badge-warning badge-xs">{{.Status}}</span>
+                {{else if ge .Status 300}}<span class="badge badge-info badge-xs">{{.Status}}</span>
+                {{else}}<span class="badge badge-success badge-xs">{{.Status}}</span>{{end}}
+                {{if .Blocked}}<span class="badge badge-error badge-outline badge-xs gap-0.5"><i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-[10px]"></i> BLOCKED</span>{{end}}
+              </div>
+            </td>
+            <td class="text-right opacity-40 text-xs tabular-nums">{{fmtDur .Duration}}</td>
+          </tr>
+          {{else}}
+          <tr>
+            <td colspan="7" class="text-center py-12 opacity-40">
+              <i class="hgi hgi-stroke hgi-rounded hgi-activity-01 text-4xl block mb-2"></i>
+              No requests yet — send some traffic through the proxy
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{{end}}

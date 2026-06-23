@@ -1,0 +1,29 @@
+{{define "log-row"}}
+<div class="log-row group flex items-center gap-4 px-4 py-1.5 border-b border-base-300/20 text-xs hover:bg-base-300/30 transition-colors {{if .Blocked}}bg-error/5{{end}}">
+  <span class="text-base-content/30 shrink-0 w-[5.5rem] tabular-nums">{{fmtTime .Timestamp}}</span>
+  <span class="text-primary/80 shrink-0 w-20 truncate font-medium">{{truncate .AppName 10}}</span>
+  <span class="shrink-0 w-32 flex items-center gap-1.5">
+    {{if .Country}}<span class="{{flagClass .Country}} rounded-sm text-[10px]" style="width:14px;height:10px;background-size:cover;display:inline-block;vertical-align:middle;"></span>{{end}}
+    <span class="text-warning/80 font-mono">{{.RealIP}}</span>
+  </span>
+  <span class="shrink-0 w-10">
+    <span class="badge badge-xs badge-ghost font-mono font-medium">{{.Method}}</span>
+  </span>
+  <span class="flex-1 truncate text-base-content/70 font-mono">{{.Path}}</span>
+  <span class="shrink-0 w-12 text-right">
+    {{if ge .Status 500}}<span class="text-error font-semibold">{{.Status}}</span>
+    {{else if ge .Status 400}}<span class="text-warning font-semibold">{{.Status}}</span>
+    {{else if ge .Status 300}}<span class="text-info">{{.Status}}</span>
+    {{else}}<span class="text-success">{{.Status}}</span>{{end}}
+  </span>
+  <span class="shrink-0 w-12 text-right text-base-content/30 tabular-nums">{{fmtDur .Duration}}</span>
+  {{if .Blocked}}
+  <span class="shrink-0 flex items-center gap-1 text-error font-semibold">
+    <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-sm"></i>
+    {{if .RuleID}}#{{.RuleID}}{{else}}BLOCKED{{end}}
+  </span>
+  {{else}}
+  <span class="shrink-0 w-16"></span>
+  {{end}}
+</div>
+{{end}}

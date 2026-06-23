@@ -17,6 +17,7 @@ type RequestLog struct {
 	Timestamp time.Time
 	AppName   string
 	RealIP    string
+	Country   string // ISO 3166-1 alpha-2, e.g. "US", "CN"
 	Method    string
 	Host      string
 	Path      string
@@ -54,12 +55,16 @@ func (db *DB) Close() error {
 }
 
 func (db *DB) migrate() error {
+	// Idempotent column migration for existing databases.
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN country TEXT NOT NULL DEFAULT ''`) //nolint
+
 	_, err := db.conn.Exec(`
 	CREATE TABLE IF NOT EXISTS requests (
 		id          INTEGER PRIMARY KEY AUTOINCREMENT,
 		ts          DATETIME NOT NULL,
 		app_name    TEXT NOT NULL,
 		real_ip     TEXT NOT NULL,
+		country     TEXT NOT NULL DEFAULT '',
 		method      TEXT NOT NULL,
 		host        TEXT NOT NULL,
 		path        TEXT NOT NULL,
@@ -188,11 +193,12 @@ func (db *DB) ListGeoRules() ([]GeoRule, error) {
 func (db *DB) InsertRequest(r RequestLog) error {
 	_, err := db.conn.Exec(`
 		INSERT INTO requests
-			(ts, app_name, real_ip, method, host, path, status, blocked, rule_id, action, user_agent, duration_ms)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			(ts, app_name, real_ip, country, method, host, path, status, blocked, rule_id, action, user_agent, duration_ms)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.Timestamp.UTC(),
 		r.AppName,
 		r.RealIP,
+		r.Country,
 		r.Method,
 		r.Host,
 		r.Path,
@@ -236,6 +242,7 @@ type LogRow struct {
 	Timestamp time.Time
 	AppName   string
 	RealIP    string
+	Country   string
 	Method    string
 	Host      string
 	Path      string
@@ -250,7 +257,7 @@ type LogRow struct {
 // ListRequests returns paginated request logs, newest first.
 // Optionally filter by blocked-only or IP.
 func (db *DB) ListRequests(blockedOnly bool, ip string, limit, offset int) ([]LogRow, error) {
-	query := `SELECT id, ts, app_name, real_ip, method, host, path, status, blocked, rule_id, action, user_agent, duration_ms
+	query := `SELECT id, ts, app_name, real_ip, country, method, host, path, status, blocked, rule_id, action, user_agent, duration_ms
 	          FROM requests WHERE 1=1`
 	args := []any{}
 
@@ -275,7 +282,7 @@ func (db *DB) ListRequests(blockedOnly bool, ip string, limit, offset int) ([]Lo
 		var row LogRow
 		var blocked int
 		if err := rows.Scan(
-			&row.ID, &row.Timestamp, &row.AppName, &row.RealIP,
+			&row.ID, &row.Timestamp, &row.AppName, &row.RealIP, &row.Country,
 			&row.Method, &row.Host, &row.Path, &row.Status,
 			&blocked, &row.RuleID, &row.Action, &row.UserAgent, &row.Duration,
 		); err != nil {

@@ -11,6 +11,7 @@ import (
 	"coraza-waf-mod/geo"
 	"coraza-waf-mod/proxy"
 	"coraza-waf-mod/storage"
+	"coraza-waf-mod/ui"
 	"coraza-waf-mod/waf"
 
 	"github.com/labstack/echo/v4"
@@ -51,6 +52,8 @@ func main() {
 	}
 	defer geoBl.Close()
 
+	broadcaster := ui.NewLogBroadcaster()
+
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(middleware.Recover())
@@ -64,7 +67,13 @@ func main() {
 		},
 	}))
 
-	h := proxy.NewHandler(cfg, engine, db, ipbl, geoBl)
+	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, broadcaster)
+	if err != nil {
+		log.Fatalf("ui init: %v", err)
+	}
+	uiHandler.Register(e)
+
+	h := proxy.NewHandler(cfg, engine, db, ipbl, geoBl, broadcaster)
 	e.Any("/*", h.Handle)
 
 	switch cfg.TLS.Mode {

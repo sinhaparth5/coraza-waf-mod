@@ -1,5 +1,5 @@
 # ─── Network ─────────────────────────────────────────────────────────────────
-listen_addr:     ":80"    # HTTP port (ACME challenge + redirect when TLS is on)
+listen_addr:     ":8080"  # HTTP port (change to :80 in production with TLS)
 listen_addr_tls: ":443"   # HTTPS port (only used when tls.mode is auto or custom)
 
 # ─── TLS ─────────────────────────────────────────────────────────────────────

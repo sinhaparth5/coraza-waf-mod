@@ -60,15 +60,14 @@ A single-binary Go WAF + reverse proxy with embedded Coraza, SQLite storage, and
 - [x] Lookup on every request; 403 with country code in response
 - [x] Check order: IP block → Geo block → WAF (fastest checks first)
 
-### Phase 5 — Web UI Dashboard
-- [ ] Admin routes protected (basic auth or API key)
-- [ ] Dashboard: stats cards (blocked today, top countries, top attacked apps) + charts
-- [ ] Logs page: paginated table, filters (IP, app, date range, blocked-only)
-- [ ] Blocked IPs page: add / remove / search
-- [ ] Geo Rules page: manage country rules per app
-- [ ] Apps page: add / edit / delete backends
-- [ ] Rules page: view loaded CRS rules + custom rules
-- [ ] HTMX live updates (no full-page reloads)
+### Phase 5 — Web UI Dashboard ✅ COMPLETE
+- [x] Admin routes protected with HTTP Basic Auth
+- [x] Dashboard: stats cards (requests today, blocked today, all-time totals) + recent requests table
+- [x] Live Logs page: nginx-style real-time feed via SSE + HTMX (color-coded, country flags, pause/resume)
+- [x] IP Rules page: add/remove block/allow per IP, global or per-app, HTMX in-place updates
+- [x] Geo Rules page: add/remove country block/allow rules, HTMX in-place updates
+- [x] Country flag emoji from ISO code; country shown in all log views
+- [x] Templates embedded in binary via embed.FS (single self-contained binary)
 
 ### Phase 6 — Polish & Production
 - [ ] Rate limiting (in-process token bucket; Redis optional later)
@@ -113,7 +112,7 @@ coraza-waf-mod/
 
 **Phase 1 — in progress.** Core proxy + WAF engine built and tested. Binary compiles and proxies requests correctly. Real IP extraction is in place.
 
-**Next up:** Phase 4 — IP blocking + Geo blocking.
+**Next up:** Phase 6 — Polish & Production (rate limiting, Docker, hot-reload, metrics).
 
 ---
 

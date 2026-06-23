@@ -1,0 +1,124 @@
+{{define "base"}}
+<!DOCTYPE html>
+<html lang="en" data-theme="night">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>{{block "title" .}}Coraza WAF Mod{{end}}</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+  <!-- daisyUI + Tailwind -->
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4/dist/full.min.css" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Hugeicons -->
+  <link rel="stylesheet" href="https://cdn.hugeicons.com/font/hgi-stroke-rounded.css"/>
+
+  <!-- Country flags -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7/css/flag-icons.min.css"/>
+
+  <!-- HTMX + SSE -->
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/sse.js"></script>
+
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .font-mono, .log-feed, code { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="bg-base-100 text-base-content min-h-screen">
+
+<div class="flex h-screen overflow-hidden">
+
+  <!-- ── Sidebar ───────────────────────────────────────────────── -->
+  <aside class="w-60 bg-base-200 flex flex-col shrink-0 border-r border-base-300">
+
+    <!-- Brand -->
+    <div class="px-5 py-5 border-b border-base-300">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+          <i class="hgi hgi-stroke hgi-rounded hgi-shield-01 text-primary text-xl"></i>
+        </div>
+        <div>
+          <p class="text-sm font-bold leading-tight text-base-content">Coraza WAF Mod</p>
+          <p class="text-xs text-base-content/40 leading-tight">Security Dashboard</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="flex-1 px-3 py-4">
+      <ul class="menu menu-sm p-0 gap-0.5">
+        <li>
+          <a href="/admin" class="nav-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium">
+            <i class="hgi hgi-stroke hgi-rounded hgi-dashboard-square-02 text-lg w-5 shrink-0"></i>
+            Dashboard
+          </a>
+        </li>
+        <li>
+          <a href="/admin/logs" class="nav-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium">
+            <i class="hgi hgi-stroke hgi-rounded hgi-file-02 text-lg w-5 shrink-0"></i>
+            Live Logs
+          </a>
+        </li>
+        <li class="mt-2">
+          <p class="px-3 py-1 text-xs font-semibold text-base-content/30 uppercase tracking-wider">Firewall</p>
+        </li>
+        <li>
+          <a href="/admin/ip-rules" class="nav-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium">
+            <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-lg w-5 shrink-0"></i>
+            IP Rules
+          </a>
+        </li>
+        <li>
+          <a href="/admin/geo-rules" class="nav-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium">
+            <i class="hgi hgi-stroke hgi-rounded hgi-earth text-lg w-5 shrink-0"></i>
+            Geo Rules
+          </a>
+        </li>
+      </ul>
+    </nav>
+
+    <!-- Footer -->
+    <div class="px-5 py-3 border-t border-base-300">
+      <p class="text-xs text-base-content/30">Coraza WAF Mod · v0.1</p>
+    </div>
+  </aside>
+
+  <!-- ── Main ──────────────────────────────────────────────────── -->
+  <div class="flex-1 flex flex-col overflow-hidden">
+
+    <!-- Top bar -->
+    <header class="bg-base-200 border-b border-base-300 px-6 py-3 flex items-center justify-between shrink-0">
+      <h1 class="text-base font-semibold">{{block "heading" .}}Dashboard{{end}}</h1>
+      <div class="flex items-center gap-2 text-xs text-base-content/40">
+        <i class="hgi hgi-stroke hgi-rounded hgi-shield-01 text-primary"></i>
+        WAF Active
+      </div>
+    </header>
+
+    <!-- Page content -->
+    <main class="flex-1 overflow-y-auto p-6">
+      {{block "content" .}}{{end}}
+    </main>
+
+  </div>
+</div>
+
+<script>
+  // Highlight active nav link
+  const path = window.location.pathname;
+  document.querySelectorAll('.nav-link').forEach(a => {
+    const href = a.getAttribute('href');
+    const isActive = href === path || (href !== '/admin' && path.startsWith(href));
+    if (isActive) {
+      a.classList.add('bg-primary/10', 'text-primary');
+    }
+  });
+</script>
+</body>
+</html>
+{{end}}

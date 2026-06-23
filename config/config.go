@@ -79,7 +79,7 @@ func Load(path string) (*Config, error) {
 
 func applyDefaults(cfg *Config) {
 	if cfg.ListenAddr == "" {
-		cfg.ListenAddr = ":80"
+		cfg.ListenAddr = ":8080"
 	}
 	if cfg.ListenAddrTLS == "" {
 		cfg.ListenAddrTLS = ":443"
