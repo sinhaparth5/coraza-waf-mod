@@ -1,93 +1,84 @@
 # Coraza WAF Mod
 
-
-
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraza](https://github.com/corazawaf/coraza) (OWASP CRS) with a built-in admin dashboard. No Docker, no external database, no Node toolchain — one binary, one SQLite file.
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/sinhaparth5/coraza-waf-mod.git
-git branch -M main
-git push -uf origin main
+[Client] → [Coraza WAF + Proxy] → [Backend App(s)]
+                  ↕
+            [SQLite DB]
+                  ↕
+           [Admin Dashboard]
 ```
 
-## Integrate with your tools
+## Features
 
-* [Set up project integrations](https://gitlab.com/sinhaparth5/coraza-waf-mod/-/settings/integrations)
+- **WAF protection** — Coraza v3 with the OWASP Core Rule Set embedded in the binary. Blocks SQLi, XSS, RCE, path traversal, restricted file access, and known scanner user agents out of the box. Custom `.conf` rules can be loaded on top of CRS.
+- **Reverse proxy / multi-app routing** — route by Host header (virtual hosting) or by path prefix (with automatic prefix stripping, like nginx `location`), to as many backend apps as you need.
+- **IP & country blocking** — manual IP allow/block rules plus GeoIP2-based country blocking (MaxMind GeoLite2), with Cloudflare-aware real-IP extraction (`CF-Connecting-IP` → `X-Forwarded-For` → `X-Real-IP`).
+- **TLS** — plain HTTP, automatic Let's Encrypt certificates, or your own cert/key — globally and/or per individual service (upload a cert or enable auto-issue per backend from the dashboard).
+- **Admin dashboard** — HTMX/Tailwind UI for live traffic & threat charts, filterable request logs with live tail, IP/geo rule management, and service (backend app) management — all changes apply immediately, no restart required.
+- **Everything in SQLite** — request logs, IP/geo rules, services, and TLS state all live in one `waf.db` file. No Postgres/Redis/MySQL to stand up.
 
-## Collaborate with your team
+## Installing
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+### Option A — native binary (recommended)
 
-## Test and Deploy
+```bash
+curl -fsSL https://<wherever-this-is-published>/install.sh | sudo bash
+```
 
-Use the built-in continuous integration in GitLab.
+This downloads the release binary for your architecture (amd64/arm64), verifies its SHA256 checksum, creates a dedicated non-root system user (`coraza-waf-mod`, granted only `CAP_NET_BIND_SERVICE` so it can bind ports 80/443 without running as root), writes a config to `/etc/coraza-waf-mod/config.yaml` with a freshly generated admin password (printed once), installs a systemd unit, and starts the service.
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+Check it's running:
 
-***
+```bash
+sudo systemctl status coraza-waf-mod
+sudo journalctl -u coraza-waf-mod -f
+```
 
-# Editing this README
+Config lives at `/etc/coraza-waf-mod/config.yaml` (see `deploy/config.yaml.example` for the annotated template) and data/certs at `/var/lib/coraza-waf-mod/`. Edit the config and `sudo systemctl restart coraza-waf-mod` to apply changes that aren't managed from the dashboard.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+### Option B — build from source
 
-## Suggestions for a good README
+Requires Go 1.25+.
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+```bash
+git clone https://gitlab.com/sinhaparth5/coraza-waf-mod.git
+cd coraza-waf-mod
+make build      # go generate (minifies JS) + go build -> ./coraza-waf-mod
+./coraza-waf-mod config.yaml
+```
 
-## Name
-Choose a self-explaining name for your project.
+`make run` builds and runs in one step. Pure Go all the way through (the SQLite driver is `modernc.org/sqlite`, no CGO), so this builds cleanly with nothing but a Go toolchain.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+### Option C — cross-compiled release binaries
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+```bash
+make dist        # cross-compiles dist/coraza-waf-mod-linux-{amd64,arm64}, CGO_ENABLED=0
+make checksums   # writes dist/checksums.txt
+```
 
 ## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+1. Edit `config.yaml` (see the comments inline) — set the listen address, TLS mode, GeoIP database path, and admin credentials.
+2. Start the server: `./coraza-waf-mod config.yaml` (defaults to `config.yaml` in the working directory if no path is given).
+3. Open the admin dashboard at `http://<host>:<port>/admin` (path is configurable via `admin.path`) and log in with the username/password from your config.
+4. Add backend apps from **Services**: give it a name, a match rule (Host or path Prefix), and a backend URL. The wizard checks the backend is reachable before saving.
+5. Manage IP rules, country blocking, and request logs from their respective dashboard pages — everything takes effect immediately.
+6. Optionally enable TLS per service from the **Manage** button on its row (upload a cert, or turn on auto-issue if `tls.auto.email` is set in config).
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+The `apps:` list in `config.yaml` is only used to seed the database on first-ever startup — after that, **Services** in the dashboard is the source of truth for routing.
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+### GeoIP setup (optional)
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+Download the free [GeoLite2-Country database](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data) from MaxMind and point `geo.db_path` at the `.mmdb` file. Leave it empty to disable geo blocking.
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+## Development
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+```bash
+make build   # build (runs go generate first — required after editing static/js/src/*.js)
+make test    # go test ./...
+make clean   # remove binary, minified JS, dist/
+```
 
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+See `CLAUDE.md` for architecture notes if you're working on the codebase.
