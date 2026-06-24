@@ -95,6 +95,13 @@ func (db *DB) QueueRequest(entry RequestLog) {
 	}
 }
 
+// QueueDepth returns the number of entries currently buffered in logQueue,
+// waiting to be written by the background worker. Used by the /metrics
+// endpoint to surface logging backpressure.
+func (db *DB) QueueDepth() int {
+	return len(db.logQueue)
+}
+
 func (db *DB) Close() error {
 	close(db.logQueue)
 	<-db.logDone

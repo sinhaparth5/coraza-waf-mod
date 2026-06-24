@@ -14,6 +14,7 @@ import (
 	"coraza-waf-mod/blocklist"
 	"coraza-waf-mod/config"
 	"coraza-waf-mod/geo"
+	"coraza-waf-mod/metrics"
 	"coraza-waf-mod/services"
 	"coraza-waf-mod/storage"
 
@@ -128,6 +129,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	}))
 
 	g.StaticFS("/static/js", h.staticJS)
+	g.GET("/metrics", echo.WrapHandler(metrics.Handler()))
 
 	g.GET("", h.Dashboard)
 	g.GET("/api/notifications", h.NotificationsPanel)

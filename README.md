@@ -17,6 +17,7 @@ A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraz
 - **IP & country blocking** — manual IP allow/block rules plus GeoIP2-based country blocking (MaxMind GeoLite2), with Cloudflare-aware real-IP extraction (`CF-Connecting-IP` → `X-Forwarded-For` → `X-Real-IP`).
 - **TLS** — plain HTTP, automatic Let's Encrypt certificates, or your own cert/key — globally and/or per individual service (upload a cert or enable auto-issue per backend from the dashboard).
 - **Admin dashboard** — HTMX/Tailwind UI for live traffic & threat charts, filterable request logs with live tail, IP/geo rule management, and service (backend app) management — all changes apply immediately, no restart required.
+- **Prometheus metrics** — `/admin/metrics` exposes request volume, latency, and per-cause block counters (IP/geo/WAF) alongside Go runtime metrics, ready to scrape (uses the same admin credentials, since Prometheus scrape configs support basic auth natively).
 - **Everything in SQLite** — request logs, IP/geo rules, services, and TLS state all live in one `waf.db` file. No Postgres/Redis/MySQL to stand up.
 
 ## Installing

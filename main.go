@@ -17,6 +17,7 @@ import (
 	"coraza-waf-mod/blocklist"
 	"coraza-waf-mod/config"
 	"coraza-waf-mod/geo"
+	"coraza-waf-mod/metrics"
 	"coraza-waf-mod/proxy"
 	"coraza-waf-mod/services"
 	"coraza-waf-mod/storage"
@@ -76,6 +77,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("services registry: %v", err)
 	}
+	metrics.SetDB(db)
+	metrics.SetRegistry(registry)
 
 	broadcaster := ui.NewLogBroadcaster()
 

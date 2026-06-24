@@ -6,11 +6,13 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"coraza-waf-mod/blocklist"
 	"coraza-waf-mod/geo"
+	"coraza-waf-mod/metrics"
 	"coraza-waf-mod/services"
 	"coraza-waf-mod/storage"
 	"coraza-waf-mod/ui"
@@ -60,6 +62,7 @@ func (h *Handler) Handle(c echo.Context) error {
 	// 1. IP blocklist — fastest check, no inspection needed.
 	if blocked, reason := h.ipbl.Check(clientIP, appName); blocked {
 		log.Printf("IP blocked %s [%s]", clientIP, reason)
+		metrics.IPBlockedTotal.WithLabelValues(appName).Inc()
 		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, reason, time.Since(start))
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied"})
 	}
@@ -67,6 +70,7 @@ func (h *Handler) Handle(c echo.Context) error {
 	// 2. Geo blocklist — country-level block.
 	if blocked, reason, _ := h.geoBl.Check(clientIP, appName); blocked {
 		log.Printf("Geo blocked %s (%s) [%s]", clientIP, country, reason)
+		metrics.GeoBlockedTotal.WithLabelValues(appName, country).Inc()
 		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, reason, time.Since(start))
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied", "country": country})
 	}
@@ -75,6 +79,7 @@ func (h *Handler) Handle(c echo.Context) error {
 	result, err := h.waf.Check(r, clientIP)
 	if err != nil {
 		log.Printf("waf error: %v", err)
+		metrics.RecordRequest(appName, strconv.Itoa(http.StatusInternalServerError), time.Since(start).Seconds())
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
 	}
 	if result.Blocked {
@@ -83,6 +88,7 @@ func (h *Handler) Handle(c echo.Context) error {
 			status = http.StatusForbidden
 		}
 		log.Printf("WAF blocked %s %s (rule %d, action %s)", clientIP, r.RequestURI, result.RuleID, result.Action)
+		metrics.WAFBlockedTotal.WithLabelValues(appName, result.Action).Inc()
 		h.logBlocked(r, appName, clientIP, country, status, result.RuleID, result.Action, time.Since(start))
 		return c.JSON(status, map[string]any{"error": "request blocked", "rule_id": result.RuleID})
 	}
@@ -171,6 +177,7 @@ func (h *Handler) logBlocked(r *http.Request, appName, clientIP, country string,
 // a background worker (see storage.DB.runLogWorker) so a slow or contended
 // write never holds open the HTTP connection of the request that caused it.
 func (h *Handler) writeLog(entry storage.RequestLog) {
+	metrics.RecordRequest(entry.AppName, strconv.Itoa(entry.Status), float64(entry.Duration)/1000)
 	if h.db != nil {
 		h.db.QueueRequest(entry)
 	}
