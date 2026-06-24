@@ -1,0 +1,27 @@
+[Unit]
+Description=Coraza WAF Mod (WAF + reverse proxy)
+After=network.target
+
+[Service]
+Type=simple
+User=coraza-waf-mod
+Group=coraza-waf-mod
+WorkingDirectory=/var/lib/coraza-waf-mod
+ExecStart=/usr/local/bin/coraza-waf-mod /etc/coraza-waf-mod/config.yaml
+Restart=on-failure
+RestartSec=5s
+
+# Binds :80/:443 without running as root: grant just the one capability
+# needed for privileged ports instead of full root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+# Sandboxing: read-only system dirs, private /tmp, no privilege escalation.
+# /var/lib/coraza-waf-mod (waf.db, certs/, GeoLite2 db) stays writable since
+# ProtectSystem=full only locks down /usr, /boot and /etc.
+ProtectSystem=full
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,15 +1,68 @@
 {{define "actions"}}
-<button onclick="togglePause()" id="pause-btn"
+{{if not .History}}
+<button id="pause-btn"
   style="display:flex; align-items:center; gap:6px; border:1px solid #ECEEF2; background:#fff; border-radius:999px; padding:6px 16px; font-size:13px; font-weight:500; color:#64748B; cursor:pointer; font-family:inherit;">
   <i id="pause-icon" class="hgi hgi-stroke hgi-rounded hgi-pause" style="font-size:13px;"></i>
   <span id="pause-label">Pause</span>
 </button>
+{{else}}
+<a href="/admin/logs"
+  style="display:flex; align-items:center; gap:6px; border:1px solid #ECEEF2; background:#fff; border-radius:999px; padding:6px 16px; font-size:13px; font-weight:500; color:#64748B; cursor:pointer; text-decoration:none;">
+  <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02" style="font-size:13px; color:#5DBB7B;"></i>
+  Back to live
+</a>
+{{end}}
 {{end}}
 
 {{define "content"}}
 
+<!-- Filter bar -->
+<form method="get" action="/admin/logs" id="logs-filter-form" style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
+  <div>
+    <label style="display:block; font-size:10px; color:#64748B; margin-bottom:4px; font-weight:600; text-transform:uppercase; letter-spacing:.04em;">From</label>
+    <input type="datetime-local" name="from" id="filter-from" data-utc="{{.FilterFrom}}"
+      style="border:1.5px solid #ECEEF2; border-radius:9px; padding:6px 10px; font-size:12px; outline:none; color:#1E293B; background:#fff;"/>
+  </div>
+  <div>
+    <label style="display:block; font-size:10px; color:#64748B; margin-bottom:4px; font-weight:600; text-transform:uppercase; letter-spacing:.04em;">To</label>
+    <input type="datetime-local" name="to" id="filter-to" data-utc="{{.FilterTo}}"
+      style="border:1.5px solid #ECEEF2; border-radius:9px; padding:6px 10px; font-size:12px; outline:none; color:#1E293B; background:#fff;"/>
+  </div>
+  <div>
+    <label style="display:block; font-size:10px; color:#64748B; margin-bottom:4px; font-weight:600; text-transform:uppercase; letter-spacing:.04em;">App</label>
+    <select name="app" style="border:1.5px solid #ECEEF2; border-radius:9px; padding:6px 10px; font-size:12px; outline:none; color:#1E293B; background:#fff; min-width:120px;">
+      <option value="" {{if eq .FilterApp ""}}selected{{end}}>All apps</option>
+      {{range .Apps}}<option value="{{.Name}}" {{if eq $.FilterApp .Name}}selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+  </div>
+  <div>
+    <label style="display:block; font-size:10px; color:#64748B; margin-bottom:4px; font-weight:600; text-transform:uppercase; letter-spacing:.04em;">Status</label>
+    <select name="status" style="border:1.5px solid #ECEEF2; border-radius:9px; padding:6px 10px; font-size:12px; outline:none; color:#1E293B; background:#fff; min-width:120px;">
+      <option value="" {{if eq .FilterStatus ""}}selected{{end}}>All statuses</option>
+      <option value="blocked" {{if eq .FilterStatus "blocked"}}selected{{end}}>Blocked only</option>
+      <option value="2xx" {{if eq .FilterStatus "2xx"}}selected{{end}}>2xx success</option>
+      <option value="3xx" {{if eq .FilterStatus "3xx"}}selected{{end}}>3xx redirect</option>
+      <option value="4xx" {{if eq .FilterStatus "4xx"}}selected{{end}}>4xx client error</option>
+      <option value="5xx" {{if eq .FilterStatus "5xx"}}selected{{end}}>5xx server error</option>
+    </select>
+  </div>
+  <button type="submit" class="btn-primary" style="display:flex; align-items:center; gap:6px; padding:7px 16px;">
+    <i class="hgi hgi-stroke hgi-rounded hgi-filter" style="font-size:13px;"></i>
+    Filter
+  </button>
+  {{if .History}}
+  <a href="/admin/logs" style="font-size:12px; color:#64748B; padding:7px 4px; text-decoration:none;">Clear</a>
+  {{end}}
+</form>
+
 <!-- Status bar -->
 <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px;">
+  {{if .History}}
+  <div style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; color:#64748B;">
+    <i class="hgi hgi-stroke hgi-rounded hgi-database" style="font-size:13px; color:#2B4870;"></i>
+    Showing {{len .Recent}} of {{.Total}} matching requests
+  </div>
+  {{else}}
   <div style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; color:#16A34A;">
     <span style="position:relative; display:flex; width:8px; height:8px;">
       <span style="position:absolute; inset:0; border-radius:50%; background:#5DBB7B; animation:ping 1.2s cubic-bezier(0,0,.2,1) infinite; opacity:.75;"></span>
@@ -18,7 +71,8 @@
     Live stream active
   </div>
   <span style="width:1px; height:16px; background:#ECEEF2; display:block;"></span>
-  <span style="font-size:11px; color:#94A3B8;">New entries appear at the top</span>
+  <span style="font-size:11px; color:#64748B;">New entries appear at the top</span>
+  {{end}}
 </div>
 
 <style>
@@ -29,19 +83,34 @@
 <div class="card" style="overflow:hidden;">
 
   <!-- Column headers -->
-  <div style="display:flex; align-items:center; gap:14px; padding:8px 20px; background:#F8F9FB; border-bottom:1px solid #ECEEF2; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.06em;">
-    <span style="flex-shrink:0; width:88px;">Time</span>
-    <span style="flex-shrink:0; width:72px;">App</span>
-    <span style="flex-shrink:0; width:120px;">IP</span>
-    <span style="flex-shrink:0; width:36px;">Method</span>
+  <div style="display:flex; align-items:center; gap:22px; padding:11px 24px; background:#F8F9FB; border-bottom:1px solid #ECEEF2; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.06em;">
+    <span style="flex-shrink:0; width:100px;">Time</span>
+    <span style="flex-shrink:0; width:90px;">App</span>
+    <span style="flex-shrink:0; width:140px;">IP</span>
+    <span style="flex-shrink:0; width:54px;">Method</span>
     <span style="flex:1;">Path</span>
-    <span style="flex-shrink:0; width:44px; text-align:right;">Status</span>
-    <span style="flex-shrink:0; width:44px; text-align:right;">Dur</span>
-    <span style="flex-shrink:0; width:64px;">Action</span>
+    <span style="flex-shrink:0; width:50px; text-align:right;">Status</span>
+    <span style="flex-shrink:0; width:50px; text-align:right;">Dur</span>
+    <span style="flex-shrink:0; width:80px;">Action</span>
   </div>
 
+  {{if .History}}
+  <!-- Static historical results -->
+  <div id="log-wrapper" data-history="true" style="overflow-y:auto; height:calc(100vh - 320px);">
+    <div id="log-feed">
+      {{range .Recent}}{{template "log-row" .}}{{end}}
+    </div>
+    {{if not .Recent}}
+    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:64px; color:#CBD5E1; text-align:center;">
+      <i class="hgi hgi-stroke hgi-rounded hgi-search-02" style="font-size:40px; display:block; margin-bottom:10px; opacity:.4;"></i>
+      <p style="font-size:13px;">No requests match these filters.</p>
+    </div>
+    {{end}}
+  </div>
+  {{else}}
   <!-- SSE live feed -->
   <div id="log-wrapper"
+       data-history="false"
        style="overflow-y:auto; height:calc(100vh - 260px);"
        hx-ext="sse"
        sse-connect="/admin/logs/stream">
@@ -57,34 +126,31 @@
     </div>
     {{end}}
   </div>
+  {{end}}
 
 </div>
 
+{{if .History}}
+<!-- Pagination -->
+<div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-top:14px;">
+  {{if gt .CurPage 1}}
+  <a href="?from={{.FilterFrom}}&to={{.FilterTo}}&app={{.FilterApp}}&status={{.FilterStatus}}&mode=history&page={{sub .CurPage 1}}"
+     style="font-size:12px; color:#64748B; border:1px solid #ECEEF2; border-radius:999px; padding:6px 14px; text-decoration:none;">← Prev</a>
+  {{end}}
+  <span style="font-size:12px; color:#64748B;">Page {{.CurPage}} of {{.TotalPages}}</span>
+  {{if lt .CurPage .TotalPages}}
+  <a href="?from={{.FilterFrom}}&to={{.FilterTo}}&app={{.FilterApp}}&status={{.FilterStatus}}&mode=history&page={{add .CurPage 1}}"
+     style="font-size:12px; color:#64748B; border:1px solid #ECEEF2; border-radius:999px; padding:6px 14px; text-decoration:none;">Next →</a>
+  {{end}}
+</div>
+{{else}}
 <p style="font-size:11px; color:#CBD5E1; margin-top:10px;" class="mono">
   Format: time · app · ip · method · path · status · duration · [action]
 </p>
+{{end}}
 
-<script>
-let paused = false;
-const wrapper = document.getElementById('log-wrapper');
-const feed = document.getElementById('log-feed');
+{{end}}
 
-function togglePause() {
-  paused = !paused;
-  document.getElementById('pause-label').textContent = paused ? 'Resume' : 'Pause';
-  const icon = document.getElementById('pause-icon');
-  icon.className = paused
-    ? 'hgi hgi-stroke hgi-rounded hgi-play'
-    : 'hgi hgi-stroke hgi-rounded hgi-pause';
-  document.getElementById('pause-btn').style.color = paused ? '#5DBB7B' : '#64748B';
-}
-
-const obs = new MutationObserver(() => {
-  const empty = document.getElementById('empty-state');
-  if (empty) empty.remove();
-  if (!paused) wrapper.scrollTop = 0;
-});
-if (feed) obs.observe(feed, { childList: true });
-</script>
-
+{{define "scripts"}}
+<script src="{{.AdminPath}}/static/js/logs.min.js" defer></script>
 {{end}}

@@ -1,64 +1,57 @@
+# Production config for the systemd-managed install (deploy/install.sh).
+# Lives at /etc/coraza-waf-mod/config.yaml. All paths below are absolute,
+# rooted at /var/lib/coraza-waf-mod (the service's WorkingDirectory) since a
+# systemd unit shouldn't depend on relative-path assumptions.
+
 # ─── Network ─────────────────────────────────────────────────────────────────
-listen_addr:     ":8080"  # HTTP port (change to :80 in production with TLS)
-listen_addr_tls: ":443"   # HTTPS port (only used when tls.mode is auto or custom)
+listen_addr:     ":8080"  # change to ":80" once you're ready to go live behind tls.mode=auto/custom
+listen_addr_tls: ":443"
 
 # ─── TLS ─────────────────────────────────────────────────────────────────────
-# mode: "off"    — plain HTTP (default, good for local dev / behind Cloudflare)
+# mode: "off"    — plain HTTP (default; fine behind Cloudflare or for initial setup)
 # mode: "auto"   — Let's Encrypt; server must be publicly reachable on port 80
 # mode: "custom" — bring your own cert + key files
 tls:
   mode: "off"
-  cache_dir: "./certs"   # Let's Encrypt certs cached here; also store custom certs here
+  cache_dir: "/var/lib/coraza-waf-mod/certs"
 
   # Uncomment for Let's Encrypt:
   # auto:
   #   domains:
   #     - "example.com"
-  #     - "www.example.com"
   #   email: "admin@example.com"
 
   # Uncomment for custom cert:
   # custom:
-  #   cert_file: "./certs/cert.pem"
-  #   key_file:  "./certs/key.pem"
+  #   cert_file: "/var/lib/coraza-waf-mod/certs/cert.pem"
+  #   key_file:  "/var/lib/coraza-waf-mod/certs/key.pem"
 
 # ─── Geo Blocking ────────────────────────────────────────────────────────────
 # Download free DB: https://dev.maxmind.com/geoip/geolite2-free-geolocation-data
-# Place GeoLite2-Country.mmdb in the project root and set the path below.
-# Leave empty to disable geo blocking.
+# Place the .mmdb at /var/lib/coraza-waf-mod/GeoLite2-Country.mmdb and uncomment.
 geo:
-  db_path: ""  # e.g. "./GeoLite2-Country.mmdb"
+  db_path: ""  # e.g. "/var/lib/coraza-waf-mod/GeoLite2-Country.mmdb"
 
 # ─── WAF ─────────────────────────────────────────────────────────────────────
 waf:
   enabled: true
-  rules_dir: ""   # optional: path to extra .conf files loaded on top of OWASP CRS
+  rules_dir: ""
 
 # ─── Database ────────────────────────────────────────────────────────────────
 db:
-  path: "./waf.db"
-  log_retention_days: 30  # requests older than this are deleted daily; -1 = keep forever
+  path: "/var/lib/coraza-waf-mod/waf.db"
+  log_retention_days: 30
 
 # ─── Admin UI ────────────────────────────────────────────────────────────────
+# install.sh generates a random password here on first install instead of
+# shipping a default — change ADMIN_PASSWORD_PLACEHOLDER manually if you're
+# deploying this file by hand instead.
 admin:
   path: "/admin"
   username: "admin"
-  password: "changeme"
+  password: "ADMIN_PASSWORD_PLACEHOLDER"
 
 # ─── Backend Apps ────────────────────────────────────────────────────────────
-apps:
-  # NOTE: this list is only read once, on first-ever startup, to seed the
-  # services table — after that, services are managed entirely from the
-  # admin UI (/admin/services) and this list is ignored. Kept here for
-  # reference only.
-  - name: "react-app"
-    host: "localhost"     # matched against the Host header
-    backend: "http://localhost:5173"
-
-  # - name: "api"
-  #   host: "api.example.com"
-  #   backend: "http://api-app:8080"
-  #
-  # - name: "blog"
-  #   host: "blog.example.com"
-  #   backend: "http://blog-app:4000"
+# Only read once, on first-ever startup, to seed the services table — after
+# that, manage backends from /admin/services instead of editing this file.
+apps: []

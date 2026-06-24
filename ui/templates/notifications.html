@@ -1,0 +1,22 @@
+{{define "notifications-panel"}}
+<div style="padding:10px;">
+  <div style="display:flex; align-items:center; justify-content:space-between; padding:4px 10px 8px;">
+    <p style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Recent Blocks</p>
+    <button id="notif-mark-read" type="button" style="font-size:11px; font-weight:600; color:#5DBB7B; background:transparent; border:none; cursor:pointer; font-family:inherit; padding:0;">Mark all as read</button>
+  </div>
+  {{range .Rows}}
+  <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px;">
+    <div style="width:30px; height:30px; border-radius:50%; background:#FEE2E2; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+      <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle" style="font-size:13px; color:#DC2626;"></i>
+    </div>
+    <div style="flex:1; min-width:0;">
+      <p class="mono" style="font-size:12px; font-weight:600; color:#1E293B; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">{{.RealIP}} <span style="color:#64748B; font-weight:400;">&rarr; {{truncate .Path 22}}</span></p>
+      <p style="font-size:10px; color:#64748B;">{{.AppName}} &middot; {{fmtTime .Timestamp}}{{if .RuleID}} &middot; rule #{{.RuleID}}{{end}}</p>
+    </div>
+  </div>
+  {{else}}
+  <p style="font-size:12px; color:#64748B; padding:16px; text-align:center;">No blocked requests yet.</p>
+  {{end}}
+  <a href="{{.AdminPath}}/logs?status=blocked&mode=history" style="display:block; text-align:center; font-size:11px; color:#5DBB7B; font-weight:600; padding:8px; text-decoration:none; border-top:1px solid #F5F7FA; margin-top:4px;">View all blocked &rarr;</a>
+</div>
+{{end}}

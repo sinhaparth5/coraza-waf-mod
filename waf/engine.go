@@ -30,16 +30,23 @@ func New(cfg config.WAFConfig) (*Engine, error) {
 	}
 
 	// Base directives + OWASP CRS (embedded via coraza-coreruleset).
+	//
+	// Our own overrides must come AFTER the includes: @coraza.conf-recommended
+	// sets "SecRuleEngine DetectionOnly" (and "SecResponseBodyAccess On") as a
+	// safe-by-default, and directives apply in the order they're parsed, so
+	// anything we set before the includes gets silently clobbered back to
+	// those defaults — every rule still matches and scores, but nothing is
+	// ever actually blocked.
 	directives := `
+Include @coraza.conf-recommended
+Include @crs-setup.conf.example
+Include @owasp_crs/*.conf
 SecRuleEngine On
 SecRequestBodyAccess On
 SecResponseBodyAccess Off
 SecRequestBodyLimit 13107200
 SecRequestBodyNoFilesLimit 131072
 SecDebugLogLevel 0
-Include @coraza.conf-recommended
-Include @crs-setup.conf.example
-Include @owasp_crs/*.conf
 `
 
 	wafCfg := coraza.NewWAFConfig().

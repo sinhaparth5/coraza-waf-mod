@@ -1,18 +1,17 @@
 package proxy
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"strings"
 	"time"
 
 	"coraza-waf-mod/blocklist"
-	"coraza-waf-mod/config"
 	"coraza-waf-mod/geo"
+	"coraza-waf-mod/services"
 	"coraza-waf-mod/storage"
 	"coraza-waf-mod/ui"
 	"coraza-waf-mod/waf"
@@ -20,49 +19,36 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+const serverHeader = "Coraza WAF Mod"
+
 type Handler struct {
-	cfg         *config.Config
 	waf         *waf.Engine
 	db          *storage.DB
 	ipbl        *blocklist.IPBlocklist
 	geoBl       *geo.Blocker
 	broadcaster *ui.LogBroadcaster
-	proxies     map[string]*httputil.ReverseProxy
+	registry    *services.Registry
 }
 
-func NewHandler(cfg *config.Config, engine *waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, bc *ui.LogBroadcaster) *Handler {
-	h := &Handler{
-		cfg:         cfg,
+func NewHandler(registry *services.Registry, engine *waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, bc *ui.LogBroadcaster) *Handler {
+	return &Handler{
 		waf:         engine,
 		db:          db,
 		ipbl:        ipbl,
 		geoBl:       geoBl,
 		broadcaster: bc,
-		proxies:     make(map[string]*httputil.ReverseProxy),
+		registry:    registry,
 	}
-	for _, app := range cfg.Apps {
-		target, err := url.Parse(app.Backend)
-		if err != nil {
-			log.Printf("invalid backend URL for app %q: %v", app.Name, err)
-			continue
-		}
-		rp := httputil.NewSingleHostReverseProxy(target)
-		rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-			log.Printf("proxy error [%s]: %v", app.Name, err)
-			http.Error(w, "bad gateway", http.StatusBadGateway)
-		}
-		h.proxies[app.Name] = rp
-	}
-	return h
 }
 
 func (h *Handler) Handle(c echo.Context) error {
 	start := time.Now()
 	r := c.Request()
 	w := c.Response().Writer
+	w.Header().Set("Server", serverHeader)
 
 	clientIP := realIP(r)
-	app := h.matchApp(r)
+	app := h.registry.Match(r.Host, r.URL.Path)
 	appName := ""
 	if app != nil {
 		appName = app.Name
@@ -108,14 +94,37 @@ func (h *Handler) Handle(c echo.Context) error {
 			"error": fmt.Sprintf("no backend configured for host %q", r.Host),
 		})
 	}
-	rp, ok := h.proxies[app.Name]
+	rp, ok := h.registry.Proxy(app.Name)
 	if !ok {
 		h.logRequest(r, appName, clientIP, country, http.StatusBadGateway, result, time.Since(start))
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": "proxy not initialised"})
 	}
 
+	// Avoid double-sending Server: httputil.ReverseProxy copies the
+	// backend's response headers with Header.Add (not Set), so the value we
+	// set above would duplicate alongside the one ModifyResponse sets from
+	// the backend's response. Clear it here and let ModifyResponse own it.
+	w.Header().Del("Server")
+
+	// Prefix-matched services route by path, and the backend is generally
+	// written assuming it's mounted at "/" (it has no idea what prefix the
+	// proxy used to find it) — so strip the prefix before forwarding, same
+	// as nginx's "location /foo/ { proxy_pass http://backend/; }". Host
+	// matches are virtual hosting, not path routing, so the path is left
+	// untouched for those. Restore the original path before logging so the
+	// admin UI shows what the client actually requested.
+	originalPath := r.URL.Path
+	if app.Prefix != "" && strings.HasPrefix(r.URL.Path, app.Prefix) {
+		r.URL.Path = strings.TrimPrefix(r.URL.Path, app.Prefix)
+		if r.URL.Path == "" {
+			r.URL.Path = "/"
+		}
+		r.URL.RawPath = ""
+	}
+
 	rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 	rp.ServeHTTP(rw, r)
+	r.URL.Path = originalPath
 	h.logRequest(r, appName, clientIP, country, rw.status, result, time.Since(start))
 	return nil
 }
@@ -158,36 +167,16 @@ func (h *Handler) logBlocked(r *http.Request, appName, clientIP, country string,
 	})
 }
 
+// writeLog must not block on the database — QueueRequest hands the entry to
+// a background worker (see storage.DB.runLogWorker) so a slow or contended
+// write never holds open the HTTP connection of the request that caused it.
 func (h *Handler) writeLog(entry storage.RequestLog) {
 	if h.db != nil {
-		if err := h.db.InsertRequest(entry); err != nil {
-			log.Printf("db log error: %v", err)
-		}
+		h.db.QueueRequest(entry)
 	}
 	if h.broadcaster != nil {
 		h.broadcaster.Broadcast(entry)
 	}
-}
-
-// ── App routing ───────────────────────────────────────────────────────────────
-
-// matchApp returns the first app whose Host or Prefix matches the request.
-// Falls back to the first app if nothing matches.
-func (h *Handler) matchApp(r *http.Request) *config.App {
-	host := strings.ToLower(strings.Split(r.Host, ":")[0])
-
-	for i, app := range h.cfg.Apps {
-		if app.Host != "" && strings.ToLower(app.Host) == host {
-			return &h.cfg.Apps[i]
-		}
-		if app.Prefix != "" && strings.HasPrefix(r.URL.Path, app.Prefix) {
-			return &h.cfg.Apps[i]
-		}
-	}
-	if len(h.cfg.Apps) > 0 {
-		return &h.cfg.Apps[0]
-	}
-	return nil
 }
 
 // ── Real IP ───────────────────────────────────────────────────────────────────
@@ -219,4 +208,24 @@ type responseWriter struct {
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.status = code
 	rw.ResponseWriter.WriteHeader(code)
+}
+
+// Hijack and Flush passthrough are required because wrapping
+// http.ResponseWriter in a struct hides any capabilities not part of the
+// http.ResponseWriter interface itself (Go doesn't promote them just because
+// the underlying concrete value supports them). Without Hijack,
+// httputil.ReverseProxy can't upgrade a connection to a WebSocket — which
+// breaks any backend that uses one, e.g. a Vite dev server's HMR client.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hj, ok := rw.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("underlying ResponseWriter does not support hijacking")
+	}
+	return hj.Hijack()
+}
+
+func (rw *responseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }

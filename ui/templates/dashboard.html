@@ -24,20 +24,20 @@
     </div>
     <!-- App list -->
     <div style="padding:14px 16px;">
-      <p style="font-size:11px; color:#94A3B8; margin-bottom:10px;">Protected backends</p>
+      <p style="font-size:11px; color:#64748B; margin-bottom:10px;">Protected backends</p>
       {{range .Apps}}
       <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #F8F9FB;">
         <div style="width:26px; height:26px; border-radius:50%; background:#E4F5EC; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-          <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01" style="font-size:11px; color:#5DBB7B;"></i>
+          <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01" style="font-size:14px; color:#5DBB7B;"></i>
         </div>
         <div style="flex:1; min-width:0;">
           <div style="font-size:12px; font-weight:600; color:#1E293B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{.Name}}</div>
-          <div style="font-size:10px; color:#94A3B8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{.Backend}}</div>
+          <div style="font-size:10px; color:#64748B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{.Backend}}</div>
         </div>
         <span style="width:6px; height:6px; border-radius:50%; background:#5DBB7B; flex-shrink:0;"></span>
       </div>
       {{else}}
-      <div style="text-align:center; padding:16px 0; font-size:11px; color:#94A3B8;">No apps configured</div>
+      <div style="text-align:center; padding:16px 0; font-size:11px; color:#64748B;">No apps configured</div>
       {{end}}
     </div>
   </div>
@@ -53,36 +53,24 @@
           <span style="font-size:36px; font-weight:800; color:#0F172A; line-height:1;">{{.Stats.TotalToday}}</span>
           <span style="font-size:11px; font-weight:600; background:#E4F5EC; color:#3DA05E; padding:2px 8px; border-radius:999px;">Active</span>
         </div>
-        <p style="font-size:12px; color:#94A3B8; margin-top:2px;">requests today</p>
+        <p style="font-size:12px; color:#64748B; margin-top:2px;">requests today</p>
       </div>
     </div>
 
-    <!-- Dot activity matrix (decorative, evokes request density) -->
-    <div style="margin-top:18px; display:flex; flex-direction:column; gap:6px;">
-      <div style="display:flex; gap:6px;">
-        <div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.12;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.22;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.32;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.42;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.52;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.62;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.72;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.82;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.92;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div>
-      </div>
-      <div style="display:flex; gap:6px;">
-        <div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.08;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.15;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.25;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.36;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.48;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.60;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.72;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.84;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.92;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div>
-      </div>
-      <div style="display:flex; gap:6px;">
-        <div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.06;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.09;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.14;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.20;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.30;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.42;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.55;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.68;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.80;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.90;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div>
-      </div>
-      <div style="display:flex; gap:6px;">
-        <div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.05;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.07;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.10;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.12;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.18;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.26;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.36;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.48;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.60;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.72;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.84;"></div><div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.94;"></div>
-      </div>
+    <!-- Real hourly traffic, last 24h -->
+    <div style="margin-top:14px; height:96px;">
+      <canvas id="trafficChart"></canvas>
     </div>
 
     <!-- Legend -->
-    <div style="display:flex; align-items:center; gap:8px; margin-top:14px;">
-      <span style="font-size:11px; color:#94A3B8;">Low</span>
-      <div style="display:flex; gap:4px; align-items:center;">
-        <div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.15;"></div>
-        <div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.40;"></div>
-        <div style="width:8px;height:8px;border-radius:50%;background:#2B4870;opacity:.70;"></div>
-        <div style="width:8px;height:8px;border-radius:50%;background:#2B4870;"></div>
-      </div>
-      <span style="font-size:11px; color:#94A3B8;">High traffic</span>
+    <div style="display:flex; align-items:center; gap:16px; margin-top:10px;">
+      <span style="display:flex; align-items:center; gap:5px; font-size:11px; color:#64748B;">
+        <span style="width:8px;height:8px;border-radius:50%;background:#5DBB7B;display:inline-block;"></span>Allowed
+      </span>
+      <span style="display:flex; align-items:center; gap:5px; font-size:11px; color:#64748B;">
+        <span style="width:8px;height:8px;border-radius:50%;background:#2B4870;display:inline-block;"></span>Blocked
+      </span>
+      <span style="font-size:11px; color:#CBD5E1;">last 24h</span>
     </div>
   </div>
 
@@ -94,7 +82,7 @@
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
         <div style="display:flex; align-items:center; gap:7px;">
           <div style="width:22px; height:22px; border-radius:50%; background:rgba(255,255,255,.10); display:flex; align-items:center; justify-content:center;">
-            <i class="hgi hgi-stroke hgi-rounded hgi-shield-ban" style="font-size:11px; color:#fff;"></i>
+            <i class="hgi hgi-stroke hgi-rounded hgi-shield-ban" style="font-size:14px; color:#fff;"></i>
           </div>
           <span style="font-size:11px; color:rgba(255,255,255,.55);">Blocked today</span>
         </div>
@@ -108,7 +96,7 @@
     <div>
       <div style="display:flex; align-items:center; gap:7px; margin-bottom:8px;">
         <div style="width:22px; height:22px; border-radius:50%; background:rgba(255,255,255,.10); display:flex; align-items:center; justify-content:center;">
-          <i class="hgi hgi-stroke hgi-rounded hgi-earth" style="font-size:11px; color:#fff;"></i>
+          <i class="hgi hgi-stroke hgi-rounded hgi-earth" style="font-size:14px; color:#fff;"></i>
         </div>
         <span style="font-size:11px; color:rgba(255,255,255,.55);">All time</span>
       </div>
@@ -126,10 +114,10 @@
   <div class="card" style="flex:1; padding:20px;">
     <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:4px;">
       <div>
-        <p style="font-size:11px; color:#94A3B8; margin-bottom:2px;">Traffic analysis</p>
+        <p style="font-size:11px; color:#64748B; margin-bottom:2px;">Traffic analysis</p>
         <h3 style="font-size:17px; font-weight:700; color:#0F172A;">Request breakdown</h3>
       </div>
-      <a href="/admin/logs" style="width:28px; height:28px; border-radius:50%; border:1px solid #ECEEF2; display:flex; align-items:center; justify-content:center; color:#94A3B8; text-decoration:none;">
+      <a href="/admin/logs" style="width:28px; height:28px; border-radius:50%; border:1px solid #ECEEF2; display:flex; align-items:center; justify-content:center; color:#64748B; text-decoration:none;">
         <i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-01" style="font-size:12px;"></i>
       </a>
     </div>
@@ -147,7 +135,7 @@
         </svg>
         <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
           <span style="font-size:22px; font-weight:800; color:#0F172A;">{{.Stats.TotalToday}}</span>
-          <span style="font-size:10px; color:#94A3B8;">requests</span>
+          <span style="font-size:10px; color:#64748B;">requests</span>
         </div>
       </div>
     </div>
@@ -175,10 +163,10 @@
   <div class="card" style="flex:1; padding:20px;">
     <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:4px;">
       <div>
-        <p style="font-size:11px; color:#94A3B8; margin-bottom:2px;">WAF detections</p>
+        <p style="font-size:11px; color:#64748B; margin-bottom:2px;">WAF detections</p>
         <h3 style="font-size:17px; font-weight:700; color:#0F172A;">Recent threats</h3>
       </div>
-      <a href="/admin/logs" style="width:28px; height:28px; border-radius:50%; border:1px solid #ECEEF2; display:flex; align-items:center; justify-content:center; color:#94A3B8; text-decoration:none;">
+      <a href="/admin/logs" style="width:28px; height:28px; border-radius:50%; border:1px solid #ECEEF2; display:flex; align-items:center; justify-content:center; color:#64748B; text-decoration:none;">
         <i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-01" style="font-size:12px;"></i>
       </a>
     </div>
@@ -190,9 +178,9 @@
         {{if $r.Country}}
         <span class="{{flagClass $r.Country}}" style="width:22px;height:16px;background-size:cover;display:block;border-radius:2px;"></span>
         {{else}}
-        <i class="hgi hgi-stroke hgi-rounded hgi-earth" style="font-size:18px;color:#94A3B8;"></i>
+        <i class="hgi hgi-stroke hgi-rounded hgi-earth" style="font-size:18px;color:#64748B;"></i>
         {{end}}
-        <span class="mono" style="font-size:9px; color:#94A3B8; overflow:hidden; white-space:nowrap; max-width:52px; text-overflow:ellipsis;">{{truncate $r.RealIP 9}}</span>
+        <span class="mono" style="font-size:9px; color:#64748B; overflow:hidden; white-space:nowrap; max-width:52px; text-overflow:ellipsis;">{{truncate $r.RealIP 9}}</span>
       </div>
       {{end}}{{end}}
       {{if .TopBlocked}}
@@ -203,33 +191,15 @@
       {{end}}
     </div>
 
-    <div style="font-size:12px; color:#94A3B8; margin-bottom:12px;">
+    <div style="font-size:12px; color:#64748B; margin-bottom:12px;">
       <span style="font-weight:600; color:#1E293B;">{{.Stats.BlockedToday}} threats</span> detected today
     </div>
 
-    <!-- Static decorative bar chart -->
-    <div style="display:flex; gap:3px; height:28px; align-items:flex-end;">
-      <div style="flex:1;border-radius:3px 3px 0 0;background:#5DBB7B;height:35%;opacity:.5;"></div>
-      <div style="flex:1;border-radius:3px 3px 0 0;background:#5DBB7B;height:50%;opacity:.6;"></div>
-      <div style="flex:1;border-radius:3px 3px 0 0;background:#5DBB7B;height:65%;opacity:.7;"></div>
-      <div style="flex:1;border-radius:3px 3px 0 0;background:#5DBB7B;height:45%;opacity:.6;"></div>
-      <div style="flex:1;border-radius:3px 3px 0 0;background:#5DBB7B;height:80%;opacity:.8;"></div>
-      <div style="flex:1;border-radius:3px 3px 0 0;background:#5DBB7B;height:60%;opacity:.7;"></div>
-      <div style="flex:1;border-radius:3px 3px 0 0;background:#94A3B8;height:30%;opacity:.4;"></div>
-      <div style="flex:1;border-radius:3px 3px 0 0;background:#94A3B8;height:45%;opacity:.4;"></div>
-      <div style="flex:1;border-radius:3px 3px 0 0;background:#5DBB7B;height:100%;"></div>
-      <div style="flex:1;border-radius:3px 3px 0 0;background:#5DBB7B;height:70%;opacity:.85;"></div>
-      <div style="flex:1;border-radius:3px 3px 0 0;background:#94A3B8;height:25%;opacity:.35;"></div>
-      <div style="flex:1;border-radius:3px 3px 0 0;background:#94A3B8;height:40%;opacity:.4;"></div>
+    <!-- Real top-blocked-countries breakdown, last 24h -->
+    <div style="height:60px;">
+      <canvas id="threatsChart"></canvas>
     </div>
-    <div style="display:flex; gap:14px; margin-top:8px;">
-      <span style="display:flex; align-items:center; gap:4px; font-size:10px; color:#64748B;">
-        <span style="width:8px;height:8px;border-radius:50%;background:#5DBB7B;display:inline-block;"></span>Allowed
-      </span>
-      <span style="display:flex; align-items:center; gap:4px; font-size:10px; color:#64748B;">
-        <span style="width:8px;height:8px;border-radius:50%;background:#94A3B8;display:inline-block;"></span>Blocked
-      </span>
-    </div>
+    <p style="font-size:10px; color:#CBD5E1; margin-top:8px; text-align:center;">blocked requests by country, last 24h</p>
   </div>
 
 </div>
@@ -238,7 +208,7 @@
 <div class="card" style="overflow:hidden;">
   <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid #F5F7FA;">
     <div>
-      <p style="font-size:11px; color:#94A3B8; margin-bottom:2px;">Traffic monitor</p>
+      <p style="font-size:11px; color:#64748B; margin-bottom:2px;">Traffic monitor</p>
       <h3 style="font-size:15px; font-weight:700; color:#0F172A;">Recent requests</h3>
     </div>
     <a href="/admin/logs" style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:#5DBB7B; border:1px solid #C8EDD8; border-radius:999px; padding:5px 14px; text-decoration:none;">
@@ -249,19 +219,19 @@
   <table style="width:100%; border-collapse:collapse; font-size:12px;">
     <thead>
       <tr style="border-bottom:1px solid #F5F7FA;">
-        <th style="text-align:left; padding:10px 20px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Time</th>
-        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">App</th>
-        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Source</th>
-        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Method</th>
-        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Path</th>
-        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Status</th>
-        <th style="text-align:right; padding:10px 20px; font-size:10px; font-weight:600; color:#94A3B8; text-transform:uppercase; letter-spacing:.05em;">Dur</th>
+        <th style="text-align:left; padding:10px 20px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Time</th>
+        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">App</th>
+        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Source</th>
+        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Method</th>
+        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Path</th>
+        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Status</th>
+        <th style="text-align:right; padding:10px 20px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Dur</th>
       </tr>
     </thead>
     <tbody>
       {{range .Recent}}
       <tr style="border-bottom:1px solid #F8F9FB; {{if .Blocked}}background:#FEF2F2;{{end}} transition:background .1s;">
-        <td class="mono" style="padding:10px 20px; color:#94A3B8; white-space:nowrap;">{{fmtTime .Timestamp}}</td>
+        <td class="mono" style="padding:10px 20px; color:#64748B; white-space:nowrap;">{{fmtTime .Timestamp}}</td>
         <td style="padding:10px 12px; font-weight:600; color:#334155;">{{.AppName}}</td>
         <td style="padding:10px 12px;">
           <div style="display:flex; align-items:center; gap:6px;">
@@ -286,7 +256,7 @@
       </tr>
       {{else}}
       <tr>
-        <td colspan="7" style="text-align:center; padding:48px; color:#94A3B8;">
+        <td colspan="7" style="text-align:center; padding:48px; color:#64748B;">
           <i class="hgi hgi-stroke hgi-rounded hgi-activity-01" style="font-size:32px; display:block; margin:0 auto 8px; opacity:.3;"></i>
           No requests yet — send traffic through the proxy
         </td>
@@ -298,13 +268,17 @@
 
 {{end}}
 
+{{define "scripts"}}
+<script src="{{.AdminPath}}/static/js/dashboard.min.js" defer></script>
+{{end}}
+
 <!-- ── Right sidebar ── -->
 {{define "sidebar"}}
 <aside style="width:280px; flex-shrink:0; background:#fff; border-left:1px solid #ECEEF2; padding:24px 20px; display:flex; flex-direction:column; gap:20px; overflow-y:auto;">
 
   <!-- Heading -->
   <div>
-    <p style="font-size:11px; color:#94A3B8; margin-bottom:4px;">Security intel</p>
+    <p style="font-size:11px; color:#64748B; margin-bottom:4px;">Security intel</p>
     <h2 style="font-size:18px; font-weight:800; color:#0F172A;">Top Threats</h2>
   </div>
 
@@ -317,13 +291,13 @@
         {{if .Country}}
         <span class="{{flagClass .Country}}" style="width:36px;height:36px;background-size:cover;display:block;"></span>
         {{else}}
-        <i class="hgi hgi-stroke hgi-rounded hgi-earth" style="font-size:16px;color:#94A3B8;"></i>
+        <i class="hgi hgi-stroke hgi-rounded hgi-earth" style="font-size:16px;color:#64748B;"></i>
         {{end}}
       </div>
       <!-- Info -->
       <div style="flex:1; min-width:0;">
         <div class="mono" style="font-size:12px; font-weight:600; color:#1E293B; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">{{.RealIP}}</div>
-        <div style="font-size:11px; color:#94A3B8; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">{{truncate .Path 18}} · {{fmtTime .Timestamp}}</div>
+        <div style="font-size:11px; color:#64748B; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">{{truncate .Path 18}} · {{fmtTime .Timestamp}}</div>
       </div>
       <!-- Badge -->
       <span style="font-size:10px; font-weight:600; padding:3px 8px; border-radius:999px; flex-shrink:0; display:flex; align-items:center; gap:4px;

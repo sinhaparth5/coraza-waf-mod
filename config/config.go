@@ -56,6 +56,9 @@ type GeoConfig struct {
 
 type DBConfig struct {
 	Path string `yaml:"path"`
+	// LogRetentionDays: requests older than this are auto-deleted daily.
+	// 0 (unset) defaults to 30. Set to -1 to keep logs forever.
+	LogRetentionDays int `yaml:"log_retention_days"`
 }
 
 type AdminConfig struct {
@@ -92,6 +95,9 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.DB.Path == "" {
 		cfg.DB.Path = "waf.db"
+	}
+	if cfg.DB.LogRetentionDays == 0 {
+		cfg.DB.LogRetentionDays = 30
 	}
 	if cfg.Admin.Path == "" {
 		cfg.Admin.Path = "/admin"

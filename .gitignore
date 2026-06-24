@@ -1,0 +1,8 @@
+/coraza-waf-mod
+/minify
+/dist/
+/certs/
+/static/js/dist/*.min.js
+waf.db
+waf.db-shm
+waf.db-wal
