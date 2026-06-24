@@ -6,11 +6,11 @@
   if (!panel || !btn) return;
 
   function isOpen() {
-    return panel.style.display === 'block';
+    return !panel.classList.contains('hidden');
   }
 
   function closePanel() {
-    panel.style.display = 'none';
+    panel.classList.add('hidden');
   }
 
   function updateBadge(n) {
@@ -26,7 +26,7 @@
     }
     existing = document.createElement('span');
     existing.id = 'notif-badge';
-    existing.style.cssText = 'position:absolute; top:-3px; right:-3px; background:#EF4444; color:#fff; font-size:9px; font-weight:700; border-radius:999px; min-width:16px; height:16px; display:flex; align-items:center; justify-content:center; padding:0 3px; border:2px solid #fff;';
+    existing.className = 'absolute -top-[3px] -right-[3px] bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-[3px] border-2 border-white';
     existing.textContent = text;
     btn.appendChild(existing);
   }
@@ -45,7 +45,7 @@
   }
 
   function openPanel() {
-    panel.style.display = 'block';
+    panel.classList.remove('hidden');
     fetch(adminPath + '/api/notifications')
       .then(function (res) { return res.text(); })
       .then(function (html) {

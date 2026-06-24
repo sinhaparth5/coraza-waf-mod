@@ -15,7 +15,10 @@
         : 'hgi hgi-stroke hgi-rounded hgi-pause';
     }
     var btn = document.getElementById('pause-btn');
-    if (btn) btn.style.color = paused ? '#5DBB7B' : '#64748B';
+    if (btn) {
+      btn.classList.toggle('text-brand', paused);
+      btn.classList.toggle('text-slate-500', !paused);
+    }
   }
 
   var pauseBtn = document.getElementById('pause-btn');

@@ -9,6 +9,25 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#5DBB7B', dark: '#3DA05E', light: '#7EE0A2' },
+            navy: '#2B4870',
+            canvas: '#F5F7FA',
+            surface: '#F8F9FB',
+            line: '#ECEEF2',
+          },
+          fontFamily: {
+            sans: ['IBM Plex Sans', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
   <link rel="stylesheet" href="https://cdn.hugeicons.com/font/hgi-stroke-rounded.css"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7/css/flag-icons.min.css"/>
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
@@ -17,8 +36,6 @@
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif; background: #F5F7FA; color: #1E293B; }
-    .mono { font-family: 'JetBrains Mono', monospace; }
     .card { background: #fff; border-radius: 18px; box-shadow: 0 2px 14px rgba(0,0,0,0.055); }
     .btn-primary { background: #5DBB7B; color: #fff; border: none; cursor: pointer; border-radius: 999px; padding: 6px 18px; font-size: 13px; font-weight: 500; font-family: inherit; transition: opacity .15s; }
     .btn-primary:hover { opacity: .88; }
@@ -27,63 +44,58 @@
     .focus-green:focus { border-color: #5DBB7B !important; }
   </style>
 </head>
-<body style="min-height:100vh;" data-admin-path="{{.AdminPath}}">
+<body class="min-h-screen bg-canvas text-slate-800 font-sans" data-admin-path="{{.AdminPath}}">
 
 <!-- ── Top Navigation ─────────────────────────────────── -->
-<header style="background:#fff; border-bottom:1px solid #ECEEF2; height:56px; display:flex; align-items:center; padding:0 24px; gap:20px; position:sticky; top:0; z-index:50;">
+<header class="bg-white border-b border-line h-14 flex items-center px-6 gap-5 sticky top-0 z-50">
 
   <!-- Brand -->
-  <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
-    <div style="width:34px; height:34px; border-radius:50%; background:#5DBB7B; display:flex; align-items:center; justify-content:center;">
-      <i class="hgi hgi-stroke hgi-rounded hgi-shield-01" style="font-size:15px; color:#fff;"></i>
+  <div class="flex items-center gap-[10px] shrink-0">
+    <div class="w-[34px] h-[34px] rounded-full bg-brand flex items-center justify-center">
+      <i class="hgi hgi-stroke hgi-rounded hgi-shield-01 text-[15px] text-white"></i>
     </div>
-    <span style="font-weight:600; font-size:14px; color:#1E293B;">Coraza WAF Mod</span>
+    <span class="font-semibold text-sm text-slate-800">Coraza WAF Mod</span>
   </div>
 
   <!-- Nav links -->
-  <nav style="display:flex; align-items:center; gap:4px; margin-left:8px;">
-    <a href="/admin" style="padding:6px 16px; border-radius:999px; font-size:13px; font-weight:500; text-decoration:none; transition:background .15s;
-      {{if eq .Page "dashboard"}}background:#5DBB7B; color:#fff;{{else}}color:#64748B;{{end}}">Dashboard</a>
-    <a href="/admin/logs" style="padding:6px 16px; border-radius:999px; font-size:13px; font-weight:500; text-decoration:none; transition:background .15s;
-      {{if eq .Page "logs"}}background:#5DBB7B; color:#fff;{{else}}color:#64748B;{{end}}">Live Logs</a>
-    <a href="/admin/ip-rules" style="padding:6px 16px; border-radius:999px; font-size:13px; font-weight:500; text-decoration:none; transition:background .15s;
-      {{if eq .Page "ip_rules"}}background:#5DBB7B; color:#fff;{{else}}color:#64748B;{{end}}">IP Rules</a>
-    <a href="/admin/geo-rules" style="padding:6px 16px; border-radius:999px; font-size:13px; font-weight:500; text-decoration:none; transition:background .15s;
-      {{if eq .Page "geo_rules"}}background:#5DBB7B; color:#fff;{{else}}color:#64748B;{{end}}">Geo Rules</a>
-    <a href="/admin/services" style="padding:6px 16px; border-radius:999px; font-size:13px; font-weight:500; text-decoration:none; transition:background .15s;
-      {{if eq .Page "services"}}background:#5DBB7B; color:#fff;{{else}}color:#64748B;{{end}}">Services</a>
+  <nav class="flex items-center gap-1 ml-2">
+    <a href="/admin" class="px-4 py-[6px] rounded-full text-[13px] font-medium no-underline transition-colors duration-150 {{if eq .Page "dashboard"}}bg-brand text-white{{else}}text-slate-500{{end}}">Dashboard</a>
+    <a href="/admin/logs" class="px-4 py-[6px] rounded-full text-[13px] font-medium no-underline transition-colors duration-150 {{if eq .Page "logs"}}bg-brand text-white{{else}}text-slate-500{{end}}">Live Logs</a>
+    <a href="/admin/ip-rules" class="px-4 py-[6px] rounded-full text-[13px] font-medium no-underline transition-colors duration-150 {{if eq .Page "ip_rules"}}bg-brand text-white{{else}}text-slate-500{{end}}">IP Rules</a>
+    <a href="/admin/geo-rules" class="px-4 py-[6px] rounded-full text-[13px] font-medium no-underline transition-colors duration-150 {{if eq .Page "geo_rules"}}bg-brand text-white{{else}}text-slate-500{{end}}">Geo Rules</a>
+    <a href="/admin/services" class="px-4 py-[6px] rounded-full text-[13px] font-medium no-underline transition-colors duration-150 {{if eq .Page "services"}}bg-brand text-white{{else}}text-slate-500{{end}}">Services</a>
   </nav>
 
-  <div style="flex:1;"></div>
+  <div class="flex-1"></div>
 
   <!-- Right actions -->
-  <div style="display:flex; align-items:center; gap:10px;">
-    <div style="display:flex; align-items:center; gap:8px; background:#F8F9FB; border:1px solid #ECEEF2; border-radius:999px; padding:6px 14px; font-size:13px; color:#64748B; width:160px;">
-      <i class="hgi hgi-stroke hgi-rounded hgi-search-01" style="font-size:13px;"></i>
+  <div class="flex items-center gap-[10px]">
+    <div class="flex items-center gap-2 bg-surface border border-line rounded-full px-[14px] py-[6px] text-[13px] text-slate-500 w-40">
+      <i class="hgi hgi-stroke hgi-rounded hgi-search-01 text-[13px]"></i>
       Search...
     </div>
-    <div style="position:relative;">
-      <button id="notif-btn" style="width:34px; height:34px; border-radius:50%; background:#F8F9FB; border:1px solid #ECEEF2; display:flex; align-items:center; justify-content:center; color:#64748B; cursor:pointer; position:relative;">
-        <i class="hgi hgi-stroke hgi-rounded hgi-notification-03" style="font-size:14px;"></i>
+    <div class="relative">
+      <button id="notif-btn" class="w-[34px] h-[34px] rounded-full bg-surface border border-line flex items-center justify-center text-slate-500 cursor-pointer relative">
+        <i class="hgi hgi-stroke hgi-rounded hgi-notification-03 text-sm"></i>
         {{if gt .AlertCount 0}}
-        <span id="notif-badge" style="position:absolute; top:-3px; right:-3px; background:#EF4444; color:#fff; font-size:9px; font-weight:700; border-radius:999px; min-width:16px; height:16px; display:flex; align-items:center; justify-content:center; padding:0 3px; border:2px solid #fff;">{{if gt .AlertCount 9}}9+{{else}}{{.AlertCount}}{{end}}</span>
+        <span id="notif-badge" class="absolute -top-[3px] -right-[3px] bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-[3px] border-2 border-white">{{if gt .AlertCount 9}}9+{{else}}{{.AlertCount}}{{end}}</span>
         {{end}}
       </button>
-      <div id="notif-panel" style="display:none; position:absolute; top:44px; right:0; width:300px; background:#fff; border:1px solid #ECEEF2; border-radius:14px; box-shadow:0 8px 30px rgba(0,0,0,.12); z-index:100;"></div>
+      <div id="notif-panel" class="hidden absolute top-11 right-0 w-[300px] bg-white border border-line rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,.12)] z-[100]"></div>
     </div>
-    <div style="width:34px; height:34px; border-radius:50%; background:#2B4870; display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; font-weight:700;">A</div>
+    <div class="w-[34px] h-[34px] rounded-full bg-navy flex items-center justify-center text-white text-xs font-bold">A</div>
   </div>
 </header>
 
 <!-- ── Page body ──────────────────────────────────────── -->
-<div style="display:flex; min-height:calc(100vh - 56px);">
+<div class="flex min-h-[calc(100vh-56px)]">
 
-  <main style="flex:1; padding:24px; min-width:0;">
+  <main class="flex-1 p-6 min-w-0">
     <!-- Page header -->
-    <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px;">
+    <div class="flex items-start justify-between mb-6">
       <div>
-        <p style="font-size:11px; color:#64748B; margin-bottom:4px;">Admin › {{.Heading}}</p>
-        <h1 style="font-size:24px; font-weight:800; color:#0F172A; line-height:1.2;">{{.Heading}}</h1>
+        <p class="text-[11px] text-slate-500 mb-1">Admin › {{.Heading}}</p>
+        <h1 class="text-2xl font-extrabold text-slate-900 leading-[1.2]">{{.Heading}}</h1>
       </div>
       {{block "actions" .}}{{end}}
     </div>

@@ -1,26 +1,26 @@
 {{define "log-row"}}
-<div style="display:flex; align-items:center; gap:22px; padding:11px 24px; border-bottom:1px solid #F5F7FA; font-size:12px; transition:background .1s; {{if .Blocked}}background:#FEF2F2;{{end}}">
-  <span class="mono" style="color:#64748B; flex-shrink:0; width:100px; white-space:nowrap; tabular-nums;">{{fmtTime .Timestamp}}</span>
-  <span style="color:#5DBB7B; font-weight:600; flex-shrink:0; width:90px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">{{truncate .AppName 10}}</span>
-  <span style="flex-shrink:0; width:140px; display:flex; align-items:center; gap:7px;">
-    {{if .Country}}<span class="{{flagClass .Country}}" style="width:15px;height:11px;background-size:cover;display:inline-block;border-radius:1px;flex-shrink:0;"></span>{{end}}
-    <span class="mono" style="color:#F59E0B; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">{{.RealIP}}</span>
+<div class="flex items-center gap-[22px] px-6 py-[11px] border-b border-canvas text-xs transition-colors duration-100 {{if .Blocked}}bg-red-50{{end}}">
+  <span class="mono text-slate-500 shrink-0 w-[100px] whitespace-nowrap tabular-nums">{{fmtTime .Timestamp}}</span>
+  <span class="text-brand font-semibold shrink-0 w-[90px] truncate">{{truncate .AppName 10}}</span>
+  <span class="shrink-0 w-[140px] flex items-center gap-[7px]">
+    {{if .Country}}<span class="{{flagClass .Country}} w-[15px] h-[11px] bg-cover inline-block rounded-[1px] shrink-0"></span>{{end}}
+    <span class="mono text-amber-500 truncate">{{.RealIP}}</span>
   </span>
-  <span style="flex-shrink:0; width:54px;">
-    <span class="mono" style="font-size:10px; font-weight:700; background:#F1F5F9; color:#64748B; padding:2px 6px; border-radius:4px;">{{.Method}}</span>
+  <span class="shrink-0 w-[54px]">
+    <span class="mono text-[10px] font-bold bg-slate-100 text-slate-500 px-[6px] py-[2px] rounded">{{.Method}}</span>
   </span>
-  <span class="mono" style="flex:1; color:#64748B; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">{{.Path}}</span>
-  <span style="flex-shrink:0; width:50px; text-align:right;">
-    {{if ge .Status 500}}<span style="font-weight:700; color:#EF4444;">{{.Status}}</span>
-    {{else if ge .Status 400}}<span style="font-weight:700; color:#F59E0B;">{{.Status}}</span>
-    {{else if ge .Status 300}}<span style="font-weight:700; color:#3B82F6;">{{.Status}}</span>
-    {{else}}<span style="font-weight:700; color:#5DBB7B;">{{.Status}}</span>{{end}}
+  <span class="mono flex-1 text-slate-500 truncate">{{.Path}}</span>
+  <span class="shrink-0 w-[50px] text-right">
+    {{if ge .Status 500}}<span class="font-bold text-red-500">{{.Status}}</span>
+    {{else if ge .Status 400}}<span class="font-bold text-amber-500">{{.Status}}</span>
+    {{else if ge .Status 300}}<span class="font-bold text-blue-500">{{.Status}}</span>
+    {{else}}<span class="font-bold text-brand">{{.Status}}</span>{{end}}
   </span>
-  <span class="mono" style="flex-shrink:0; width:50px; text-align:right; color:#CBD5E1;">{{fmtDur .Duration}}</span>
-  <span style="flex-shrink:0; width:80px;">
+  <span class="mono shrink-0 w-[50px] text-right text-slate-300">{{fmtDur .Duration}}</span>
+  <span class="shrink-0 w-20">
     {{if .Blocked}}
-    <span style="display:flex; align-items:center; gap:4px; color:#DC2626; font-weight:600;">
-      <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle" style="font-size:13px;"></i>
+    <span class="flex items-center gap-1 text-red-600 font-semibold">
+      <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-[13px]"></i>
       {{if .RuleID}}#{{.RuleID}}{{else}}BLOCK{{end}}
     </span>
     {{end}}

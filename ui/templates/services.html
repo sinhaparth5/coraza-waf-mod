@@ -1,103 +1,103 @@
 {{define "content"}}
-<div style="display:grid; grid-template-columns:340px 1fr; gap:16px;">
+<div class="grid grid-cols-[340px_1fr] gap-4">
 
   <!-- ── Add Service Wizard ── -->
-  <div class="card" style="padding:22px; height:fit-content;" id="service-wizard" data-step="1">
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-      <div style="width:28px; height:28px; border-radius:50%; background:#E4F5EC; display:flex; align-items:center; justify-content:center;">
-        <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01" style="font-size:13px; color:#5DBB7B;"></i>
+  <div class="card p-[22px] h-fit" id="service-wizard" data-step="1">
+    <div class="flex items-center gap-2 mb-[6px]">
+      <div class="w-[28px] h-[28px] rounded-full bg-[#E4F5EC] flex items-center justify-center">
+        <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01 text-[13px] text-brand"></i>
       </div>
-      <h2 style="font-size:15px; font-weight:700; color:#0F172A;">Add Service</h2>
+      <h2 class="text-[15px] font-bold text-slate-900">Add Service</h2>
     </div>
 
     <!-- Step indicator -->
-    <div style="display:flex; align-items:center; gap:6px; margin:16px 0 20px;">
-      <div class="wizard-dot active" data-dot="1" style="flex:1; height:4px; border-radius:99px; background:#5DBB7B;"></div>
-      <div class="wizard-dot" data-dot="2" style="flex:1; height:4px; border-radius:99px; background:#ECEEF2;"></div>
-      <div class="wizard-dot" data-dot="3" style="flex:1; height:4px; border-radius:99px; background:#ECEEF2;"></div>
-      <div class="wizard-dot" data-dot="4" style="flex:1; height:4px; border-radius:99px; background:#ECEEF2;"></div>
+    <div class="flex items-center gap-[6px] my-4 mb-5">
+      <div class="wizard-dot active flex-1 h-1 rounded-full bg-brand" data-dot="1"></div>
+      <div class="wizard-dot flex-1 h-1 rounded-full bg-line" data-dot="2"></div>
+      <div class="wizard-dot flex-1 h-1 rounded-full bg-line" data-dot="3"></div>
+      <div class="wizard-dot flex-1 h-1 rounded-full bg-line" data-dot="4"></div>
     </div>
 
     <form id="service-form" novalidate hx-post="/admin/services" hx-target="#services-body" hx-swap="innerHTML" hx-on::after-request="this.reset(); window.resetServiceWizard()">
 
       <!-- Step 1: Name -->
       <div class="wizard-step" data-step="1">
-        <label style="display:block; font-size:11px; color:#64748B; margin-bottom:5px; font-weight:500;">Service Name</label>
+        <label class="block text-[11px] text-slate-500 mb-[5px] font-medium">Service Name</label>
         <input name="name" type="text" placeholder="e.g. blog, api, admin-panel"
-          style="width:100%; border:1.5px solid #ECEEF2; border-radius:10px; padding:8px 12px; font-size:13px; outline:none; color:#1E293B; background:#fff;" class="focus-green"/>
-        <p class="step-error" style="display:none; font-size:11px; color:#EF4444; margin-top:6px;">This field is required.</p>
-        <p style="font-size:11px; color:#64748B; margin-top:8px;">A friendly name to identify this backend in logs and rules.</p>
+          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-3 py-2 text-[13px] outline-none text-slate-800 bg-white"/>
+        <p class="step-error hidden text-[11px] text-red-500 mt-[6px]">This field is required.</p>
+        <p class="text-[11px] text-slate-500 mt-2">A friendly name to identify this backend in logs and rules.</p>
       </div>
 
       <!-- Step 2: Match rule -->
-      <div class="wizard-step" data-step="2" style="display:none;">
-        <label style="display:block; font-size:11px; color:#64748B; margin-bottom:8px; font-weight:500;">Match incoming requests by</label>
-        <div style="display:flex; gap:16px; margin-bottom:14px;">
-          <label style="display:flex; align-items:center; gap:7px; cursor:pointer;">
-            <input type="radio" name="match_type" value="host" checked style="accent-color:#5DBB7B;"/>
-            <span style="font-size:13px; font-weight:500; color:#1E293B;">Host header</span>
+      <div class="wizard-step hidden" data-step="2">
+        <label class="block text-[11px] text-slate-500 mb-2 font-medium">Match incoming requests by</label>
+        <div class="flex gap-4 mb-[14px]">
+          <label class="flex items-center gap-[7px] cursor-pointer">
+            <input type="radio" name="match_type" value="host" checked class="accent-brand"/>
+            <span class="text-[13px] font-medium text-slate-800">Host header</span>
           </label>
-          <label style="display:flex; align-items:center; gap:7px; cursor:pointer;">
-            <input type="radio" name="match_type" value="prefix" style="accent-color:#5DBB7B;"/>
-            <span style="font-size:13px; font-weight:500; color:#1E293B;">Path prefix</span>
+          <label class="flex items-center gap-[7px] cursor-pointer">
+            <input type="radio" name="match_type" value="prefix" class="accent-brand"/>
+            <span class="text-[13px] font-medium text-slate-800">Path prefix</span>
           </label>
         </div>
         <input name="match_value" type="text" placeholder="blog.example.com or /api"
-          style="width:100%; border:1.5px solid #ECEEF2; border-radius:10px; padding:8px 12px; font-size:13px; outline:none; color:#1E293B; background:#fff;" class="focus-green"/>
-        <p class="step-error" style="display:none; font-size:11px; color:#EF4444; margin-top:6px;">This field is required.</p>
-        <p style="font-size:11px; color:#64748B; margin-top:8px;">Host matches the request's Host header exactly; prefix matches the start of the URL path.</p>
+          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-3 py-2 text-[13px] outline-none text-slate-800 bg-white"/>
+        <p class="step-error hidden text-[11px] text-red-500 mt-[6px]">This field is required.</p>
+        <p class="text-[11px] text-slate-500 mt-2">Host matches the request's Host header exactly; prefix matches the start of the URL path.</p>
       </div>
 
       <!-- Step 3: Backend -->
-      <div class="wizard-step" data-step="3" style="display:none;">
-        <label style="display:block; font-size:11px; color:#64748B; margin-bottom:5px; font-weight:500;">Backend URL</label>
+      <div class="wizard-step hidden" data-step="3">
+        <label class="block text-[11px] text-slate-500 mb-[5px] font-medium">Backend URL</label>
         <input name="backend" type="text" placeholder="http://127.0.0.1:3000"
-          style="width:100%; border:1.5px solid #ECEEF2; border-radius:10px; padding:8px 12px; font-size:13px; font-family:monospace; outline:none; color:#1E293B; background:#fff;" class="focus-green"/>
-        <p class="step-error" style="display:none; font-size:11px; color:#EF4444; margin-top:6px;">This field is required.</p>
-        <p style="font-size:11px; color:#64748B; margin-top:8px;">Where the WAF forwards allowed traffic once it's passed inspection.</p>
+          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-3 py-2 text-[13px] font-mono outline-none text-slate-800 bg-white"/>
+        <p class="step-error hidden text-[11px] text-red-500 mt-[6px]">This field is required.</p>
+        <p class="text-[11px] text-slate-500 mt-2">Where the WAF forwards allowed traffic once it's passed inspection.</p>
       </div>
 
       <!-- Step 4: Review -->
-      <div class="wizard-step" data-step="4" style="display:none;">
-        <p style="font-size:11px; color:#64748B; margin-bottom:10px; font-weight:500;">Review</p>
-        <div id="wizard-review" style="display:flex; flex-direction:column; gap:8px; font-size:12px; background:#F8F9FB; border-radius:10px; padding:12px 14px;"></div>
+      <div class="wizard-step hidden" data-step="4">
+        <p class="text-[11px] text-slate-500 mb-[10px] font-medium">Review</p>
+        <div id="wizard-review" class="flex flex-col gap-2 text-xs bg-surface rounded-[10px] px-[14px] py-3"></div>
       </div>
 
       <!-- Nav buttons -->
-      <div style="display:flex; gap:8px; margin-top:18px;">
-        <button type="button" id="wizard-back" style="display:none; flex:1; padding:9px 0; border-radius:999px; border:1px solid #ECEEF2; background:#fff; color:#64748B; font-size:13px; font-weight:500; cursor:pointer; font-family:inherit;">Back</button>
-        <button type="button" id="wizard-next" class="btn-primary" style="flex:1; padding:9px 0;">Next</button>
-        <button type="submit" id="wizard-submit" class="btn-primary" style="display:none; flex:1; padding:9px 0;">
-          <i class="hgi hgi-stroke hgi-rounded hgi-add-circle" style="font-size:14px;"></i>
+      <div class="flex gap-2 mt-[18px]">
+        <button type="button" id="wizard-back" class="hidden flex-1 py-[9px] rounded-full border border-line bg-white text-slate-500 text-[13px] font-medium cursor-pointer font-sans">Back</button>
+        <button type="button" id="wizard-next" class="btn-primary flex-1 py-[9px]">Next</button>
+        <button type="submit" id="wizard-submit" class="btn-primary hidden flex-1 py-[9px]">
+          <i class="hgi hgi-stroke hgi-rounded hgi-add-circle text-sm"></i>
           Create Service
         </button>
       </div>
-      <div id="wizard-error" style="font-size:11px; color:#EF4444; margin-top:10px;"></div>
-      <div class="htmx-indicator" style="font-size:11px; color:#64748B; margin-top:10px; display:flex; align-items:center; gap:6px;">
-        <i class="hgi hgi-stroke hgi-rounded hgi-loading-03" style="font-size:12px;"></i>
+      <div id="wizard-error" class="text-[11px] text-red-500 mt-[10px]"></div>
+      <div class="htmx-indicator flex items-center gap-[6px] text-[11px] text-slate-500 mt-[10px]">
+        <i class="hgi hgi-stroke hgi-rounded hgi-loading-03 text-xs"></i>
         Checking backend reachability…
       </div>
     </form>
   </div>
 
   <!-- ── Services Table ── -->
-  <div class="card" style="overflow:hidden;">
-    <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid #F5F7FA;">
+  <div class="card overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-canvas">
       <div>
-        <p style="font-size:11px; color:#64748B; margin-bottom:2px;">Routing</p>
-        <h3 style="font-size:15px; font-weight:700; color:#0F172A;">Configured Services</h3>
+        <p class="text-[11px] text-slate-500 mb-[2px]">Routing</p>
+        <h3 class="text-[15px] font-bold text-slate-900">Configured Services</h3>
       </div>
-      <span style="font-size:11px; font-weight:600; background:#F1F5F9; color:#64748B; padding:3px 10px; border-radius:999px;">{{len .Services}} services</span>
+      <span class="text-[11px] font-semibold bg-slate-100 text-slate-500 px-[10px] py-[3px] rounded-full">{{len .Services}} services</span>
     </div>
-    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+    <table class="w-full border-collapse text-xs">
       <thead>
-        <tr style="border-bottom:1px solid #F5F7FA;">
-          <th style="text-align:left; padding:10px 20px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Name</th>
-          <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Match</th>
-          <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Backend</th>
-          <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">TLS</th>
-          <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Added</th>
-          <th style="text-align:right; padding:10px 20px;"></th>
+        <tr class="border-b border-canvas">
+          <th class="text-left px-5 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Name</th>
+          <th class="text-left px-3 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Match</th>
+          <th class="text-left px-3 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Backend</th>
+          <th class="text-left px-3 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">TLS</th>
+          <th class="text-left px-3 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Added</th>
+          <th class="text-right px-5 py-[10px]"></th>
         </tr>
       </thead>
       <tbody id="services-body" hx-get="/admin/services/rows" hx-trigger="every 15s" hx-swap="innerHTML">
@@ -109,46 +109,46 @@
 </div>
 
 <!-- ── TLS Modal ── -->
-<div id="tls-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:200; align-items:center; justify-content:center;">
-  <div class="card" style="width:420px; padding:22px;">
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
-      <h2 style="font-size:15px; font-weight:700; color:#0F172A;">TLS for <span id="tls-modal-service-name" style="color:#5DBB7B;"></span></h2>
-      <button type="button" id="tls-modal-close" style="background:none; border:none; cursor:pointer; color:#64748B; font-size:18px; line-height:1;">&times;</button>
+<div id="tls-modal-overlay" class="hidden flex fixed inset-0 bg-slate-900/[.45] z-[200] items-center justify-center">
+  <div class="card w-[420px] p-[22px]">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-[15px] font-bold text-slate-900">TLS for <span id="tls-modal-service-name" class="text-brand"></span></h2>
+      <button type="button" id="tls-modal-close" class="bg-none border-none cursor-pointer text-slate-500 text-lg leading-none">&times;</button>
     </div>
 
-    <div style="display:flex; gap:16px; margin-bottom:16px;">
-      <label style="display:flex; align-items:center; gap:7px; cursor:pointer;">
-        <input type="radio" name="tls_action" value="upload" checked style="accent-color:#5DBB7B;"/>
-        <span style="font-size:13px; font-weight:500; color:#1E293B;">Upload cert</span>
+    <div class="flex gap-4 mb-4">
+      <label class="flex items-center gap-[7px] cursor-pointer">
+        <input type="radio" name="tls_action" value="upload" checked class="accent-brand"/>
+        <span class="text-[13px] font-medium text-slate-800">Upload cert</span>
       </label>
-      <label style="display:flex; align-items:center; gap:7px; cursor:pointer;">
-        <input type="radio" name="tls_action" value="auto" style="accent-color:#5DBB7B;"/>
-        <span style="font-size:13px; font-weight:500; color:#1E293B;">Auto-issue</span>
+      <label class="flex items-center gap-[7px] cursor-pointer">
+        <input type="radio" name="tls_action" value="auto" class="accent-brand"/>
+        <span class="text-[13px] font-medium text-slate-800">Auto-issue</span>
       </label>
     </div>
 
     <form id="tls-upload-form" hx-post="/admin/services/tls/upload" hx-target="#services-body" hx-swap="innerHTML">
       <input type="hidden" name="service_id" class="tls-service-id"/>
-      <label style="display:block; font-size:11px; color:#64748B; margin-bottom:5px; font-weight:500;">Certificate (PEM)</label>
+      <label class="block text-[11px] text-slate-500 mb-[5px] font-medium">Certificate (PEM)</label>
       <textarea name="cert_pem" rows="4" placeholder="-----BEGIN CERTIFICATE-----"
-        style="width:100%; border:1.5px solid #ECEEF2; border-radius:10px; padding:8px 12px; font-size:11px; font-family:monospace; outline:none; color:#1E293B; background:#fff; margin-bottom:10px; resize:vertical;" class="focus-green"></textarea>
-      <label style="display:block; font-size:11px; color:#64748B; margin-bottom:5px; font-weight:500;">Private Key (PEM)</label>
+        class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-3 py-2 text-[11px] font-mono outline-none text-slate-800 bg-white mb-[10px] resize-y"></textarea>
+      <label class="block text-[11px] text-slate-500 mb-[5px] font-medium">Private Key (PEM)</label>
       <textarea name="key_pem" rows="4" placeholder="-----BEGIN PRIVATE KEY-----"
-        style="width:100%; border:1.5px solid #ECEEF2; border-radius:10px; padding:8px 12px; font-size:11px; font-family:monospace; outline:none; color:#1E293B; background:#fff; resize:vertical;" class="focus-green"></textarea>
-      <button type="submit" class="btn-primary" style="width:100%; margin-top:14px; padding:9px 0;">Save Certificate</button>
+        class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-3 py-2 text-[11px] font-mono outline-none text-slate-800 bg-white resize-y"></textarea>
+      <button type="submit" class="btn-primary w-full mt-[14px] py-[9px]">Save Certificate</button>
     </form>
 
-    <form id="tls-auto-form" style="display:none;" hx-post="/admin/services/tls/auto" hx-target="#services-body" hx-swap="innerHTML">
+    <form id="tls-auto-form" class="hidden" hx-post="/admin/services/tls/auto" hx-target="#services-body" hx-swap="innerHTML">
       <input type="hidden" name="service_id" class="tls-service-id"/>
-      <p style="font-size:12px; color:#64748B; margin-bottom:14px; line-height:1.5;">A certificate is requested automatically from Let's Encrypt the first time this domain receives a real HTTPS connection — nothing is issued right now. Requires <code class="mono">tls.auto.email</code> to be set in config.yaml.</p>
-      <button type="submit" class="btn-primary" style="width:100%; padding:9px 0;">Enable Auto-Issue</button>
+      <p class="text-xs text-slate-500 mb-[14px] leading-[1.5]">A certificate is requested automatically from Let's Encrypt the first time this domain receives a real HTTPS connection — nothing is issued right now. Requires <code class="mono">tls.auto.email</code> to be set in config.yaml.</p>
+      <button type="submit" class="btn-primary w-full py-[9px]">Enable Auto-Issue</button>
     </form>
 
-    <div id="tls-error" style="font-size:11px; color:#EF4444; margin-top:10px;"></div>
+    <div id="tls-error" class="text-[11px] text-red-500 mt-[10px]"></div>
 
-    <form id="tls-clear-form" hx-post="/admin/services/tls/clear" hx-target="#services-body" hx-swap="innerHTML" style="margin-top:14px; border-top:1px solid #F5F7FA; padding-top:14px;">
+    <form id="tls-clear-form" hx-post="/admin/services/tls/clear" hx-target="#services-body" hx-swap="innerHTML" class="mt-[14px] border-t border-canvas pt-[14px]">
       <input type="hidden" name="service_id" class="tls-service-id"/>
-      <button type="submit" style="width:100%; padding:8px 0; border-radius:999px; border:1px solid #FEE2E2; background:#fff; color:#EF4444; font-size:12px; font-weight:500; cursor:pointer; font-family:inherit;">Disable TLS for this service</button>
+      <button type="submit" class="w-full py-2 rounded-full border border-red-100 bg-white text-red-500 text-xs font-medium cursor-pointer font-sans">Disable TLS for this service</button>
     </form>
   </div>
 </div>
@@ -156,54 +156,52 @@
 
 {{define "services-rows"}}
 {{range .}}
-<tr style="border-bottom:1px solid #F8F9FB; transition:background .1s;">
-  <td style="padding:11px 20px; font-weight:600; color:#1E293B;">
-    <span style="display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:7px;
-      background:{{if not .Known}}#CBD5E1{{else if .Healthy}}#5DBB7B{{else}}#EF4444{{end}};"
+<tr class="border-b border-surface transition-colors duration-100">
+  <td class="px-5 py-[11px] font-semibold text-slate-800">
+    <span class="inline-block w-[7px] h-[7px] rounded-full mr-[7px] {{if not .Known}}bg-slate-300{{else if .Healthy}}bg-brand{{else}}bg-red-500{{end}}"
       title="{{if not .Known}}no traffic seen yet — health unknown{{else if .Healthy}}reachable (last real request succeeded){{else}}unreachable (last real request failed){{end}}"></span>
     {{.Name}}
   </td>
-  <td style="padding:11px 12px;">
+  <td class="px-3 py-[11px]">
     {{if .Host}}
-    <span style="font-size:11px; font-weight:600; background:#EFF6FF; color:#3B82F6; padding:2px 8px; border-radius:999px;">host: {{.Host}}</span>
+    <span class="text-[11px] font-semibold bg-blue-50 text-blue-500 px-2 py-[2px] rounded-full">host: {{.Host}}</span>
     {{else}}
-    <span style="font-size:11px; font-weight:600; background:#FEF3C7; color:#B45309; padding:2px 8px; border-radius:999px;">prefix: {{.Prefix}}</span>
+    <span class="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-[2px] rounded-full">prefix: {{.Prefix}}</span>
     {{end}}
   </td>
-  <td style="padding:11px 12px; font-family:monospace; font-size:11px; color:#334155;">{{.Backend}}</td>
-  <td style="padding:11px 12px;">
+  <td class="px-3 py-[11px] font-mono text-[11px] text-slate-700">{{.Backend}}</td>
+  <td class="px-3 py-[11px]">
     {{if .Host}}
-    <span style="display:inline-flex; align-items:center; gap:5px;">
+    <span class="inline-flex items-center gap-[5px]">
       {{if eq .TLSMode "custom"}}
-      <span style="font-size:10px; font-weight:600; background:#DCFCE7; color:#16A34A; padding:2px 8px; border-radius:999px;">Custom{{if .TLSExpiresAt}} · exp {{shortDate .TLSExpiresAt}}{{end}}</span>
+      <span class="text-[10px] font-semibold bg-green-100 text-green-600 px-2 py-[2px] rounded-full">Custom{{if .TLSExpiresAt}} · exp {{shortDate .TLSExpiresAt}}{{end}}</span>
       {{else if eq .TLSMode "auto"}}
-      <span style="font-size:10px; font-weight:600; background:#EFF6FF; color:#3B82F6; padding:2px 8px; border-radius:999px;">Auto (Let's Encrypt)</span>
+      <span class="text-[10px] font-semibold bg-blue-50 text-blue-500 px-2 py-[2px] rounded-full">Auto (Let's Encrypt)</span>
       {{else}}
-      <span style="font-size:10px; font-weight:600; background:#F1F5F9; color:#64748B; padding:2px 8px; border-radius:999px;">None</span>
+      <span class="text-[10px] font-semibold bg-slate-100 text-slate-500 px-2 py-[2px] rounded-full">None</span>
       {{end}}
-      <button type="button" class="tls-manage-btn" data-id="{{.ID}}" data-name="{{.Name}}"
-        style="font-size:10px; color:#3B82F6; background:none; border:none; cursor:pointer; text-decoration:underline; font-family:inherit;">Manage</button>
+      <button type="button" class="tls-manage-btn text-[10px] text-blue-500 bg-none border-none cursor-pointer underline font-sans" data-id="{{.ID}}" data-name="{{.Name}}">Manage</button>
     </span>
     {{else}}
-    <span style="font-size:11px; color:#64748B;">—</span>
+    <span class="text-[11px] text-slate-500">—</span>
     {{end}}
   </td>
-  <td style="padding:11px 12px; font-size:11px; color:#64748B; white-space:nowrap;">{{fmtTime .CreatedAt}}</td>
-  <td style="padding:11px 20px; text-align:right;">
+  <td class="px-3 py-[11px] text-[11px] text-slate-500 whitespace-nowrap">{{fmtTime .CreatedAt}}</td>
+  <td class="px-5 py-[11px] text-right">
     <button hx-delete="/admin/services/{{.ID}}"
             hx-target="#services-body"
             hx-swap="innerHTML"
             hx-confirm="Remove service {{.Name}}?"
-            style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:500; color:#EF4444; background:transparent; border:1px solid #FEE2E2; border-radius:999px; padding:4px 12px; cursor:pointer; font-family:inherit; transition:background .15s;">
-      <i class="hgi hgi-stroke hgi-rounded hgi-delete-02" style="font-size:12px;"></i>
+            class="inline-flex items-center gap-[5px] text-[11px] font-medium text-red-500 bg-transparent border border-red-100 rounded-full px-3 py-1 cursor-pointer font-sans transition-colors duration-150">
+      <i class="hgi hgi-stroke hgi-rounded hgi-delete-02 text-xs"></i>
       Remove
     </button>
   </td>
 </tr>
 {{else}}
 <tr>
-  <td colspan="6" style="text-align:center; padding:48px; color:#64748B;">
-    <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01" style="font-size:32px; display:block; margin:0 auto 8px; opacity:.3;"></i>
+  <td colspan="6" class="text-center p-12 text-slate-500">
+    <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01 text-[32px] block mx-auto mb-2 opacity-30"></i>
     No services configured yet
   </td>
 </tr>

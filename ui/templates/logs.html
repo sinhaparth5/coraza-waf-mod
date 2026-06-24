@@ -1,14 +1,14 @@
 {{define "actions"}}
 {{if not .History}}
 <button id="pause-btn"
-  style="display:flex; align-items:center; gap:6px; border:1px solid #ECEEF2; background:#fff; border-radius:999px; padding:6px 16px; font-size:13px; font-weight:500; color:#64748B; cursor:pointer; font-family:inherit;">
-  <i id="pause-icon" class="hgi hgi-stroke hgi-rounded hgi-pause" style="font-size:13px;"></i>
+  class="flex items-center gap-[6px] border border-line bg-white rounded-full px-4 py-[6px] text-[13px] font-medium text-slate-500 cursor-pointer font-sans">
+  <i id="pause-icon" class="hgi hgi-stroke hgi-rounded hgi-pause text-[13px]"></i>
   <span id="pause-label">Pause</span>
 </button>
 {{else}}
 <a href="/admin/logs"
-  style="display:flex; align-items:center; gap:6px; border:1px solid #ECEEF2; background:#fff; border-radius:999px; padding:6px 16px; font-size:13px; font-weight:500; color:#64748B; cursor:pointer; text-decoration:none;">
-  <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02" style="font-size:13px; color:#5DBB7B;"></i>
+  class="flex items-center gap-[6px] border border-line bg-white rounded-full px-4 py-[6px] text-[13px] font-medium text-slate-500 cursor-pointer no-underline">
+  <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02 text-[13px] text-brand"></i>
   Back to live
 </a>
 {{end}}
@@ -17,27 +17,27 @@
 {{define "content"}}
 
 <!-- Filter bar -->
-<form method="get" action="/admin/logs" id="logs-filter-form" style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
+<form method="get" action="/admin/logs" id="logs-filter-form" class="flex items-end gap-[10px] flex-wrap mb-[14px]">
   <div>
-    <label style="display:block; font-size:10px; color:#64748B; margin-bottom:4px; font-weight:600; text-transform:uppercase; letter-spacing:.04em;">From</label>
+    <label class="block text-[10px] text-slate-500 mb-1 font-semibold uppercase tracking-[.04em]">From</label>
     <input type="datetime-local" name="from" id="filter-from" data-utc="{{.FilterFrom}}"
-      style="border:1.5px solid #ECEEF2; border-radius:9px; padding:6px 10px; font-size:12px; outline:none; color:#1E293B; background:#fff;"/>
+      class="border-[1.5px] border-line rounded-[9px] px-[10px] py-[6px] text-xs outline-none text-slate-800 bg-white"/>
   </div>
   <div>
-    <label style="display:block; font-size:10px; color:#64748B; margin-bottom:4px; font-weight:600; text-transform:uppercase; letter-spacing:.04em;">To</label>
+    <label class="block text-[10px] text-slate-500 mb-1 font-semibold uppercase tracking-[.04em]">To</label>
     <input type="datetime-local" name="to" id="filter-to" data-utc="{{.FilterTo}}"
-      style="border:1.5px solid #ECEEF2; border-radius:9px; padding:6px 10px; font-size:12px; outline:none; color:#1E293B; background:#fff;"/>
+      class="border-[1.5px] border-line rounded-[9px] px-[10px] py-[6px] text-xs outline-none text-slate-800 bg-white"/>
   </div>
   <div>
-    <label style="display:block; font-size:10px; color:#64748B; margin-bottom:4px; font-weight:600; text-transform:uppercase; letter-spacing:.04em;">App</label>
-    <select name="app" style="border:1.5px solid #ECEEF2; border-radius:9px; padding:6px 10px; font-size:12px; outline:none; color:#1E293B; background:#fff; min-width:120px;">
+    <label class="block text-[10px] text-slate-500 mb-1 font-semibold uppercase tracking-[.04em]">App</label>
+    <select name="app" class="border-[1.5px] border-line rounded-[9px] px-[10px] py-[6px] text-xs outline-none text-slate-800 bg-white min-w-[120px]">
       <option value="" {{if eq .FilterApp ""}}selected{{end}}>All apps</option>
       {{range .Apps}}<option value="{{.Name}}" {{if eq $.FilterApp .Name}}selected{{end}}>{{.Name}}</option>{{end}}
     </select>
   </div>
   <div>
-    <label style="display:block; font-size:10px; color:#64748B; margin-bottom:4px; font-weight:600; text-transform:uppercase; letter-spacing:.04em;">Status</label>
-    <select name="status" style="border:1.5px solid #ECEEF2; border-radius:9px; padding:6px 10px; font-size:12px; outline:none; color:#1E293B; background:#fff; min-width:120px;">
+    <label class="block text-[10px] text-slate-500 mb-1 font-semibold uppercase tracking-[.04em]">Status</label>
+    <select name="status" class="border-[1.5px] border-line rounded-[9px] px-[10px] py-[6px] text-xs outline-none text-slate-800 bg-white min-w-[120px]">
       <option value="" {{if eq .FilterStatus ""}}selected{{end}}>All statuses</option>
       <option value="blocked" {{if eq .FilterStatus "blocked"}}selected{{end}}>Blocked only</option>
       <option value="2xx" {{if eq .FilterStatus "2xx"}}selected{{end}}>2xx success</option>
@@ -46,64 +46,60 @@
       <option value="5xx" {{if eq .FilterStatus "5xx"}}selected{{end}}>5xx server error</option>
     </select>
   </div>
-  <button type="submit" class="btn-primary" style="display:flex; align-items:center; gap:6px; padding:7px 16px;">
-    <i class="hgi hgi-stroke hgi-rounded hgi-filter" style="font-size:13px;"></i>
+  <button type="submit" class="btn-primary flex items-center gap-[6px] px-4 py-[7px]">
+    <i class="hgi hgi-stroke hgi-rounded hgi-filter text-[13px]"></i>
     Filter
   </button>
   {{if .History}}
-  <a href="/admin/logs" style="font-size:12px; color:#64748B; padding:7px 4px; text-decoration:none;">Clear</a>
+  <a href="/admin/logs" class="text-xs text-slate-500 px-1 py-[7px] no-underline">Clear</a>
   {{end}}
 </form>
 
 <!-- Status bar -->
-<div style="display:flex; align-items:center; gap:16px; margin-bottom:16px;">
+<div class="flex items-center gap-4 mb-4">
   {{if .History}}
-  <div style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; color:#64748B;">
-    <i class="hgi hgi-stroke hgi-rounded hgi-database" style="font-size:13px; color:#2B4870;"></i>
+  <div class="flex items-center gap-2 text-[13px] font-medium text-slate-500">
+    <i class="hgi hgi-stroke hgi-rounded hgi-database text-[13px] text-navy"></i>
     Showing {{len .Recent}} of {{.Total}} matching requests
   </div>
   {{else}}
-  <div style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; color:#16A34A;">
-    <span style="position:relative; display:flex; width:8px; height:8px;">
-      <span style="position:absolute; inset:0; border-radius:50%; background:#5DBB7B; animation:ping 1.2s cubic-bezier(0,0,.2,1) infinite; opacity:.75;"></span>
-      <span style="width:8px; height:8px; border-radius:50%; background:#5DBB7B; display:block;"></span>
+  <div class="flex items-center gap-2 text-[13px] font-medium text-green-600">
+    <span class="relative flex w-2 h-2">
+      <span class="absolute inset-0 rounded-full bg-brand animate-ping opacity-75"></span>
+      <span class="w-2 h-2 rounded-full bg-brand block"></span>
     </span>
     Live stream active
   </div>
-  <span style="width:1px; height:16px; background:#ECEEF2; display:block;"></span>
-  <span style="font-size:11px; color:#64748B;">New entries appear at the top</span>
+  <span class="w-px h-4 bg-line block"></span>
+  <span class="text-[11px] text-slate-500">New entries appear at the top</span>
   {{end}}
 </div>
 
-<style>
-  @keyframes ping { 75%,100%{transform:scale(2);opacity:0} }
-</style>
-
 <!-- Log terminal card -->
-<div class="card" style="overflow:hidden;">
+<div class="card overflow-hidden">
 
   <!-- Column headers -->
-  <div style="display:flex; align-items:center; gap:22px; padding:11px 24px; background:#F8F9FB; border-bottom:1px solid #ECEEF2; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.06em;">
-    <span style="flex-shrink:0; width:100px;">Time</span>
-    <span style="flex-shrink:0; width:90px;">App</span>
-    <span style="flex-shrink:0; width:140px;">IP</span>
-    <span style="flex-shrink:0; width:54px;">Method</span>
-    <span style="flex:1;">Path</span>
-    <span style="flex-shrink:0; width:50px; text-align:right;">Status</span>
-    <span style="flex-shrink:0; width:50px; text-align:right;">Dur</span>
-    <span style="flex-shrink:0; width:80px;">Action</span>
+  <div class="flex items-center gap-[22px] px-6 py-[11px] bg-surface border-b border-line text-[10px] font-semibold text-slate-500 uppercase tracking-[.06em]">
+    <span class="shrink-0 w-[100px]">Time</span>
+    <span class="shrink-0 w-[90px]">App</span>
+    <span class="shrink-0 w-[140px]">IP</span>
+    <span class="shrink-0 w-[54px]">Method</span>
+    <span class="flex-1">Path</span>
+    <span class="shrink-0 w-[50px] text-right">Status</span>
+    <span class="shrink-0 w-[50px] text-right">Dur</span>
+    <span class="shrink-0 w-20">Action</span>
   </div>
 
   {{if .History}}
   <!-- Static historical results -->
-  <div id="log-wrapper" data-history="true" style="overflow-y:auto; height:calc(100vh - 320px);">
+  <div id="log-wrapper" data-history="true" class="overflow-y-auto h-[calc(100vh-320px)]">
     <div id="log-feed">
       {{range .Recent}}{{template "log-row" .}}{{end}}
     </div>
     {{if not .Recent}}
-    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:64px; color:#CBD5E1; text-align:center;">
-      <i class="hgi hgi-stroke hgi-rounded hgi-search-02" style="font-size:40px; display:block; margin-bottom:10px; opacity:.4;"></i>
-      <p style="font-size:13px;">No requests match these filters.</p>
+    <div class="flex flex-col items-center justify-center p-16 text-slate-300 text-center">
+      <i class="hgi hgi-stroke hgi-rounded hgi-search-02 text-[40px] block mb-[10px] opacity-40"></i>
+      <p class="text-[13px]">No requests match these filters.</p>
     </div>
     {{end}}
   </div>
@@ -111,7 +107,7 @@
   <!-- SSE live feed -->
   <div id="log-wrapper"
        data-history="false"
-       style="overflow-y:auto; height:calc(100vh - 260px);"
+       class="overflow-y-auto h-[calc(100vh-260px)]"
        hx-ext="sse"
        sse-connect="/admin/logs/stream">
     <div id="log-feed"
@@ -120,9 +116,9 @@
       {{range .Recent}}{{template "log-row" .}}{{end}}
     </div>
     {{if not .Recent}}
-    <div id="empty-state" style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:64px; color:#CBD5E1; text-align:center;">
-      <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02" style="font-size:40px; display:block; margin-bottom:10px; opacity:.4;"></i>
-      <p style="font-size:13px;">Waiting for requests…</p>
+    <div id="empty-state" class="flex flex-col items-center justify-center p-16 text-slate-300 text-center">
+      <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02 text-[40px] block mb-[10px] opacity-40"></i>
+      <p class="text-[13px]">Waiting for requests…</p>
     </div>
     {{end}}
   </div>
@@ -132,19 +128,19 @@
 
 {{if .History}}
 <!-- Pagination -->
-<div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-top:14px;">
+<div class="flex items-center justify-center gap-[10px] mt-[14px]">
   {{if gt .CurPage 1}}
   <a href="?from={{.FilterFrom}}&to={{.FilterTo}}&app={{.FilterApp}}&status={{.FilterStatus}}&mode=history&page={{sub .CurPage 1}}"
-     style="font-size:12px; color:#64748B; border:1px solid #ECEEF2; border-radius:999px; padding:6px 14px; text-decoration:none;">← Prev</a>
+     class="text-xs text-slate-500 border border-line rounded-full px-[14px] py-[6px] no-underline">← Prev</a>
   {{end}}
-  <span style="font-size:12px; color:#64748B;">Page {{.CurPage}} of {{.TotalPages}}</span>
+  <span class="text-xs text-slate-500">Page {{.CurPage}} of {{.TotalPages}}</span>
   {{if lt .CurPage .TotalPages}}
   <a href="?from={{.FilterFrom}}&to={{.FilterTo}}&app={{.FilterApp}}&status={{.FilterStatus}}&mode=history&page={{add .CurPage 1}}"
-     style="font-size:12px; color:#64748B; border:1px solid #ECEEF2; border-radius:999px; padding:6px 14px; text-decoration:none;">Next →</a>
+     class="text-xs text-slate-500 border border-line rounded-full px-[14px] py-[6px] no-underline">Next →</a>
   {{end}}
 </div>
 {{else}}
-<p style="font-size:11px; color:#CBD5E1; margin-top:10px;" class="mono">
+<p class="mono text-[11px] text-slate-300 mt-[10px]">
   Format: time · app · ip · method · path · status · duration · [action]
 </p>
 {{end}}

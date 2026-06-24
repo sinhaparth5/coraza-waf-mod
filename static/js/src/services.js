@@ -15,14 +15,16 @@
   function goToStep(n) {
     current = n;
     steps.forEach(function (step) {
-      step.style.display = Number(step.dataset.step) === n ? 'block' : 'none';
+      step.classList.toggle('hidden', Number(step.dataset.step) !== n);
     });
     dots.forEach(function (dot) {
-      dot.style.background = Number(dot.dataset.dot) <= n ? '#5DBB7B' : '#ECEEF2';
+      var active = Number(dot.dataset.dot) <= n;
+      dot.classList.toggle('bg-brand', active);
+      dot.classList.toggle('bg-line', !active);
     });
-    backBtn.style.display = n > 1 ? 'block' : 'none';
-    nextBtn.style.display = n < total ? 'block' : 'none';
-    submitBtn.style.display = n === total ? 'block' : 'none';
+    backBtn.classList.toggle('hidden', n <= 1);
+    nextBtn.classList.toggle('hidden', n >= total);
+    submitBtn.classList.toggle('hidden', n !== total);
   }
 
   // Manual validation only — native required/checkValidity() is unreliable
@@ -37,9 +39,9 @@
       var err = input.parentElement.querySelector('.step-error');
       if (input.value.trim() === '') {
         ok = false;
-        if (err) err.style.display = 'block';
+        if (err) err.classList.remove('hidden');
       } else if (err) {
-        err.style.display = 'none';
+        err.classList.add('hidden');
       }
     });
     return ok;
@@ -58,12 +60,12 @@
       ['Backend', backend],
     ].forEach(function (pair) {
       var row = document.createElement('div');
-      row.style.cssText = 'display:flex; justify-content:space-between; gap:10px;';
+      row.className = 'flex justify-between gap-[10px]';
       var label = document.createElement('span');
-      label.style.color = '#64748B';
+      label.className = 'text-slate-500';
       label.textContent = pair[0];
       var value = document.createElement('span');
-      value.style.cssText = 'font-weight:600; color:#1E293B; text-align:right; word-break:break-all;';
+      value.className = 'font-semibold text-slate-800 text-right break-all';
       value.textContent = pair[1];
       row.appendChild(label);
       row.appendChild(value);
@@ -121,11 +123,11 @@
     });
     nameLabel.textContent = name;
     error.textContent = '';
-    overlay.style.display = 'flex';
+    overlay.classList.remove('hidden');
   }
 
   function closeModal() {
-    overlay.style.display = 'none';
+    overlay.classList.add('hidden');
   }
 
   document.addEventListener('click', function (e) {
@@ -141,8 +143,8 @@
   actionRadios.forEach(function (radio) {
     radio.addEventListener('change', function () {
       var isUpload = overlay.querySelector('input[name="tls_action"]:checked').value === 'upload';
-      uploadForm.style.display = isUpload ? 'block' : 'none';
-      autoForm.style.display = isUpload ? 'none' : 'block';
+      uploadForm.classList.toggle('hidden', !isUpload);
+      autoForm.classList.toggle('hidden', isUpload);
     });
   });
 

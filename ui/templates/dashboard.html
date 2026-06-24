@@ -1,6 +1,6 @@
 {{define "actions"}}
-<a href="/admin/logs" class="btn-primary" style="display:flex;align-items:center;gap:6px;text-decoration:none;">
-  <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02" style="font-size:13px;"></i>
+<a href="/admin/logs" class="btn-primary flex items-center gap-[6px] no-underline">
+  <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02 text-[13px]"></i>
   Live feed
 </a>
 {{end}}
@@ -8,124 +8,124 @@
 {{define "content"}}
 
 <!-- ── Row 1: Three stat cards ── -->
-<div style="display:flex; gap:16px; margin-bottom:16px;">
+<div class="flex gap-4 mb-4">
 
   <!-- Card 1: Protected Apps -->
-  <div class="card" style="width:220px; flex-shrink:0; overflow:hidden;">
+  <div class="card w-[220px] shrink-0 overflow-hidden">
     <!-- Gradient header with shield -->
-    <div style="height:120px; background:linear-gradient(135deg,#E4F5EC,#C8EDD8); display:flex; align-items:center; justify-content:center; position:relative;">
-      <i class="hgi hgi-stroke hgi-rounded hgi-shield-01" style="font-size:64px; color:#5DBB7B; opacity:0.45;"></i>
+    <div class="h-[120px] bg-gradient-to-br from-[#E4F5EC] to-[#C8EDD8] flex items-center justify-center relative">
+      <i class="hgi hgi-stroke hgi-rounded hgi-shield-01 text-[64px] text-brand opacity-[0.45]"></i>
       <!-- Status pill -->
-      <div style="position:absolute; bottom:12px; left:12px; display:flex; align-items:center; gap:6px; background:rgba(15,23,42,0.72); backdrop-filter:blur(4px); border-radius:999px; padding:5px 12px;">
-        <span style="width:6px; height:6px; border-radius:50%; background:#5DBB7B; display:inline-block;"></span>
-        <span style="font-size:11px; color:#fff; font-weight:500;">WAF Active</span>
-        <span style="font-size:10px; color:rgba(255,255,255,0.5);">+</span>
+      <div class="absolute bottom-3 left-3 flex items-center gap-[6px] bg-slate-900/[0.72] backdrop-blur-sm rounded-full px-3 py-[5px]">
+        <span class="w-[6px] h-[6px] rounded-full bg-brand inline-block"></span>
+        <span class="text-[11px] text-white font-medium">WAF Active</span>
+        <span class="text-[10px] text-white/50">+</span>
       </div>
     </div>
     <!-- App list -->
-    <div style="padding:14px 16px;">
-      <p style="font-size:11px; color:#64748B; margin-bottom:10px;">Protected backends</p>
+    <div class="px-4 py-[14px]">
+      <p class="text-[11px] text-slate-500 mb-[10px]">Protected backends</p>
       {{range .Apps}}
-      <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #F8F9FB;">
-        <div style="width:26px; height:26px; border-radius:50%; background:#E4F5EC; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-          <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01" style="font-size:14px; color:#5DBB7B;"></i>
+      <div class="flex items-center gap-[10px] py-2 border-b border-surface">
+        <div class="w-[26px] h-[26px] rounded-full bg-[#E4F5EC] flex items-center justify-center shrink-0">
+          <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01 text-sm text-brand"></i>
         </div>
-        <div style="flex:1; min-width:0;">
-          <div style="font-size:12px; font-weight:600; color:#1E293B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{.Name}}</div>
-          <div style="font-size:10px; color:#64748B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{.Backend}}</div>
+        <div class="flex-1 min-w-0">
+          <div class="text-xs font-semibold text-slate-800 truncate">{{.Name}}</div>
+          <div class="text-[10px] text-slate-500 truncate">{{.Backend}}</div>
         </div>
-        <span style="width:6px; height:6px; border-radius:50%; background:#5DBB7B; flex-shrink:0;"></span>
+        <span class="w-[6px] h-[6px] rounded-full bg-brand shrink-0"></span>
       </div>
       {{else}}
-      <div style="text-align:center; padding:16px 0; font-size:11px; color:#64748B;">No apps configured</div>
+      <div class="text-center py-4 text-[11px] text-slate-500">No apps configured</div>
       {{end}}
     </div>
   </div>
 
   <!-- Card 2: Traffic stats + dot matrix -->
-  <div class="card" style="flex:1; padding:20px;">
-    <div style="display:flex; align-items:flex-start; gap:10px; margin-bottom:4px;">
-      <div style="width:28px; height:28px; border-radius:50%; background:#E4F5EC; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:2px;">
-        <i class="hgi hgi-stroke hgi-rounded hgi-activity-01" style="font-size:12px; color:#5DBB7B;"></i>
+  <div class="card flex-1 p-5">
+    <div class="flex items-start gap-[10px] mb-1">
+      <div class="w-[28px] h-[28px] rounded-full bg-[#E4F5EC] flex items-center justify-center shrink-0 mt-[2px]">
+        <i class="hgi hgi-stroke hgi-rounded hgi-activity-01 text-xs text-brand"></i>
       </div>
       <div>
-        <div style="display:flex; align-items:baseline; gap:10px;">
-          <span style="font-size:36px; font-weight:800; color:#0F172A; line-height:1;">{{.Stats.TotalToday}}</span>
-          <span style="font-size:11px; font-weight:600; background:#E4F5EC; color:#3DA05E; padding:2px 8px; border-radius:999px;">Active</span>
+        <div class="flex items-baseline gap-[10px]">
+          <span class="text-4xl font-extrabold text-slate-900 leading-none">{{.Stats.TotalToday}}</span>
+          <span class="text-[11px] font-semibold bg-[#E4F5EC] text-brand-dark px-2 py-[2px] rounded-full">Active</span>
         </div>
-        <p style="font-size:12px; color:#64748B; margin-top:2px;">requests today</p>
+        <p class="text-xs text-slate-500 mt-[2px]">requests today</p>
       </div>
     </div>
 
     <!-- Real hourly traffic, last 24h -->
-    <div style="margin-top:14px; height:96px;">
+    <div class="mt-[14px] h-24">
       <canvas id="trafficChart"></canvas>
     </div>
 
     <!-- Legend -->
-    <div style="display:flex; align-items:center; gap:16px; margin-top:10px;">
-      <span style="display:flex; align-items:center; gap:5px; font-size:11px; color:#64748B;">
-        <span style="width:8px;height:8px;border-radius:50%;background:#5DBB7B;display:inline-block;"></span>Allowed
+    <div class="flex items-center gap-4 mt-[10px]">
+      <span class="flex items-center gap-[5px] text-[11px] text-slate-500">
+        <span class="w-2 h-2 rounded-full bg-brand inline-block"></span>Allowed
       </span>
-      <span style="display:flex; align-items:center; gap:5px; font-size:11px; color:#64748B;">
-        <span style="width:8px;height:8px;border-radius:50%;background:#2B4870;display:inline-block;"></span>Blocked
+      <span class="flex items-center gap-[5px] text-[11px] text-slate-500">
+        <span class="w-2 h-2 rounded-full bg-navy inline-block"></span>Blocked
       </span>
-      <span style="font-size:11px; color:#CBD5E1;">last 24h</span>
+      <span class="text-[11px] text-slate-300">last 24h</span>
     </div>
   </div>
 
   <!-- Card 3: Dark blocked card -->
-  <div style="width:210px; flex-shrink:0; border-radius:18px; padding:20px; display:flex; flex-direction:column; background:#2B4870;">
+  <div class="w-[210px] shrink-0 rounded-2xl p-5 flex flex-col bg-navy">
 
     <!-- Blocked today -->
-    <div style="padding-bottom:16px; margin-bottom:16px; border-bottom:1px solid rgba(255,255,255,.10);">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-        <div style="display:flex; align-items:center; gap:7px;">
-          <div style="width:22px; height:22px; border-radius:50%; background:rgba(255,255,255,.10); display:flex; align-items:center; justify-content:center;">
-            <i class="hgi hgi-stroke hgi-rounded hgi-shield-ban" style="font-size:14px; color:#fff;"></i>
+    <div class="pb-4 mb-4 border-b border-white/10">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-[7px]">
+          <div class="w-[22px] h-[22px] rounded-full bg-white/10 flex items-center justify-center">
+            <i class="hgi hgi-stroke hgi-rounded hgi-shield-ban text-sm text-white"></i>
           </div>
-          <span style="font-size:11px; color:rgba(255,255,255,.55);">Blocked today</span>
+          <span class="text-[11px] text-white/[.55]">Blocked today</span>
         </div>
-        <span style="font-size:11px; font-weight:600; background:rgba(93,187,123,.28); color:#7EE0A2; padding:2px 8px; border-radius:999px;">{{.BlockRate}}%</span>
+        <span class="text-[11px] font-semibold bg-brand/[.28] text-brand-light px-2 py-[2px] rounded-full">{{.BlockRate}}%</span>
       </div>
-      <div style="font-size:40px; font-weight:800; color:#fff; line-height:1.1;">{{.Stats.BlockedToday}}</div>
-      <div style="font-size:11px; color:rgba(255,255,255,.45); margin-top:2px;">threats blocked</div>
+      <div class="text-[40px] font-extrabold text-white leading-[1.1]">{{.Stats.BlockedToday}}</div>
+      <div class="text-[11px] text-white/[.45] mt-[2px]">threats blocked</div>
     </div>
 
     <!-- All-time -->
     <div>
-      <div style="display:flex; align-items:center; gap:7px; margin-bottom:8px;">
-        <div style="width:22px; height:22px; border-radius:50%; background:rgba(255,255,255,.10); display:flex; align-items:center; justify-content:center;">
-          <i class="hgi hgi-stroke hgi-rounded hgi-earth" style="font-size:14px; color:#fff;"></i>
+      <div class="flex items-center gap-[7px] mb-2">
+        <div class="w-[22px] h-[22px] rounded-full bg-white/10 flex items-center justify-center">
+          <i class="hgi hgi-stroke hgi-rounded hgi-earth text-sm text-white"></i>
         </div>
-        <span style="font-size:11px; color:rgba(255,255,255,.55);">All time</span>
+        <span class="text-[11px] text-white/[.55]">All time</span>
       </div>
-      <div style="font-size:26px; font-weight:800; color:#fff; line-height:1.1;">{{.Stats.BlockedAll}}</div>
-      <div style="font-size:11px; color:rgba(255,255,255,.40); margin-top:2px;">total blocked</div>
+      <div class="text-[26px] font-extrabold text-white leading-[1.1]">{{.Stats.BlockedAll}}</div>
+      <div class="text-[11px] text-white/40 mt-[2px]">total blocked</div>
     </div>
   </div>
 
 </div>
 
 <!-- ── Row 2: Breakdown + Recent threats ── -->
-<div style="display:flex; gap:16px; margin-bottom:16px;">
+<div class="flex gap-4 mb-4">
 
   <!-- Request breakdown (donut + legend) -->
-  <div class="card" style="flex:1; padding:20px;">
-    <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:4px;">
+  <div class="card flex-1 p-5">
+    <div class="flex items-start justify-between mb-1">
       <div>
-        <p style="font-size:11px; color:#64748B; margin-bottom:2px;">Traffic analysis</p>
-        <h3 style="font-size:17px; font-weight:700; color:#0F172A;">Request breakdown</h3>
+        <p class="text-[11px] text-slate-500 mb-[2px]">Traffic analysis</p>
+        <h3 class="text-[17px] font-bold text-slate-900">Request breakdown</h3>
       </div>
-      <a href="/admin/logs" style="width:28px; height:28px; border-radius:50%; border:1px solid #ECEEF2; display:flex; align-items:center; justify-content:center; color:#64748B; text-decoration:none;">
-        <i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-01" style="font-size:12px;"></i>
+      <a href="/admin/logs" class="w-[28px] h-[28px] rounded-full border border-line flex items-center justify-center text-slate-500 no-underline">
+        <i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-01 text-xs"></i>
       </a>
     </div>
 
     <!-- SVG donut ring -->
-    <div style="display:flex; align-items:center; justify-content:center; margin:20px 0;">
-      <div style="position:relative; width:120px; height:120px;">
-        <svg viewBox="0 0 120 120" style="width:120px;height:120px;transform:rotate(-90deg);">
+    <div class="flex items-center justify-center my-5">
+      <div class="relative w-[120px] h-[120px]">
+        <svg viewBox="0 0 120 120" class="w-[120px] h-[120px] -rotate-90">
           <circle cx="60" cy="60" r="50" fill="none" stroke="#F0F2F5" stroke-width="12"/>
           <circle cx="60" cy="60" r="50" fill="none" stroke="#5DBB7B" stroke-width="12"
             stroke-dasharray="{{.AllowedArc}} 314" stroke-linecap="round"/>
@@ -133,131 +133,131 @@
             stroke-dasharray="{{.BlockedArc}} 314" stroke-dashoffset="-{{.AllowedArc}}"
             stroke-linecap="round"/>
         </svg>
-        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
-          <span style="font-size:22px; font-weight:800; color:#0F172A;">{{.Stats.TotalToday}}</span>
-          <span style="font-size:10px; color:#64748B;">requests</span>
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <span class="text-[22px] font-extrabold text-slate-900">{{.Stats.TotalToday}}</span>
+          <span class="text-[10px] text-slate-500">requests</span>
         </div>
       </div>
     </div>
 
     <!-- Legend -->
-    <div style="display:flex; flex-direction:column; gap:8px;">
-      <div style="display:flex; align-items:center; justify-content:space-between;">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span style="width:10px; height:10px; border-radius:50%; background:#5DBB7B; display:inline-block;"></span>
-          <span style="font-size:12px; color:#64748B;">Allowed</span>
+    <div class="flex flex-col gap-2">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="w-[10px] h-[10px] rounded-full bg-brand inline-block"></span>
+          <span class="text-xs text-slate-500">Allowed</span>
         </div>
-        <span style="font-size:12px; font-weight:600; color:#1E293B;">{{sub .Stats.TotalToday .Stats.BlockedToday}}</span>
+        <span class="text-xs font-semibold text-slate-800">{{sub .Stats.TotalToday .Stats.BlockedToday}}</span>
       </div>
-      <div style="display:flex; align-items:center; justify-content:space-between;">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span style="width:10px; height:10px; border-radius:50%; background:#2B4870; display:inline-block;"></span>
-          <span style="font-size:12px; color:#64748B;">Blocked</span>
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="w-[10px] h-[10px] rounded-full bg-navy inline-block"></span>
+          <span class="text-xs text-slate-500">Blocked</span>
         </div>
-        <span style="font-size:12px; font-weight:600; color:#1E293B;">{{.Stats.BlockedToday}}</span>
+        <span class="text-xs font-semibold text-slate-800">{{.Stats.BlockedToday}}</span>
       </div>
     </div>
   </div>
 
   <!-- Recent threats -->
-  <div class="card" style="flex:1; padding:20px;">
-    <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:4px;">
+  <div class="card flex-1 p-5">
+    <div class="flex items-start justify-between mb-1">
       <div>
-        <p style="font-size:11px; color:#64748B; margin-bottom:2px;">WAF detections</p>
-        <h3 style="font-size:17px; font-weight:700; color:#0F172A;">Recent threats</h3>
+        <p class="text-[11px] text-slate-500 mb-[2px]">WAF detections</p>
+        <h3 class="text-[17px] font-bold text-slate-900">Recent threats</h3>
       </div>
-      <a href="/admin/logs" style="width:28px; height:28px; border-radius:50%; border:1px solid #ECEEF2; display:flex; align-items:center; justify-content:center; color:#64748B; text-decoration:none;">
-        <i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-01" style="font-size:12px;"></i>
+      <a href="/admin/logs" class="w-[28px] h-[28px] rounded-full border border-line flex items-center justify-center text-slate-500 no-underline">
+        <i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-01 text-xs"></i>
       </a>
     </div>
 
     <!-- Top blocked IP avatars -->
-    <div style="display:flex; gap:8px; margin:18px 0 14px;">
+    <div class="flex gap-2 my-[18px] mb-[14px]">
       {{range $i, $r := .TopBlocked}}{{if lt $i 3}}
-      <div style="width:56px; height:56px; border-radius:14px; background:#F5F7FA; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; overflow:hidden;">
+      <div class="w-14 h-14 rounded-2xl bg-canvas flex flex-col items-center justify-center gap-[3px] overflow-hidden">
         {{if $r.Country}}
-        <span class="{{flagClass $r.Country}}" style="width:22px;height:16px;background-size:cover;display:block;border-radius:2px;"></span>
+        <span class="{{flagClass $r.Country}} w-[22px] h-4 bg-cover block rounded-[2px]"></span>
         {{else}}
-        <i class="hgi hgi-stroke hgi-rounded hgi-earth" style="font-size:18px;color:#64748B;"></i>
+        <i class="hgi hgi-stroke hgi-rounded hgi-earth text-[18px] text-slate-500"></i>
         {{end}}
-        <span class="mono" style="font-size:9px; color:#64748B; overflow:hidden; white-space:nowrap; max-width:52px; text-overflow:ellipsis;">{{truncate $r.RealIP 9}}</span>
+        <span class="mono text-[9px] text-slate-500 overflow-hidden whitespace-nowrap max-w-[52px] text-ellipsis">{{truncate $r.RealIP 9}}</span>
       </div>
       {{end}}{{end}}
       {{if .TopBlocked}}
-      <div style="width:56px; height:56px; border-radius:14px; background:#2B4870; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;">
-        <i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-02" style="font-size:14px; color:rgba(255,255,255,.65);"></i>
-        <span style="font-size:9px; color:rgba(255,255,255,.5);">More</span>
+      <div class="w-14 h-14 rounded-2xl bg-navy flex flex-col items-center justify-center gap-[2px]">
+        <i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-02 text-sm text-white/[.65]"></i>
+        <span class="text-[9px] text-white/50">More</span>
       </div>
       {{end}}
     </div>
 
-    <div style="font-size:12px; color:#64748B; margin-bottom:12px;">
-      <span style="font-weight:600; color:#1E293B;">{{.Stats.BlockedToday}} threats</span> detected today
+    <div class="text-xs text-slate-500 mb-3">
+      <span class="font-semibold text-slate-800">{{.Stats.BlockedToday}} threats</span> detected today
     </div>
 
     <!-- Real top-blocked-countries breakdown, last 24h -->
-    <div style="height:60px;">
+    <div class="h-[60px]">
       <canvas id="threatsChart"></canvas>
     </div>
-    <p style="font-size:10px; color:#CBD5E1; margin-top:8px; text-align:center;">blocked requests by country, last 24h</p>
+    <p class="text-[10px] text-slate-300 mt-2 text-center">blocked requests by country, last 24h</p>
   </div>
 
 </div>
 
 <!-- ── Recent requests table ── -->
-<div class="card" style="overflow:hidden;">
-  <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid #F5F7FA;">
+<div class="card overflow-hidden">
+  <div class="flex items-center justify-between px-5 py-4 border-b border-canvas">
     <div>
-      <p style="font-size:11px; color:#64748B; margin-bottom:2px;">Traffic monitor</p>
-      <h3 style="font-size:15px; font-weight:700; color:#0F172A;">Recent requests</h3>
+      <p class="text-[11px] text-slate-500 mb-[2px]">Traffic monitor</p>
+      <h3 class="text-[15px] font-bold text-slate-900">Recent requests</h3>
     </div>
-    <a href="/admin/logs" style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:#5DBB7B; border:1px solid #C8EDD8; border-radius:999px; padding:5px 14px; text-decoration:none;">
-      <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02" style="font-size:12px;"></i>
+    <a href="/admin/logs" class="flex items-center gap-[6px] text-xs font-medium text-brand border border-[#C8EDD8] rounded-full px-[14px] py-[5px] no-underline">
+      <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02 text-xs"></i>
       Live feed
     </a>
   </div>
-  <table style="width:100%; border-collapse:collapse; font-size:12px;">
+  <table class="w-full border-collapse text-xs">
     <thead>
-      <tr style="border-bottom:1px solid #F5F7FA;">
-        <th style="text-align:left; padding:10px 20px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Time</th>
-        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">App</th>
-        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Source</th>
-        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Method</th>
-        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Path</th>
-        <th style="text-align:left; padding:10px 12px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Status</th>
-        <th style="text-align:right; padding:10px 20px; font-size:10px; font-weight:600; color:#64748B; text-transform:uppercase; letter-spacing:.05em;">Dur</th>
+      <tr class="border-b border-canvas">
+        <th class="text-left px-5 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Time</th>
+        <th class="text-left px-3 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">App</th>
+        <th class="text-left px-3 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Source</th>
+        <th class="text-left px-3 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Method</th>
+        <th class="text-left px-3 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Path</th>
+        <th class="text-left px-3 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+        <th class="text-right px-5 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Dur</th>
       </tr>
     </thead>
     <tbody>
       {{range .Recent}}
-      <tr style="border-bottom:1px solid #F8F9FB; {{if .Blocked}}background:#FEF2F2;{{end}} transition:background .1s;">
-        <td class="mono" style="padding:10px 20px; color:#64748B; white-space:nowrap;">{{fmtTime .Timestamp}}</td>
-        <td style="padding:10px 12px; font-weight:600; color:#334155;">{{.AppName}}</td>
-        <td style="padding:10px 12px;">
-          <div style="display:flex; align-items:center; gap:6px;">
-            {{if .Country}}<span class="{{flagClass .Country}}" style="width:14px;height:10px;background-size:cover;display:inline-block;border-radius:2px;"></span>{{end}}
-            <span class="mono" style="color:#475569;">{{.RealIP}}</span>
+      <tr class="border-b border-surface {{if .Blocked}}bg-red-50{{end}} transition-colors duration-100">
+        <td class="mono px-5 py-[10px] text-slate-500 whitespace-nowrap">{{fmtTime .Timestamp}}</td>
+        <td class="px-3 py-[10px] font-semibold text-slate-700">{{.AppName}}</td>
+        <td class="px-3 py-[10px]">
+          <div class="flex items-center gap-[6px]">
+            {{if .Country}}<span class="{{flagClass .Country}} w-[14px] h-[10px] bg-cover inline-block rounded-[2px]"></span>{{end}}
+            <span class="mono text-slate-600">{{.RealIP}}</span>
           </div>
         </td>
-        <td style="padding:10px 12px;">
-          <span class="mono" style="font-size:10px; font-weight:700; background:#F1F5F9; color:#64748B; padding:2px 7px; border-radius:5px;">{{.Method}}</span>
+        <td class="px-3 py-[10px]">
+          <span class="mono text-[10px] font-bold bg-slate-100 text-slate-500 px-[7px] py-[2px] rounded-[5px]">{{.Method}}</span>
         </td>
-        <td class="mono" style="padding:10px 12px; color:#64748B; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{truncate .Path 36}}</td>
-        <td style="padding:10px 12px;">
-          <div style="display:flex; align-items:center; gap:6px;">
-            {{if ge .Status 500}}<span style="font-size:12px; font-weight:700; color:#EF4444;">{{.Status}}</span>
-            {{else if ge .Status 400}}<span style="font-size:12px; font-weight:700; color:#F59E0B;">{{.Status}}</span>
-            {{else if ge .Status 300}}<span style="font-size:12px; font-weight:700; color:#3B82F6;">{{.Status}}</span>
-            {{else}}<span style="font-size:12px; font-weight:700; color:#5DBB7B;">{{.Status}}</span>{{end}}
-            {{if .Blocked}}<span style="font-size:9px; font-weight:600; background:#FEE2E2; color:#DC2626; padding:2px 7px; border-radius:999px;">BLOCKED</span>{{end}}
+        <td class="mono px-3 py-[10px] text-slate-500 max-w-[180px] overflow-hidden text-ellipsis whitespace-nowrap">{{truncate .Path 36}}</td>
+        <td class="px-3 py-[10px]">
+          <div class="flex items-center gap-[6px]">
+            {{if ge .Status 500}}<span class="text-xs font-bold text-red-500">{{.Status}}</span>
+            {{else if ge .Status 400}}<span class="text-xs font-bold text-amber-500">{{.Status}}</span>
+            {{else if ge .Status 300}}<span class="text-xs font-bold text-blue-500">{{.Status}}</span>
+            {{else}}<span class="text-xs font-bold text-brand">{{.Status}}</span>{{end}}
+            {{if .Blocked}}<span class="text-[9px] font-semibold bg-red-100 text-red-600 px-[7px] py-[2px] rounded-full">BLOCKED</span>{{end}}
           </div>
         </td>
-        <td class="mono" style="padding:10px 20px; text-align:right; color:#CBD5E1;">{{fmtDur .Duration}}</td>
+        <td class="mono px-5 py-[10px] text-right text-slate-300">{{fmtDur .Duration}}</td>
       </tr>
       {{else}}
       <tr>
-        <td colspan="7" style="text-align:center; padding:48px; color:#64748B;">
-          <i class="hgi hgi-stroke hgi-rounded hgi-activity-01" style="font-size:32px; display:block; margin:0 auto 8px; opacity:.3;"></i>
+        <td colspan="7" class="text-center p-12 text-slate-500">
+          <i class="hgi hgi-stroke hgi-rounded hgi-activity-01 text-[32px] block mx-auto mb-2 opacity-30"></i>
           No requests yet — send traffic through the proxy
         </td>
       </tr>
@@ -274,84 +274,82 @@
 
 <!-- ── Right sidebar ── -->
 {{define "sidebar"}}
-<aside style="width:280px; flex-shrink:0; background:#fff; border-left:1px solid #ECEEF2; padding:24px 20px; display:flex; flex-direction:column; gap:20px; overflow-y:auto;">
+<aside class="w-[280px] shrink-0 bg-white border-l border-line px-5 py-6 flex flex-col gap-5 overflow-y-auto">
 
   <!-- Heading -->
   <div>
-    <p style="font-size:11px; color:#64748B; margin-bottom:4px;">Security intel</p>
-    <h2 style="font-size:18px; font-weight:800; color:#0F172A;">Top Threats</h2>
+    <p class="text-[11px] text-slate-500 mb-1">Security intel</p>
+    <h2 class="text-lg font-extrabold text-slate-900">Top Threats</h2>
   </div>
 
   <!-- Threat list -->
   <div>
     {{range .TopBlocked}}
-    <div style="display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid #F8F9FB;">
+    <div class="flex items-center gap-3 py-[10px] border-b border-surface">
       <!-- Flag/avatar -->
-      <div style="width:36px; height:36px; border-radius:50%; overflow:hidden; flex-shrink:0; background:#F5F7FA; display:flex; align-items:center; justify-content:center;">
+      <div class="w-9 h-9 rounded-full overflow-hidden shrink-0 bg-canvas flex items-center justify-center">
         {{if .Country}}
-        <span class="{{flagClass .Country}}" style="width:36px;height:36px;background-size:cover;display:block;"></span>
+        <span class="{{flagClass .Country}} w-9 h-9 bg-cover block"></span>
         {{else}}
-        <i class="hgi hgi-stroke hgi-rounded hgi-earth" style="font-size:16px;color:#64748B;"></i>
+        <i class="hgi hgi-stroke hgi-rounded hgi-earth text-base text-slate-500"></i>
         {{end}}
       </div>
       <!-- Info -->
-      <div style="flex:1; min-width:0;">
-        <div class="mono" style="font-size:12px; font-weight:600; color:#1E293B; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">{{.RealIP}}</div>
-        <div style="font-size:11px; color:#64748B; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">{{truncate .Path 18}} · {{fmtTime .Timestamp}}</div>
+      <div class="flex-1 min-w-0">
+        <div class="mono text-xs font-semibold text-slate-800 truncate">{{.RealIP}}</div>
+        <div class="text-[11px] text-slate-500 truncate">{{truncate .Path 18}} · {{fmtTime .Timestamp}}</div>
       </div>
       <!-- Badge -->
-      <span style="font-size:10px; font-weight:600; padding:3px 8px; border-radius:999px; flex-shrink:0; display:flex; align-items:center; gap:4px;
-        {{if .RuleID}}background:#FEF3C7; color:#D97706;{{else}}background:#FEE2E2; color:#DC2626;{{end}}">
-        <span style="width:5px;height:5px;border-radius:50%;display:inline-block;
-          {{if .RuleID}}background:#D97706;{{else}}background:#DC2626;{{end}}"></span>
+      <span class="text-[10px] font-semibold px-2 py-[3px] rounded-full shrink-0 flex items-center gap-1 {{if .RuleID}}bg-amber-100 text-amber-600{{else}}bg-red-100 text-red-600{{end}}">
+        <span class="w-[5px] h-[5px] rounded-full inline-block {{if .RuleID}}bg-amber-600{{else}}bg-red-600{{end}}"></span>
         {{if .RuleID}}WAF{{else}}Block{{end}}
       </span>
     </div>
     {{else}}
-    <div style="text-align:center; padding:32px 0; color:#CBD5E1;">
-      <i class="hgi hgi-stroke hgi-rounded hgi-shield-01" style="font-size:28px; display:block; margin:0 auto 8px; opacity:.35;"></i>
-      <p style="font-size:12px;">No threats detected</p>
+    <div class="text-center py-8 text-slate-300">
+      <i class="hgi hgi-stroke hgi-rounded hgi-shield-01 text-[28px] block mx-auto mb-2 opacity-[.35]"></i>
+      <p class="text-xs">No threats detected</p>
     </div>
     {{end}}
   </div>
 
   <!-- WAF status dark card -->
-  <div style="border-radius:18px; background:#2B4870; padding:20px; margin-top:auto;">
+  <div class="rounded-2xl bg-navy p-5 mt-auto">
 
     <!-- Pills -->
-    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px;">
-      <span style="font-size:11px; font-weight:600; background:#5DBB7B; color:#fff; padding:4px 12px; border-radius:999px;">WAF Engine</span>
-      <span style="font-size:11px; font-weight:500; background:rgba(255,255,255,.12); color:rgba(255,255,255,.8); padding:4px 12px; border-radius:999px;">CRS 4.x</span>
+    <div class="flex gap-[6px] flex-wrap mb-4">
+      <span class="text-[11px] font-semibold bg-brand text-white px-3 py-1 rounded-full">WAF Engine</span>
+      <span class="text-[11px] font-medium bg-white/[.12] text-white/80 px-3 py-1 rounded-full">CRS 4.x</span>
     </div>
 
-    <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-size:11px; color:rgba(255,255,255,.50);">IP Rules</span>
-        <span style="font-size:11px; font-weight:600; color:#fff;">Active</span>
+    <div class="flex flex-col gap-2 mb-[14px]">
+      <div class="flex justify-between items-center">
+        <span class="text-[11px] text-white/50">IP Rules</span>
+        <span class="text-[11px] font-semibold text-white">Active</span>
       </div>
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-size:11px; color:rgba(255,255,255,.50);">Geo Rules</span>
-        <span style="font-size:11px; font-weight:600; color:#fff;">Active</span>
+      <div class="flex justify-between items-center">
+        <span class="text-[11px] text-white/50">Geo Rules</span>
+        <span class="text-[11px] font-semibold text-white">Active</span>
       </div>
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-size:11px; color:rgba(255,255,255,.50);">Protection</span>
-        <span style="font-size:15px; font-weight:800; color:#fff;">100%</span>
+      <div class="flex justify-between items-center">
+        <span class="text-[11px] text-white/50">Protection</span>
+        <span class="text-[15px] font-extrabold text-white">100%</span>
       </div>
     </div>
 
-    <div style="font-size:22px; font-weight:800; color:#fff;">Coraza v3.7</div>
-    <div style="font-size:11px; color:rgba(255,255,255,.38); margin-top:2px;">OWASP Core Rule Set</div>
+    <div class="text-[22px] font-extrabold text-white">Coraza v3.7</div>
+    <div class="text-[11px] text-white/[.38] mt-[2px]">OWASP Core Rule Set</div>
 
     <!-- Bottom icons -->
-    <div style="display:flex; align-items:center; gap:8px; margin-top:16px; padding-top:14px; border-top:1px solid rgba(255,255,255,.10);">
-      <div style="width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,.10); display:flex; align-items:center; justify-content:center;">
-        <i class="hgi hgi-stroke hgi-rounded hgi-shield-01" style="font-size:14px; color:#fff;"></i>
+    <div class="flex items-center gap-2 mt-4 pt-[14px] border-t border-white/10">
+      <div class="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+        <i class="hgi hgi-stroke hgi-rounded hgi-shield-01 text-sm text-white"></i>
       </div>
-      <div style="position:relative;">
-        <div style="width:32px; height:32px; border-radius:50%; background:#5DBB7B; display:flex; align-items:center; justify-content:center;">
-          <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01" style="font-size:14px; color:#fff;"></i>
+      <div class="relative">
+        <div class="w-8 h-8 rounded-full bg-brand flex items-center justify-center">
+          <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01 text-sm text-white"></i>
         </div>
-        <span style="position:absolute; top:-4px; right:-4px; width:16px; height:16px; border-radius:50%; background:#fff; color:#2B4870; font-size:8px; font-weight:800; display:flex; align-items:center; justify-content:center;">{{len .Apps}}</span>
+        <span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-white text-navy text-[8px] font-extrabold flex items-center justify-center">{{len .Apps}}</span>
       </div>
     </div>
   </div>
