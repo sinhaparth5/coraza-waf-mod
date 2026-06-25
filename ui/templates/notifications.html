@@ -1,22 +1,22 @@
 {{define "notifications-panel"}}
-<div class="p-[10px]">
+<div class="p-3">
   <div class="flex items-center justify-between px-[10px] pt-1 pb-2">
-    <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Recent Blocks</p>
-    <button id="notif-mark-read" type="button" class="text-[11px] font-semibold text-brand bg-transparent border-none cursor-pointer font-sans p-0">Mark all as read</button>
+    <p class="text-[12px] font-bold text-slate-500 uppercase tracking-wider">Recent Blocks</p>
+    <button id="notif-mark-read" type="button" class="text-[12px] font-semibold text-brand bg-transparent border-none cursor-pointer font-sans p-0">Mark all as read</button>
   </div>
   {{range .Rows}}
-  <div class="flex items-center gap-[10px] px-[10px] py-2 rounded-[10px]">
-    <div class="w-[30px] h-[30px] rounded-full bg-red-100 flex items-center justify-center shrink-0">
+  <div class="flex items-center gap-[10px] px-[10px] py-[10px] rounded-[10px]">
+    <div class="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
       <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-[13px] text-red-600"></i>
     </div>
     <div class="flex-1 min-w-0">
-      <p class="mono text-xs font-semibold text-slate-800 truncate">{{.RealIP}} <span class="text-slate-500 font-normal">&rarr; {{truncate .Path 22}}</span></p>
-      <p class="text-[10px] text-slate-500">{{.AppName}} &middot; {{fmtTime .Timestamp}}{{if .RuleID}} &middot; rule #{{.RuleID}}{{end}}</p>
+      <p class="mono text-[13px] font-semibold text-slate-800 truncate">{{.RealIP}} <span class="text-slate-500 font-normal">&rarr; {{truncate .Path 22}}</span></p>
+      <p class="text-[11px] text-slate-500">{{.AppName}} &middot; {{fmtTime .Timestamp}}{{if .RuleID}} &middot; rule #{{.RuleID}}{{end}}</p>
     </div>
   </div>
   {{else}}
-  <p class="text-xs text-slate-500 p-4 text-center">No blocked requests yet.</p>
+  <p class="text-[13px] text-slate-500 p-4 text-center">No blocked requests yet.</p>
   {{end}}
-  <a href="{{.AdminPath}}/logs?status=blocked&mode=history" class="block text-center text-[11px] text-brand font-semibold p-2 no-underline border-t border-canvas mt-1">View all blocked &rarr;</a>
+  <a href="{{.AdminPath}}/logs?status=blocked&mode=history" class="block text-center text-[12px] text-brand font-semibold p-2 no-underline border-t border-canvas mt-1">View all blocked &rarr;</a>
 </div>
 {{end}}

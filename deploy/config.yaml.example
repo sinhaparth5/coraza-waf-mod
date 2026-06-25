@@ -27,8 +27,9 @@ tls:
   #   key_file:  "/var/lib/coraza-waf-mod/certs/key.pem"
 
 # ─── Geo Blocking ────────────────────────────────────────────────────────────
-# Download free DB: https://dev.maxmind.com/geoip/geolite2-free-geolocation-data
-# Place the .mmdb at /var/lib/coraza-waf-mod/GeoLite2-Country.mmdb and uncomment.
+# The binary includes a bundled GeoLite2-Country.mmdb, so this can stay empty.
+# To override it with an externally updated MaxMind database, set db_path to a
+# readable .mmdb file, for example one maintained by geoipupdate.
 geo:
   db_path: ""  # e.g. "/var/lib/coraza-waf-mod/GeoLite2-Country.mmdb"
 
@@ -50,6 +51,14 @@ admin:
   path: "/admin"
   username: "admin"
   password: "ADMIN_PASSWORD_PLACEHOLDER"
+
+# ─── Rate Limiting ───────────────────────────────────────────────────────────
+# Per-IP token-bucket limiter applied globally, ahead of geo/WAF inspection.
+# Disabled by default — the right rate depends on your app's traffic shape.
+rate_limit:
+  enabled: false
+  requests_per_second: 10  # sustained rate per client IP
+  burst: 20                # max requests a client can burst before throttling
 
 # ─── Backend Apps ────────────────────────────────────────────────────────────
 # Only read once, on first-ever startup, to seed the services table — after

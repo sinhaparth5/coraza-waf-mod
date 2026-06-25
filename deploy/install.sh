@@ -21,6 +21,8 @@ ETC_DIR="/etc/coraza-waf-mod"
 VAR_DIR="/var/lib/coraza-waf-mod"
 INSTALL_PATH="/usr/local/bin/${BINARY_NAME}"
 UNIT_PATH="/etc/systemd/system/${BINARY_NAME}.service"
+PRUNE_SERVICE_PATH="/etc/systemd/system/${BINARY_NAME}-prune.service"
+PRUNE_TIMER_PATH="/etc/systemd/system/${BINARY_NAME}-prune.timer"
 
 if [ "$(id -u)" -ne 0 ]; then
 	echo "Run as root (e.g. with sudo)." >&2
@@ -132,12 +134,40 @@ NoNewPrivileges=true
 WantedBy=multi-user.target
 EOF
 
+echo "==> Installing log retention prune timer (runs 'coraza-waf-mod prune' every 15 days)"
+cat >"${PRUNE_SERVICE_PATH}" <<EOF
+[Unit]
+Description=Coraza WAF Mod log retention prune (one-shot)
+
+[Service]
+Type=oneshot
+User=${SERVICE_USER}
+Group=${SERVICE_USER}
+WorkingDirectory=${VAR_DIR}
+ExecStart=${INSTALL_PATH} prune ${ETC_DIR}/config.yaml
+EOF
+
+cat >"${PRUNE_TIMER_PATH}" <<EOF
+[Unit]
+Description=Run Coraza WAF Mod log retention prune every 15 days
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=15d
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
 echo "==> Starting ${BINARY_NAME}"
 systemctl daemon-reload
 systemctl enable "${BINARY_NAME}"
 systemctl restart "${BINARY_NAME}"
+systemctl enable --now "${BINARY_NAME}-prune.timer"
 
 echo
 echo "Done. Check it with:"
 echo "    sudo systemctl status ${BINARY_NAME}"
 echo "    sudo journalctl -u ${BINARY_NAME} -f"
+echo "    sudo systemctl list-timers ${BINARY_NAME}-prune.timer"

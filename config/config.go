@@ -7,14 +7,15 @@ import (
 )
 
 type Config struct {
-	ListenAddr    string      `yaml:"listen_addr"`
-	ListenAddrTLS string      `yaml:"listen_addr_tls"`
-	Apps          []App       `yaml:"apps"`
-	WAF           WAFConfig   `yaml:"waf"`
-	TLS           TLSConfig   `yaml:"tls"`
-	Geo           GeoConfig   `yaml:"geo"`
-	DB            DBConfig    `yaml:"db"`
-	Admin         AdminConfig `yaml:"admin"`
+	ListenAddr    string          `yaml:"listen_addr"`
+	ListenAddrTLS string          `yaml:"listen_addr_tls"`
+	Apps          []App           `yaml:"apps"`
+	WAF           WAFConfig       `yaml:"waf"`
+	TLS           TLSConfig       `yaml:"tls"`
+	Geo           GeoConfig       `yaml:"geo"`
+	DB            DBConfig        `yaml:"db"`
+	Admin         AdminConfig     `yaml:"admin"`
+	RateLimit     RateLimitConfig `yaml:"rate_limit"`
 }
 
 type App struct {
@@ -51,7 +52,7 @@ type CustomTLSConfig struct {
 }
 
 type GeoConfig struct {
-	DBPath string `yaml:"db_path"` // path to GeoLite2-Country.mmdb; empty = geo blocking disabled
+	DBPath string `yaml:"db_path"` // optional path to GeoLite2-Country.mmdb; empty = bundled DB
 }
 
 type DBConfig struct {
@@ -65,6 +66,16 @@ type AdminConfig struct {
 	Path     string `yaml:"path"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
+}
+
+// RateLimitConfig is the in-process per-IP token-bucket limiter applied
+// globally ahead of geo/WAF inspection. Disabled by default since the right
+// rate depends entirely on the proxied app's traffic shape — an enabled
+// default could throttle legitimate traffic on upgrade.
+type RateLimitConfig struct {
+	Enabled           bool    `yaml:"enabled"`
+	RequestsPerSecond float64 `yaml:"requests_per_second"`
+	Burst             int     `yaml:"burst"`
 }
 
 func Load(path string) (*Config, error) {
@@ -101,5 +112,11 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.Admin.Path == "" {
 		cfg.Admin.Path = "/admin"
+	}
+	if cfg.RateLimit.RequestsPerSecond <= 0 {
+		cfg.RateLimit.RequestsPerSecond = 10
+	}
+	if cfg.RateLimit.Burst <= 0 {
+		cfg.RateLimit.Burst = 20
 	}
 }

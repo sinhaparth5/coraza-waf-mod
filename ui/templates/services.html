@@ -1,17 +1,17 @@
 {{define "content"}}
-<div class="grid grid-cols-[340px_1fr] gap-4">
+<div class="grid grid-cols-[360px_1fr] gap-6">
 
   <!-- ── Add Service Wizard ── -->
-  <div class="card p-[22px] h-fit" id="service-wizard" data-step="1">
-    <div class="flex items-center gap-2 mb-[6px]">
-      <div class="w-[28px] h-[28px] rounded-full bg-[#E4F5EC] flex items-center justify-center">
-        <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01 text-[13px] text-brand"></i>
+  <div class="card p-6 h-fit" id="service-wizard" data-step="1">
+    <div class="flex items-center gap-[10px] mb-[6px]">
+      <div class="w-8 h-8 rounded-full bg-brand-tint flex items-center justify-center">
+        <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01 text-[14px] text-brand-dark"></i>
       </div>
-      <h2 class="text-[15px] font-bold text-slate-900">Add Service</h2>
+      <h2 class="text-[17px] font-bold text-slate-900">Add Service</h2>
     </div>
 
     <!-- Step indicator -->
-    <div class="flex items-center gap-[6px] my-4 mb-5">
+    <div class="flex items-center gap-[6px] my-4 mb-6">
       <div class="wizard-dot active flex-1 h-1 rounded-full bg-brand" data-dot="1"></div>
       <div class="wizard-dot flex-1 h-1 rounded-full bg-line" data-dot="2"></div>
       <div class="wizard-dot flex-1 h-1 rounded-full bg-line" data-dot="3"></div>
@@ -22,133 +22,115 @@
 
       <!-- Step 1: Name -->
       <div class="wizard-step" data-step="1">
-        <label class="block text-[11px] text-slate-500 mb-[5px] font-medium">Service Name</label>
+        <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Service Name</label>
         <input name="name" type="text" placeholder="e.g. blog, api, admin-panel"
-          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-3 py-2 text-[13px] outline-none text-slate-800 bg-white"/>
-        <p class="step-error hidden text-[11px] text-red-500 mt-[6px]">This field is required.</p>
-        <p class="text-[11px] text-slate-500 mt-2">A friendly name to identify this backend in logs and rules.</p>
+          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+        <p class="step-error hidden text-[12px] text-red-500 mt-[6px]">This field is required.</p>
+        <p class="text-[12px] text-slate-500 mt-[10px]">A friendly name to identify this backend in logs and rules.</p>
       </div>
 
       <!-- Step 2: Match rule -->
       <div class="wizard-step hidden" data-step="2">
-        <label class="block text-[11px] text-slate-500 mb-2 font-medium">Match incoming requests by</label>
-        <div class="flex gap-4 mb-[14px]">
-          <label class="flex items-center gap-[7px] cursor-pointer">
+        <label class="block text-[12px] text-slate-500 mb-[10px] font-medium">Match incoming requests by</label>
+        <div class="flex gap-4 mb-4">
+          <label class="flex items-center gap-2 cursor-pointer">
             <input type="radio" name="match_type" value="host" checked class="accent-brand"/>
-            <span class="text-[13px] font-medium text-slate-800">Host header</span>
+            <span class="text-[14px] font-medium text-slate-800">Host header</span>
           </label>
-          <label class="flex items-center gap-[7px] cursor-pointer">
+          <label class="flex items-center gap-2 cursor-pointer">
             <input type="radio" name="match_type" value="prefix" class="accent-brand"/>
-            <span class="text-[13px] font-medium text-slate-800">Path prefix</span>
+            <span class="text-[14px] font-medium text-slate-800">Path prefix</span>
           </label>
         </div>
         <input name="match_value" type="text" placeholder="blog.example.com or /api"
-          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-3 py-2 text-[13px] outline-none text-slate-800 bg-white"/>
-        <p class="step-error hidden text-[11px] text-red-500 mt-[6px]">This field is required.</p>
-        <p class="text-[11px] text-slate-500 mt-2">Host matches the request's Host header exactly; prefix matches the start of the URL path.</p>
+          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+        <p class="step-error hidden text-[12px] text-red-500 mt-[6px]">This field is required.</p>
+        <p class="text-[12px] text-slate-500 mt-[10px]">Host matches the request's Host header exactly; prefix matches the start of the URL path.</p>
       </div>
 
       <!-- Step 3: Backend -->
       <div class="wizard-step hidden" data-step="3">
-        <label class="block text-[11px] text-slate-500 mb-[5px] font-medium">Backend URL</label>
+        <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Backend URL</label>
         <input name="backend" type="text" placeholder="http://127.0.0.1:3000"
-          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-3 py-2 text-[13px] font-mono outline-none text-slate-800 bg-white"/>
-        <p class="step-error hidden text-[11px] text-red-500 mt-[6px]">This field is required.</p>
-        <p class="text-[11px] text-slate-500 mt-2">Where the WAF forwards allowed traffic once it's passed inspection.</p>
+          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] font-mono outline-none text-slate-800 bg-white"/>
+        <p class="step-error hidden text-[12px] text-red-500 mt-[6px]">This field is required.</p>
+        <p class="text-[12px] text-slate-500 mt-[10px]">Where the WAF forwards allowed traffic once it's passed inspection.</p>
       </div>
 
       <!-- Step 4: Review -->
       <div class="wizard-step hidden" data-step="4">
-        <p class="text-[11px] text-slate-500 mb-[10px] font-medium">Review</p>
-        <div id="wizard-review" class="flex flex-col gap-2 text-xs bg-surface rounded-[10px] px-[14px] py-3"></div>
+        <p class="text-[12px] text-slate-500 mb-[10px] font-medium">Review</p>
+        <div id="wizard-review" class="flex flex-col gap-2 text-[13px] bg-surface rounded-[10px] px-4 py-[14px]"></div>
       </div>
 
       <!-- Nav buttons -->
-      <div class="flex gap-2 mt-[18px]">
-        <button type="button" id="wizard-back" class="hidden flex-1 py-[9px] rounded-full border border-line bg-white text-slate-500 text-[13px] font-medium cursor-pointer font-sans">Back</button>
-        <button type="button" id="wizard-next" class="btn-primary flex-1 py-[9px]">Next</button>
-        <button type="submit" id="wizard-submit" class="btn-primary hidden flex-1 py-[9px]">
+      <div class="flex gap-2 mt-5">
+        <button type="button" id="wizard-back" class="hidden flex-1 py-[10px] rounded-full border border-line bg-white text-slate-500 text-[14px] font-medium cursor-pointer font-sans">Back</button>
+        <button type="button" id="wizard-next" class="btn-primary flex-1">Next</button>
+        <button type="submit" id="wizard-submit" class="btn-primary hidden flex-1">
           <i class="hgi hgi-stroke hgi-rounded hgi-add-circle text-sm"></i>
           Create Service
         </button>
       </div>
-      <div id="wizard-error" class="text-[11px] text-red-500 mt-[10px]"></div>
-      <div class="htmx-indicator flex items-center gap-[6px] text-[11px] text-slate-500 mt-[10px]">
+      <div id="wizard-error" class="text-[12px] text-red-500 mt-[10px]"></div>
+      <div class="htmx-indicator flex items-center gap-[6px] text-[12px] text-slate-500 mt-[10px]">
         <i class="hgi hgi-stroke hgi-rounded hgi-loading-03 text-xs"></i>
         Checking backend reachability…
       </div>
     </form>
   </div>
 
-  <!-- ── Services Table ── -->
+  <!-- ── Services List ── -->
   <div class="card overflow-hidden">
-    <div class="flex items-center justify-between px-5 py-4 border-b border-canvas">
-      <div>
-        <p class="text-[11px] text-slate-500 mb-[2px]">Routing</p>
-        <h3 class="text-[15px] font-bold text-slate-900">Configured Services</h3>
-      </div>
-      <span class="text-[11px] font-semibold bg-slate-100 text-slate-500 px-[10px] py-[3px] rounded-full">{{len .Services}} services</span>
+    {{template "card-header" (map "Cat" "Routing" "Title" "Configured Services" "Badge" (printf "%d services" (len .Services)))}}
+    <div id="services-body" class="flex flex-col gap-1 px-2 pb-2" hx-get="/admin/services/rows" hx-trigger="every 15s" hx-swap="innerHTML">
+      {{template "services-rows" .Services}}
     </div>
-    <table class="w-full border-collapse text-xs">
-      <thead>
-        <tr class="border-b border-canvas">
-          <th class="text-left px-5 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Name</th>
-          <th class="text-left px-3 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Match</th>
-          <th class="text-left px-3 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Backend</th>
-          <th class="text-left px-3 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">TLS</th>
-          <th class="text-left px-3 py-[10px] text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Added</th>
-          <th class="text-right px-5 py-[10px]"></th>
-        </tr>
-      </thead>
-      <tbody id="services-body" hx-get="/admin/services/rows" hx-trigger="every 15s" hx-swap="innerHTML">
-        {{template "services-rows" .Services}}
-      </tbody>
-    </table>
   </div>
 
 </div>
 
 <!-- ── TLS Modal ── -->
 <div id="tls-modal-overlay" class="hidden flex fixed inset-0 bg-slate-900/[.45] z-[200] items-center justify-center">
-  <div class="card w-[420px] p-[22px]">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-[15px] font-bold text-slate-900">TLS for <span id="tls-modal-service-name" class="text-brand"></span></h2>
+  <div class="card w-[440px] p-6">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-[17px] font-bold text-slate-900">TLS for <span id="tls-modal-service-name" class="text-brand"></span></h2>
       <button type="button" id="tls-modal-close" class="bg-none border-none cursor-pointer text-slate-500 text-lg leading-none">&times;</button>
     </div>
 
     <div class="flex gap-4 mb-4">
-      <label class="flex items-center gap-[7px] cursor-pointer">
+      <label class="flex items-center gap-2 cursor-pointer">
         <input type="radio" name="tls_action" value="upload" checked class="accent-brand"/>
-        <span class="text-[13px] font-medium text-slate-800">Upload cert</span>
+        <span class="text-[14px] font-medium text-slate-800">Upload cert</span>
       </label>
-      <label class="flex items-center gap-[7px] cursor-pointer">
+      <label class="flex items-center gap-2 cursor-pointer">
         <input type="radio" name="tls_action" value="auto" class="accent-brand"/>
-        <span class="text-[13px] font-medium text-slate-800">Auto-issue</span>
+        <span class="text-[14px] font-medium text-slate-800">Auto-issue</span>
       </label>
     </div>
 
     <form id="tls-upload-form" hx-post="/admin/services/tls/upload" hx-target="#services-body" hx-swap="innerHTML">
       <input type="hidden" name="service_id" class="tls-service-id"/>
-      <label class="block text-[11px] text-slate-500 mb-[5px] font-medium">Certificate (PEM)</label>
+      <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Certificate (PEM)</label>
       <textarea name="cert_pem" rows="4" placeholder="-----BEGIN CERTIFICATE-----"
-        class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-3 py-2 text-[11px] font-mono outline-none text-slate-800 bg-white mb-[10px] resize-y"></textarea>
-      <label class="block text-[11px] text-slate-500 mb-[5px] font-medium">Private Key (PEM)</label>
+        class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[12px] font-mono outline-none text-slate-800 bg-white mb-3 resize-y"></textarea>
+      <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Private Key (PEM)</label>
       <textarea name="key_pem" rows="4" placeholder="-----BEGIN PRIVATE KEY-----"
-        class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-3 py-2 text-[11px] font-mono outline-none text-slate-800 bg-white resize-y"></textarea>
-      <button type="submit" class="btn-primary w-full mt-[14px] py-[9px]">Save Certificate</button>
+        class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[12px] font-mono outline-none text-slate-800 bg-white resize-y"></textarea>
+      <button type="submit" class="btn-primary w-full mt-4">Save Certificate</button>
     </form>
 
     <form id="tls-auto-form" class="hidden" hx-post="/admin/services/tls/auto" hx-target="#services-body" hx-swap="innerHTML">
       <input type="hidden" name="service_id" class="tls-service-id"/>
-      <p class="text-xs text-slate-500 mb-[14px] leading-[1.5]">A certificate is requested automatically from Let's Encrypt the first time this domain receives a real HTTPS connection — nothing is issued right now. Requires <code class="mono">tls.auto.email</code> to be set in config.yaml.</p>
-      <button type="submit" class="btn-primary w-full py-[9px]">Enable Auto-Issue</button>
+      <p class="text-[13px] text-slate-500 mb-4 leading-[1.5]">A certificate is requested automatically from Let's Encrypt the first time this domain receives a real HTTPS connection — nothing is issued right now. Requires <code class="mono">tls.auto.email</code> to be set in config.yaml.</p>
+      <button type="submit" class="btn-primary w-full">Enable Auto-Issue</button>
     </form>
 
-    <div id="tls-error" class="text-[11px] text-red-500 mt-[10px]"></div>
+    <div id="tls-error" class="text-[12px] text-red-500 mt-[10px]"></div>
 
-    <form id="tls-clear-form" hx-post="/admin/services/tls/clear" hx-target="#services-body" hx-swap="innerHTML" class="mt-[14px] border-t border-canvas pt-[14px]">
+    <form id="tls-clear-form" hx-post="/admin/services/tls/clear" hx-target="#services-body" hx-swap="innerHTML" class="mt-4 border-t border-canvas pt-4">
       <input type="hidden" name="service_id" class="tls-service-id"/>
-      <button type="submit" class="w-full py-2 rounded-full border border-red-100 bg-white text-red-500 text-xs font-medium cursor-pointer font-sans">Disable TLS for this service</button>
+      <button type="submit" class="w-full py-[10px] rounded-full border border-red-100 bg-white text-red-500 text-[13px] font-medium cursor-pointer font-sans">Disable TLS for this service</button>
     </form>
   </div>
 </div>
@@ -156,55 +138,45 @@
 
 {{define "services-rows"}}
 {{range .}}
-<tr class="border-b border-surface transition-colors duration-100">
-  <td class="px-5 py-[11px] font-semibold text-slate-800">
-    <span class="inline-block w-[7px] h-[7px] rounded-full mr-[7px] {{if not .Known}}bg-slate-300{{else if .Healthy}}bg-brand{{else}}bg-red-500{{end}}"
+<div class="flex items-center gap-3 p-3 rounded-2xl hover:bg-surface transition-colors duration-150">
+  <div class="relative w-10 h-10 rounded-full bg-brand-tint flex items-center justify-center shrink-0">
+    <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01 text-base text-brand-dark"></i>
+    <span class="absolute -bottom-px -right-px w-3 h-3 rounded-full border-2 border-white {{if not .Known}}bg-slate-300{{else if .Healthy}}bg-brand{{else}}bg-red-500{{end}}"
       title="{{if not .Known}}no traffic seen yet — health unknown{{else if .Healthy}}reachable (last real request succeeded){{else}}unreachable (last real request failed){{end}}"></span>
-    {{.Name}}
-  </td>
-  <td class="px-3 py-[11px]">
-    {{if .Host}}
-    <span class="text-[11px] font-semibold bg-blue-50 text-blue-500 px-2 py-[2px] rounded-full">host: {{.Host}}</span>
-    {{else}}
-    <span class="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-[2px] rounded-full">prefix: {{.Prefix}}</span>
-    {{end}}
-  </td>
-  <td class="px-3 py-[11px] font-mono text-[11px] text-slate-700">{{.Backend}}</td>
-  <td class="px-3 py-[11px]">
-    {{if .Host}}
-    <span class="inline-flex items-center gap-[5px]">
-      {{if eq .TLSMode "custom"}}
-      <span class="text-[10px] font-semibold bg-green-100 text-green-600 px-2 py-[2px] rounded-full">Custom{{if .TLSExpiresAt}} · exp {{shortDate .TLSExpiresAt}}{{end}}</span>
-      {{else if eq .TLSMode "auto"}}
-      <span class="text-[10px] font-semibold bg-blue-50 text-blue-500 px-2 py-[2px] rounded-full">Auto (Let's Encrypt)</span>
+  </div>
+  <div class="flex-1 min-w-0">
+    <div class="flex items-center gap-2">
+      <span class="text-[14px] font-semibold text-slate-900 truncate">{{.Name}}</span>
+      {{if .Host}}
+      <span class="text-[11px] font-semibold bg-blue-50 text-blue-500 px-2 py-px rounded-full shrink-0">host</span>
       {{else}}
-      <span class="text-[10px] font-semibold bg-slate-100 text-slate-500 px-2 py-[2px] rounded-full">None</span>
+      <span class="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-px rounded-full shrink-0">prefix</span>
       {{end}}
-      <button type="button" class="tls-manage-btn text-[10px] text-blue-500 bg-none border-none cursor-pointer underline font-sans" data-id="{{.ID}}" data-name="{{.Name}}">Manage</button>
+    </div>
+    <div class="mono text-[12px] text-slate-500 truncate">{{if .Host}}{{.Host}}{{else}}{{.Prefix}}{{end}} &rarr; {{.Backend}}</div>
+  </div>
+  <div class="flex items-center gap-3 shrink-0">
+    {{if .Host}}
+    <span class="inline-flex items-center gap-[6px]">
+      {{if eq .TLSMode "custom"}}
+      <span class="text-[11px] font-semibold bg-green-100 text-green-600 px-2 py-[2px] rounded-full">Custom{{if .TLSExpiresAt}} · exp {{shortDate .TLSExpiresAt}}{{end}}</span>
+      {{else if eq .TLSMode "auto"}}
+      <span class="text-[11px] font-semibold bg-blue-50 text-blue-500 px-2 py-[2px] rounded-full">Auto (Let's Encrypt)</span>
+      {{else}}
+      <span class="text-[11px] font-semibold bg-slate-100 text-slate-500 px-2 py-[2px] rounded-full">No TLS</span>
+      {{end}}
+      <button type="button" class="tls-manage-btn inline-flex items-center gap-[5px] text-[11px] font-medium text-blue-500 bg-transparent border border-blue-100 rounded-full px-3 py-[5px] cursor-pointer font-sans transition-colors duration-150" data-id="{{.ID}}" data-name="{{.Name}}">
+        <i class="hgi hgi-stroke hgi-rounded hgi-settings-01 text-xs"></i>
+        Manage
+      </button>
     </span>
-    {{else}}
-    <span class="text-[11px] text-slate-500">—</span>
     {{end}}
-  </td>
-  <td class="px-3 py-[11px] text-[11px] text-slate-500 whitespace-nowrap">{{fmtTime .CreatedAt}}</td>
-  <td class="px-5 py-[11px] text-right">
-    <button hx-delete="/admin/services/{{.ID}}"
-            hx-target="#services-body"
-            hx-swap="innerHTML"
-            hx-confirm="Remove service {{.Name}}?"
-            class="inline-flex items-center gap-[5px] text-[11px] font-medium text-red-500 bg-transparent border border-red-100 rounded-full px-3 py-1 cursor-pointer font-sans transition-colors duration-150">
-      <i class="hgi hgi-stroke hgi-rounded hgi-delete-02 text-xs"></i>
-      Remove
-    </button>
-  </td>
-</tr>
+    <span class="text-[12px] text-slate-400 whitespace-nowrap">{{fmtTime .CreatedAt}}</span>
+    {{template "remove-btn" (map "URL" (printf "/admin/services/%d" .ID) "Target" "#services-body" "Confirm" (printf "Remove service %s?" .Name))}}
+  </div>
+</div>
 {{else}}
-<tr>
-  <td colspan="6" class="text-center p-12 text-slate-500">
-    <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01 text-[32px] block mx-auto mb-2 opacity-30"></i>
-    No services configured yet
-  </td>
-</tr>
+{{template "empty-state" (map "Icon" "hgi-server-stack-01" "Message" "No services configured yet")}}
 {{end}}
 {{end}}
 

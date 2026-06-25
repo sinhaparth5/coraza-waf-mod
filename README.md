@@ -55,7 +55,7 @@ make build      # go generate (minifies JS) + go build -> ./coraza-waf-mod
 ### Option C — cross-compiled release binaries
 
 ```bash
-make dist        # cross-compiles dist/coraza-waf-mod-linux-{amd64,arm64}, CGO_ENABLED=0
+make dist        # cross-compiles Linux amd64/arm64 and Windows amd64 binaries, CGO_ENABLED=0
 make checksums   # writes dist/checksums.txt
 ```
 
@@ -72,7 +72,28 @@ The `apps:` list in `config.yaml` is only used to seed the database on first-eve
 
 ### GeoIP setup (optional)
 
-Download the free [GeoLite2-Country database](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data) from MaxMind and point `geo.db_path` at the `.mmdb` file. Leave it empty to disable geo blocking.
+Country blocking uses the bundled MaxMind GeoLite2 Country database by default, so fresh Windows/Linux builds work without manually copying an `.mmdb` file. This product includes GeoLite Data created by MaxMind, available from [https://www.maxmind.com](https://www.maxmind.com).
+
+To override the bundled database with a newer external copy:
+
+1. Create a MaxMind account from the [GeoLite2 signup page](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/).
+2. In the MaxMind account portal, generate a license key for database downloads.
+3. Download `GeoLite2-Country` in `GeoIP2 Binary (.mmdb)` format, then extract `GeoLite2-Country.mmdb`.
+4. Put the file somewhere readable by the service, for example:
+
+```bash
+sudo mkdir -p /var/lib/coraza-waf-mod
+sudo cp GeoLite2-Country.mmdb /var/lib/coraza-waf-mod/
+```
+
+5. Set the path in `config.yaml`:
+
+```yaml
+geo:
+  db_path: "/var/lib/coraza-waf-mod/GeoLite2-Country.mmdb"
+```
+
+Leave `geo.db_path` empty to use the bundled database. GeoLite users must keep the database updated; MaxMind requires old database versions to be replaced or destroyed within 30 days of a new release, so release builds should refresh the bundled `.mmdb` regularly.
 
 ## Development
 

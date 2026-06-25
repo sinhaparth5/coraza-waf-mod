@@ -53,6 +53,17 @@ func (b *LogBroadcaster) Broadcast(entry storage.RequestLog) {
 	b.mu.Unlock()
 }
 
+// SubscriberCount returns how many SSE clients are currently connected
+// (notifications stream + logs stream combined, since both share this
+// broadcaster) — used to log how many long-lived connections are open, since
+// each one permanently occupies one of the browser's ~6-per-origin HTTP/1.1
+// connection slots until the tab closes.
+func (b *LogBroadcaster) SubscriberCount() int {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return len(b.subs)
+}
+
 // Recent returns a copy of the ring buffer (oldest first).
 func (b *LogBroadcaster) Recent() []storage.RequestLog {
 	b.mu.RLock()

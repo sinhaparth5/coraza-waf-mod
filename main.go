@@ -19,6 +19,7 @@ import (
 	"coraza-waf-mod/geo"
 	"coraza-waf-mod/metrics"
 	"coraza-waf-mod/proxy"
+	"coraza-waf-mod/ratelimit"
 	"coraza-waf-mod/services"
 	"coraza-waf-mod/storage"
 	"coraza-waf-mod/ui"
@@ -30,9 +31,26 @@ import (
 )
 
 func main() {
+	args := os.Args[1:]
+
+	// `coraza-waf-mod prune [config.yaml]` opens just the DB, deletes logs
+	// older than the configured retention window, and exits — meant to be
+	// invoked by an external scheduler (cron, or a systemd timer; see
+	// deploy/coraza-waf-mod-prune.{service,timer}) instead of running inside
+	// the long-lived server process, so a multi-second batched delete never
+	// has to share that process's DB connection pool with live traffic.
+	if len(args) > 0 && args[0] == "prune" {
+		cfgPath := "config.yaml"
+		if len(args) > 1 {
+			cfgPath = args[1]
+		}
+		runPruneOnly(cfgPath)
+		return
+	}
+
 	cfgPath := "config.yaml"
-	if len(os.Args) > 1 {
-		cfgPath = os.Args[1]
+	if len(args) > 0 {
+		cfgPath = args[0]
 	}
 
 	cfg, err := config.Load(cfgPath)
@@ -62,6 +80,9 @@ func main() {
 	}
 	defer geoBl.Close()
 
+	rl := ratelimit.New(cfg.RateLimit)
+	defer rl.Stop()
+
 	// One-time migration: legacy config.yaml apps: entries become rows in
 	// the services table, so the admin Services page is the source of
 	// truth going forward.
@@ -79,10 +100,9 @@ func main() {
 	}
 	metrics.SetDB(db)
 	metrics.SetRegistry(registry)
+	metrics.SetLimiter(rl)
 
 	broadcaster := ui.NewLogBroadcaster()
-
-	go runLogRetention(db, cfg.DB.LogRetentionDays)
 
 	e := echo.New()
 	e.HideBanner = true
@@ -97,13 +117,13 @@ func main() {
 		},
 	}))
 
-	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS)
+	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs)
 	if err != nil {
 		log.Fatalf("ui init: %v", err)
 	}
 	uiHandler.Register(e)
 
-	h := proxy.NewHandler(registry, engine, db, ipbl, geoBl, broadcaster)
+	h := proxy.NewHandler(registry, engine, db, ipbl, geoBl, rl, broadcaster)
 	e.Any("/*", h.Handle)
 
 	appCount := len(registry.List())
@@ -220,32 +240,32 @@ func startCustomTLS(e *echo.Echo, cfg *config.Config, registry *services.Registr
 	}
 }
 
-// runLogRetention prunes request logs older than retentionDays once at
-// startup and then once every 24h for the lifetime of the process.
-// retentionDays <= 0 disables pruning (logs kept forever).
-func runLogRetention(db *storage.DB, retentionDays int) {
-	if retentionDays <= 0 {
-		log.Printf("log retention: disabled, requests kept forever")
+// runPruneOnly opens the DB, deletes request logs older than the configured
+// retention window, logs the result, and returns — it does not start the WAF,
+// proxy, or admin UI. retentionDays <= 0 disables pruning (logs kept forever).
+func runPruneOnly(cfgPath string) {
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		log.Fatalf("config: %v", err)
+	}
+	if cfg.DB.LogRetentionDays <= 0 {
+		log.Printf("log retention: disabled (log_retention_days <= 0), nothing to prune")
 		return
 	}
 
-	prune := func() {
-		n, err := db.PruneOldRequests(retentionDays)
-		if err != nil {
-			log.Printf("log retention: prune failed: %v", err)
-			return
-		}
-		if n > 0 {
-			log.Printf("log retention: deleted %d requests older than %d days", n, retentionDays)
-		}
+	db, err := storage.Open(cfg.DB.Path)
+	if err != nil {
+		log.Fatalf("db: %v", err)
 	}
+	defer db.Close()
 
-	prune()
-	ticker := time.NewTicker(24 * time.Hour)
-	defer ticker.Stop()
-	for range ticker.C {
-		prune()
+	start := time.Now()
+	n, err := db.PruneOldRequests(cfg.DB.LogRetentionDays)
+	dur := time.Since(start)
+	if err != nil {
+		log.Fatalf("log retention: prune failed after %s: %v", dur, err)
 	}
+	log.Printf("log retention: deleted %d requests older than %d days (took %s)", n, cfg.DB.LogRetentionDays, dur)
 }
 
 func httpsRedirect(w http.ResponseWriter, r *http.Request) {

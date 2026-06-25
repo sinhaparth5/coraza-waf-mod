@@ -23,9 +23,8 @@ tls:
   #   key_file:  "./certs/key.pem"
 
 # ─── Geo Blocking ────────────────────────────────────────────────────────────
-# Download free DB: https://dev.maxmind.com/geoip/geolite2-free-geolocation-data
-# Place GeoLite2-Country.mmdb in the project root and set the path below.
-# Leave empty to disable geo blocking.
+# The binary includes a bundled GeoLite2-Country.mmdb. Leave db_path empty to
+# use it, or set a path here to override it with an externally updated .mmdb.
 geo:
   db_path: ""  # e.g. "./GeoLite2-Country.mmdb"
 
@@ -44,6 +43,14 @@ admin:
   path: "/admin"
   username: "admin"
   password: "changeme"
+
+# ─── Rate Limiting ───────────────────────────────────────────────────────────
+# Per-IP token-bucket limiter applied globally, ahead of geo/WAF inspection.
+# Disabled by default — the right rate depends on your app's traffic shape.
+rate_limit:
+  enabled: false
+  requests_per_second: 10  # sustained rate per client IP
+  burst: 20                # max requests a client can burst before throttling
 
 # ─── Backend Apps ────────────────────────────────────────────────────────────
 apps:

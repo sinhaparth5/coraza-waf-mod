@@ -27,6 +27,32 @@ const serverHeader = "Coraza WAF Mod"
 // for the one-shot check on add and for the periodic background sweep.
 const probeTimeout = 3 * time.Second
 
+// slowBackendThreshold gates the diagnostic log in timedTransport.RoundTrip —
+// logging every backend call would be noise, but anything crossing this is
+// worth seeing, since it's the leading edge of what could become a 5s dial
+// timeout or 10s response-header timeout (see backendTransport below).
+const slowBackendThreshold = 1 * time.Second
+
+// timedTransport wraps backendTransport per service so a hung or slow
+// backend shows up in the logs with which service and how long, instead of
+// just appearing as the request itself stalling with no visible cause.
+type timedTransport struct {
+	rt   http.RoundTripper
+	name string
+}
+
+func (t *timedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	start := time.Now()
+	resp, err := t.rt.RoundTrip(req)
+	dur := time.Since(start)
+	if err != nil {
+		log.Printf("backend [%s] %s %s: failed after %s: %v", t.name, req.Method, req.URL.Path, dur, err)
+	} else if dur >= slowBackendThreshold {
+		log.Printf("backend [%s] %s %s: slow response, took %s", t.name, req.Method, req.URL.Path, dur)
+	}
+	return resp, err
+}
+
 // backendTransport is shared by every service's reverse proxy. Go's
 // http.DefaultTransport has a 30s dial timeout and NO response-header
 // timeout at all, so a dead or unresponsive backend can hang a proxied
@@ -84,7 +110,7 @@ func (r *Registry) Reload(db *storage.DB) error {
 		}
 		name := s.Name
 		rp := httputil.NewSingleHostReverseProxy(target)
-		rp.Transport = backendTransport
+		rp.Transport = &timedTransport{rt: backendTransport, name: name}
 		// Passive health tracking: no separate probe traffic at all — a
 		// service is marked down the instant a real proxied request fails
 		// to reach it, and healthy again on the next real request that

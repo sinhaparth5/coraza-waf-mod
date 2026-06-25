@@ -15,6 +15,12 @@ import (
 // see QueueRequest.
 const logQueueSize = 10000
 
+// slowWriteThreshold gates the diagnostic log in runLogWorker — a single
+// InsertRequest taking this long usually means something else (a long-held
+// writer lock, e.g. a prune batch, or slow disk I/O) is making every queued
+// write wait its turn.
+const slowWriteThreshold = 500 * time.Millisecond
+
 type DB struct {
 	conn     *sql.DB
 	logQueue chan RequestLog
@@ -77,8 +83,13 @@ func Open(path string) (*DB, error) {
 func (db *DB) runLogWorker() {
 	defer close(db.logDone)
 	for entry := range db.logQueue {
-		if err := db.InsertRequest(entry); err != nil {
-			log.Printf("storage: async request log write failed: %v", err)
+		writeStart := time.Now()
+		err := db.InsertRequest(entry)
+		dur := time.Since(writeStart)
+		if err != nil {
+			log.Printf("storage: async request log write failed after %s: %v", dur, err)
+		} else if dur >= slowWriteThreshold {
+			log.Printf("storage: slow request log write, took %s (queue depth now %d)", dur, db.QueueDepth())
 		}
 	}
 }
@@ -681,15 +692,39 @@ func (db *DB) CountBlockedSince(t time.Time) (int, error) {
 	return n, err
 }
 
+// pruneBatchSize bounds how many rows PruneOldRequests deletes per
+// transaction. SQLite holds its one process-wide write lock for the whole
+// duration of a DELETE — on a large table, a single unbatched
+// "DELETE WHERE ts < cutoff" can hold that lock for many seconds, during
+// which the async log worker (and any admin-UI write) blocks up to
+// busy_timeout and then fails. Chunking keeps each transaction's lock hold
+// time small, and the pause between batches gives queued writers a chance
+// to run instead of starving behind back-to-back prune transactions.
+const pruneBatchSize = 2000
+
 // PruneOldRequests deletes request logs older than `days` days and returns
 // how many rows were removed.
 func (db *DB) PruneOldRequests(days int) (int64, error) {
 	cutoff := time.Now().UTC().AddDate(0, 0, -days)
-	res, err := db.conn.Exec(`DELETE FROM requests WHERE ts < ?`, cutoff)
-	if err != nil {
-		return 0, err
+	var total int64
+	for {
+		res, err := db.conn.Exec(
+			`DELETE FROM requests WHERE id IN (SELECT id FROM requests WHERE ts < ? LIMIT ?)`,
+			cutoff, pruneBatchSize,
+		)
+		if err != nil {
+			return total, err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return total, err
+		}
+		total += n
+		if n < pruneBatchSize {
+			return total, nil
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
-	return res.RowsAffected()
 }
 
 const metaKeyNotificationsSeenAt = "notifications_seen_at"

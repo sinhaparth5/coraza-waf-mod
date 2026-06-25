@@ -1,0 +1,70 @@
+{{define "confirm-modal"}}
+<div id="confirm-modal-overlay"
+     class="hidden flex fixed inset-0 z-[300] items-center justify-center"
+     style="background:rgba(0,0,0,0.15);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);">
+  <div class="relative overflow-hidden"
+       style="width:360px;background:rgba(255,255,255,0.80);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);border-radius:20px;border:1px solid rgba(255,255,255,0.90);box-shadow:0 20px 60px rgba(0,0,0,0.12),0 0 0 1px rgba(0,0,0,0.04);padding:24px;">
+
+    <!-- iridescent shimmer decoration -->
+    <div class="absolute pointer-events-none"
+         style="right:-32px;bottom:-32px;width:160px;height:80px;border-radius:10px;opacity:.20;background:conic-gradient(from 196deg at 50% 50%,rgba(66,232,255,0.009) 5deg,rgba(255,126,171,0.50) 185deg,#3083FF 275deg,#7147FF 360deg);"></div>
+
+    <div class="flex items-center gap-3 mb-5 relative">
+      <div class="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+           style="background:rgba(255,59,48,0.10);">
+        <i class="hgi hgi-stroke hgi-rounded hgi-alert-02 text-base" style="color:#FF3B30;"></i>
+      </div>
+      <h2 class="text-[17px] font-bold" style="color:rgba(0,0,0,0.85);">Confirm removal</h2>
+    </div>
+
+    <p id="confirm-modal-message"
+       class="text-[14px] leading-[1.6] mb-6 relative"
+       style="color:rgba(0,0,0,0.55);"></p>
+
+    <div class="flex gap-2.5 relative">
+      <button id="confirm-modal-cancel" type="button"
+        class="flex-1 py-[11px] text-[15px] font-semibold cursor-pointer font-sans border-none hover:opacity-[.70] transition-opacity duration-150"
+        style="background:rgba(0,0,0,0.06);color:rgba(0,0,0,0.70);border-radius:14px;">
+        Cancel
+      </button>
+      <button id="confirm-modal-ok" type="button"
+        class="flex-1 py-[11px] text-[15px] font-semibold cursor-pointer font-sans border-none hover:opacity-[.70] transition-opacity duration-150"
+        style="background:rgba(255,59,48,0.12);color:#FF3B30;border-radius:14px;">
+        Remove
+      </button>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  var overlay   = document.getElementById('confirm-modal-overlay');
+  var msgEl     = document.getElementById('confirm-modal-message');
+  var btnOk     = document.getElementById('confirm-modal-ok');
+  var btnCancel = document.getElementById('confirm-modal-cancel');
+  var _resolve  = null;
+
+  function show(q) {
+    msgEl.textContent = q;
+    overlay.classList.remove('hidden');
+    btnOk.focus();
+    return new Promise(function (res) { _resolve = res; });
+  }
+
+  function hide()    { overlay.classList.add('hidden'); _resolve = null; }
+  function confirm() { var r = _resolve; hide(); if (r) r(true);  }
+  function cancel()  { var r = _resolve; hide(); if (r) r(false); }
+
+  btnOk.addEventListener('click', confirm);
+  btnCancel.addEventListener('click', cancel);
+  overlay.addEventListener('click', function (e) { if (e.target === overlay) cancel(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) cancel();
+  });
+
+  document.addEventListener('htmx:confirm', function (evt) {
+    evt.preventDefault();
+    show(evt.detail.question).then(function (ok) { if (ok) evt.detail.issueRequest(true); });
+  });
+})();
+</script>
+{{end}}

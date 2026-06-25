@@ -1,13 +1,13 @@
 {{define "actions"}}
 {{if not .History}}
 <button id="pause-btn"
-  class="flex items-center gap-[6px] border border-line bg-white rounded-full px-4 py-[6px] text-[13px] font-medium text-slate-500 cursor-pointer font-sans">
+  class="flex items-center gap-[6px] border border-line bg-white rounded-full px-4 py-2 text-[14px] font-medium text-slate-500 cursor-pointer font-sans">
   <i id="pause-icon" class="hgi hgi-stroke hgi-rounded hgi-pause text-[13px]"></i>
   <span id="pause-label">Pause</span>
 </button>
 {{else}}
 <a href="/admin/logs"
-  class="flex items-center gap-[6px] border border-line bg-white rounded-full px-4 py-[6px] text-[13px] font-medium text-slate-500 cursor-pointer no-underline">
+  class="flex items-center gap-[6px] border border-line bg-white rounded-full px-4 py-2 text-[14px] font-medium text-slate-500 cursor-pointer no-underline">
   <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02 text-[13px] text-brand"></i>
   Back to live
 </a>
@@ -17,27 +17,27 @@
 {{define "content"}}
 
 <!-- Filter bar -->
-<form method="get" action="/admin/logs" id="logs-filter-form" class="flex items-end gap-[10px] flex-wrap mb-[14px]">
+<form method="get" action="/admin/logs" id="logs-filter-form" class="flex items-end gap-3 flex-wrap mb-4">
   <div>
-    <label class="block text-[10px] text-slate-500 mb-1 font-semibold uppercase tracking-[.04em]">From</label>
+    <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">From</label>
     <input type="datetime-local" name="from" id="filter-from" data-utc="{{.FilterFrom}}"
-      class="border-[1.5px] border-line rounded-[9px] px-[10px] py-[6px] text-xs outline-none text-slate-800 bg-white"/>
+      class="border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] outline-none text-slate-800 bg-white"/>
   </div>
   <div>
-    <label class="block text-[10px] text-slate-500 mb-1 font-semibold uppercase tracking-[.04em]">To</label>
+    <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">To</label>
     <input type="datetime-local" name="to" id="filter-to" data-utc="{{.FilterTo}}"
-      class="border-[1.5px] border-line rounded-[9px] px-[10px] py-[6px] text-xs outline-none text-slate-800 bg-white"/>
+      class="border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] outline-none text-slate-800 bg-white"/>
   </div>
   <div>
-    <label class="block text-[10px] text-slate-500 mb-1 font-semibold uppercase tracking-[.04em]">App</label>
-    <select name="app" class="border-[1.5px] border-line rounded-[9px] px-[10px] py-[6px] text-xs outline-none text-slate-800 bg-white min-w-[120px]">
+    <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">App</label>
+    <select name="app" class="border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] outline-none text-slate-800 bg-white min-w-[130px]">
       <option value="" {{if eq .FilterApp ""}}selected{{end}}>All apps</option>
       {{range .Apps}}<option value="{{.Name}}" {{if eq $.FilterApp .Name}}selected{{end}}>{{.Name}}</option>{{end}}
     </select>
   </div>
   <div>
-    <label class="block text-[10px] text-slate-500 mb-1 font-semibold uppercase tracking-[.04em]">Status</label>
-    <select name="status" class="border-[1.5px] border-line rounded-[9px] px-[10px] py-[6px] text-xs outline-none text-slate-800 bg-white min-w-[120px]">
+    <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">Status</label>
+    <select name="status" class="border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] outline-none text-slate-800 bg-white min-w-[130px]">
       <option value="" {{if eq .FilterStatus ""}}selected{{end}}>All statuses</option>
       <option value="blocked" {{if eq .FilterStatus "blocked"}}selected{{end}}>Blocked only</option>
       <option value="2xx" {{if eq .FilterStatus "2xx"}}selected{{end}}>2xx success</option>
@@ -46,24 +46,24 @@
       <option value="5xx" {{if eq .FilterStatus "5xx"}}selected{{end}}>5xx server error</option>
     </select>
   </div>
-  <button type="submit" class="btn-primary flex items-center gap-[6px] px-4 py-[7px]">
+  <button type="submit" class="btn-primary flex items-center gap-[6px]">
     <i class="hgi hgi-stroke hgi-rounded hgi-filter text-[13px]"></i>
     Filter
   </button>
   {{if .History}}
-  <a href="/admin/logs" class="text-xs text-slate-500 px-1 py-[7px] no-underline">Clear</a>
+  <a href="/admin/logs" class="text-[13px] text-slate-500 px-1 py-2 no-underline">Clear</a>
   {{end}}
 </form>
 
 <!-- Status bar -->
 <div class="flex items-center gap-4 mb-4">
   {{if .History}}
-  <div class="flex items-center gap-2 text-[13px] font-medium text-slate-500">
+  <div class="flex items-center gap-2 text-[14px] font-medium text-slate-500">
     <i class="hgi hgi-stroke hgi-rounded hgi-database text-[13px] text-navy"></i>
     Showing {{len .Recent}} of {{.Total}} matching requests
   </div>
   {{else}}
-  <div class="flex items-center gap-2 text-[13px] font-medium text-green-600">
+  <div class="flex items-center gap-2 text-[14px] font-medium text-green-600">
     <span class="relative flex w-2 h-2">
       <span class="absolute inset-0 rounded-full bg-brand animate-ping opacity-75"></span>
       <span class="w-2 h-2 rounded-full bg-brand block"></span>
@@ -71,7 +71,7 @@
     Live stream active
   </div>
   <span class="w-px h-4 bg-line block"></span>
-  <span class="text-[11px] text-slate-500">New entries appear at the top</span>
+  <span class="text-[12px] text-slate-500">New entries appear at the top</span>
   {{end}}
 </div>
 
@@ -79,11 +79,11 @@
 <div class="card overflow-hidden">
 
   <!-- Column headers -->
-  <div class="flex items-center gap-[22px] px-6 py-[11px] bg-surface border-b border-line text-[10px] font-semibold text-slate-500 uppercase tracking-[.06em]">
-    <span class="shrink-0 w-[100px]">Time</span>
-    <span class="shrink-0 w-[90px]">App</span>
-    <span class="shrink-0 w-[140px]">IP</span>
-    <span class="shrink-0 w-[54px]">Method</span>
+  <div class="flex items-center gap-[22px] px-6 py-3 bg-surface border-b border-line text-[11px] font-semibold text-slate-500 uppercase tracking-[.06em]">
+    <span class="shrink-0 w-[104px]">Time</span>
+    <span class="shrink-0 w-[94px]">App</span>
+    <span class="shrink-0 w-[150px]">IP</span>
+    <span class="shrink-0 w-[58px]">Method</span>
     <span class="flex-1">Path</span>
     <span class="shrink-0 w-[50px] text-right">Status</span>
     <span class="shrink-0 w-[50px] text-right">Dur</span>
@@ -92,14 +92,14 @@
 
   {{if .History}}
   <!-- Static historical results -->
-  <div id="log-wrapper" data-history="true" class="overflow-y-auto h-[calc(100vh-320px)]">
+  <div id="log-wrapper" data-history="true" class="overflow-y-auto h-[calc(100vh-350px)]">
     <div id="log-feed">
       {{range .Recent}}{{template "log-row" .}}{{end}}
     </div>
     {{if not .Recent}}
     <div class="flex flex-col items-center justify-center p-16 text-slate-300 text-center">
       <i class="hgi hgi-stroke hgi-rounded hgi-search-02 text-[40px] block mb-[10px] opacity-40"></i>
-      <p class="text-[13px]">No requests match these filters.</p>
+      <p class="text-[14px]">No requests match these filters.</p>
     </div>
     {{end}}
   </div>
@@ -107,18 +107,15 @@
   <!-- SSE live feed -->
   <div id="log-wrapper"
        data-history="false"
-       class="overflow-y-auto h-[calc(100vh-260px)]"
-       hx-ext="sse"
-       sse-connect="/admin/logs/stream">
+       class="overflow-y-auto h-[calc(100vh-280px)]">
     <div id="log-feed"
-         sse-swap="message"
-         hx-swap="afterbegin">
+         data-live-stream="true">
       {{range .Recent}}{{template "log-row" .}}{{end}}
     </div>
     {{if not .Recent}}
     <div id="empty-state" class="flex flex-col items-center justify-center p-16 text-slate-300 text-center">
       <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02 text-[40px] block mb-[10px] opacity-40"></i>
-      <p class="text-[13px]">Waiting for requests…</p>
+      <p class="text-[14px]">Waiting for requests…</p>
     </div>
     {{end}}
   </div>
@@ -128,19 +125,19 @@
 
 {{if .History}}
 <!-- Pagination -->
-<div class="flex items-center justify-center gap-[10px] mt-[14px]">
+<div class="flex items-center justify-center gap-3 mt-4">
   {{if gt .CurPage 1}}
   <a href="?from={{.FilterFrom}}&to={{.FilterTo}}&app={{.FilterApp}}&status={{.FilterStatus}}&mode=history&page={{sub .CurPage 1}}"
-     class="text-xs text-slate-500 border border-line rounded-full px-[14px] py-[6px] no-underline">← Prev</a>
+     class="text-[13px] text-slate-500 border border-line rounded-full px-4 py-2 no-underline">← Prev</a>
   {{end}}
-  <span class="text-xs text-slate-500">Page {{.CurPage}} of {{.TotalPages}}</span>
+  <span class="text-[13px] text-slate-500">Page {{.CurPage}} of {{.TotalPages}}</span>
   {{if lt .CurPage .TotalPages}}
   <a href="?from={{.FilterFrom}}&to={{.FilterTo}}&app={{.FilterApp}}&status={{.FilterStatus}}&mode=history&page={{add .CurPage 1}}"
-     class="text-xs text-slate-500 border border-line rounded-full px-[14px] py-[6px] no-underline">Next →</a>
+     class="text-[13px] text-slate-500 border border-line rounded-full px-4 py-2 no-underline">Next →</a>
   {{end}}
 </div>
 {{else}}
-<p class="mono text-[11px] text-slate-300 mt-[10px]">
+<p class="mono text-[12px] text-slate-300 mt-3">
   Format: time · app · ip · method · path · status · duration · [action]
 </p>
 {{end}}

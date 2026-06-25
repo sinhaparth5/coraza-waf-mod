@@ -1,0 +1,9 @@
+[Unit]
+Description=Coraza WAF Mod log retention prune (one-shot)
+
+[Service]
+Type=oneshot
+User=coraza-waf-mod
+Group=coraza-waf-mod
+WorkingDirectory=/var/lib/coraza-waf-mod
+ExecStart=/usr/local/bin/coraza-waf-mod prune /etc/coraza-waf-mod/config.yaml

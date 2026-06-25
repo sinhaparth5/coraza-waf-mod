@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Coraza WAF Mod log retention prune every 15 days
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=15d
+Persistent=true
+
+[Install]
+WantedBy=timers.target

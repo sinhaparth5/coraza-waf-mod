@@ -7,21 +7,22 @@
   <title>Coraza WAF Mod — {{.Heading}}</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
         extend: {
           colors: {
-            brand: { DEFAULT: '#5DBB7B', dark: '#3DA05E', light: '#7EE0A2' },
-            navy: '#2B4870',
-            canvas: '#F5F7FA',
-            surface: '#F8F9FB',
-            line: '#ECEEF2',
+            brand: { DEFAULT: '#76C893', dark: '#2A9D8F', light: '#9FE0B7', tint: '#EAF7EE' },
+            navy: '#2B5C74',
+            slateblue: '#4A7B96',
+            canvas: '#EAEBED',
+            surface: '#F4F7F9',
+            line: '#E2E5EA',
           },
           fontFamily: {
-            sans: ['IBM Plex Sans', 'system-ui', '-apple-system', 'sans-serif'],
+            sans: ['Plus Jakarta Sans', 'system-ui', '-apple-system', 'sans-serif'],
             mono: ['JetBrains Mono', 'monospace'],
           },
         },
@@ -36,79 +37,99 @@
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    .card { background: #fff; border-radius: 18px; box-shadow: 0 2px 14px rgba(0,0,0,0.055); }
-    .btn-primary { background: #5DBB7B; color: #fff; border: none; cursor: pointer; border-radius: 999px; padding: 6px 18px; font-size: 13px; font-weight: 500; font-family: inherit; transition: opacity .15s; }
+    .card { background: #fff; border-radius: 28px; border: 1px solid #EEF1F3; box-shadow: 0px 10px 40px rgba(0,0,0,0.03); }
+    .btn-primary { background: #76C893; color: #fff; border: none; cursor: pointer; border-radius: 999px; padding: 7px 20px; font-size: 14px; font-weight: 500; font-family: inherit; transition: opacity .15s; }
     .btn-primary:hover { opacity: .88; }
     input, select { font-family: inherit; }
     .focus-green { transition: border-color .15s; }
-    .focus-green:focus { border-color: #5DBB7B !important; }
+    .focus-green:focus { border-color: #76C893 !important; }
   </style>
 </head>
-<body class="min-h-screen bg-canvas text-slate-800 font-sans" data-admin-path="{{.AdminPath}}">
+<body class="min-h-screen bg-canvas text-slate-800 font-sans text-[14px]" data-admin-path="{{.AdminPath}}">
 
-<!-- ── Top Navigation ─────────────────────────────────── -->
-<header class="bg-white border-b border-line h-14 flex items-center px-6 gap-5 sticky top-0 z-50">
+<!-- ── Sidebar Navigation ─────────────────────────────────── -->
+<aside class="fixed left-4 top-4 bottom-4 w-[264px] bg-white rounded-2xl border border-line flex flex-col z-50">
 
   <!-- Brand -->
-  <div class="flex items-center gap-[10px] shrink-0">
-    <div class="w-[34px] h-[34px] rounded-full bg-brand flex items-center justify-center">
-      <i class="hgi hgi-stroke hgi-rounded hgi-shield-01 text-[15px] text-white"></i>
+  <div class="flex items-center gap-[10px] px-5 py-5 shrink-0">
+    <div class="w-9 h-9 rounded-full bg-brand flex items-center justify-center shrink-0">
+      <i class="hgi hgi-stroke hgi-rounded hgi-shield-01 text-base text-white"></i>
     </div>
-    <span class="font-semibold text-sm text-slate-800">Coraza WAF Mod</span>
+    <span class="font-bold text-[15px] text-slate-800 truncate">Coraza WAF</span>
   </div>
 
   <!-- Nav links -->
-  <nav class="flex items-center gap-1 ml-2">
-    <a href="/admin" class="px-4 py-[6px] rounded-full text-[13px] font-medium no-underline transition-colors duration-150 {{if eq .Page "dashboard"}}bg-brand text-white{{else}}text-slate-500{{end}}">Dashboard</a>
-    <a href="/admin/logs" class="px-4 py-[6px] rounded-full text-[13px] font-medium no-underline transition-colors duration-150 {{if eq .Page "logs"}}bg-brand text-white{{else}}text-slate-500{{end}}">Live Logs</a>
-    <a href="/admin/ip-rules" class="px-4 py-[6px] rounded-full text-[13px] font-medium no-underline transition-colors duration-150 {{if eq .Page "ip_rules"}}bg-brand text-white{{else}}text-slate-500{{end}}">IP Rules</a>
-    <a href="/admin/geo-rules" class="px-4 py-[6px] rounded-full text-[13px] font-medium no-underline transition-colors duration-150 {{if eq .Page "geo_rules"}}bg-brand text-white{{else}}text-slate-500{{end}}">Geo Rules</a>
-    <a href="/admin/services" class="px-4 py-[6px] rounded-full text-[13px] font-medium no-underline transition-colors duration-150 {{if eq .Page "services"}}bg-brand text-white{{else}}text-slate-500{{end}}">Services</a>
+  <nav class="flex-1 flex flex-col gap-1 px-3 pt-1 overflow-y-auto">
+    <a href="/admin" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "dashboard"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+      <i class="hgi hgi-stroke hgi-rounded hgi-dashboard-square-01 text-base"></i>
+      Dashboard
+    </a>
+    <a href="/admin/logs" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "logs"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+      <i class="hgi hgi-stroke hgi-rounded hgi-activity-01 text-base"></i>
+      Live Logs
+    </a>
+    <a href="/admin/ip-rules" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "ip_rules"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+      <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-base"></i>
+      IP Rules
+    </a>
+    <a href="/admin/geo-rules" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "geo_rules"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+      <i class="hgi hgi-stroke hgi-rounded hgi-earth text-base"></i>
+      Geo Rules
+    </a>
+    <a href="/admin/services" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "services"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+      <i class="hgi hgi-stroke hgi-rounded hgi-settings-01 text-base"></i>
+      Services
+    </a>
   </nav>
 
-  <div class="flex-1"></div>
-
-  <!-- Right actions -->
-  <div class="flex items-center gap-[10px]">
-    <div class="flex items-center gap-2 bg-surface border border-line rounded-full px-[14px] py-[6px] text-[13px] text-slate-500 w-40">
-      <i class="hgi hgi-stroke hgi-rounded hgi-search-01 text-[13px]"></i>
-      Search...
+  <!-- Account -->
+  <div class="px-3 pb-3 pt-2 border-t border-canvas shrink-0">
+    <div class="flex items-center gap-3 px-3 py-[10px]">
+      <div class="w-8 h-8 rounded-full bg-navy flex items-center justify-center text-white text-[12px] font-bold shrink-0">A</div>
+      <span class="text-[13px] font-semibold text-slate-800 flex-1 truncate">Admin</span>
+      <div class="relative shrink-0">
+        <button id="notif-btn" class="w-8 h-8 rounded-full bg-surface border border-line flex items-center justify-center text-slate-500 cursor-pointer relative">
+          <i class="hgi hgi-stroke hgi-rounded hgi-notification-03 text-[14px]"></i>
+          {{if gt .AlertCount 0}}
+          <span id="notif-badge" class="absolute -top-[3px] -right-[3px] bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[17px] h-[17px] flex items-center justify-center px-[3px] border-2 border-white">{{if gt .AlertCount 9}}9+{{else}}{{.AlertCount}}{{end}}</span>
+          {{end}}
+        </button>
+        <div id="notif-panel" class="hidden absolute bottom-10 left-0 w-[300px] bg-white border border-line rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,.12)] z-[100]"></div>
+      </div>
     </div>
-    <div class="relative">
-      <button id="notif-btn" class="w-[34px] h-[34px] rounded-full bg-surface border border-line flex items-center justify-center text-slate-500 cursor-pointer relative">
-        <i class="hgi hgi-stroke hgi-rounded hgi-notification-03 text-sm"></i>
-        {{if gt .AlertCount 0}}
-        <span id="notif-badge" class="absolute -top-[3px] -right-[3px] bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-[3px] border-2 border-white">{{if gt .AlertCount 9}}9+{{else}}{{.AlertCount}}{{end}}</span>
-        {{end}}
-      </button>
-      <div id="notif-panel" class="hidden absolute top-11 right-0 w-[300px] bg-white border border-line rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,.12)] z-[100]"></div>
-    </div>
-    <div class="w-[34px] h-[34px] rounded-full bg-navy flex items-center justify-center text-white text-xs font-bold">A</div>
   </div>
-</header>
+</aside>
 
 <!-- ── Page body ──────────────────────────────────────── -->
-<div class="flex min-h-[calc(100vh-56px)]">
+<div class="flex min-h-screen ml-[288px]">
 
-  <main class="flex-1 p-6 min-w-0">
+  <main class="flex-1 p-7 min-w-0">
     <!-- Page header -->
-    <div class="flex items-start justify-between mb-6">
+    <div class="flex items-start justify-between mb-7">
       <div>
-        <p class="text-[11px] text-slate-500 mb-1">Admin › {{.Heading}}</p>
-        <h1 class="text-2xl font-extrabold text-slate-900 leading-[1.2]">{{.Heading}}</h1>
+        <p class="text-[12px] text-slate-500 mb-1">Admin › {{.Heading}}</p>
+        <h1 class="text-[28px] font-extrabold text-slate-900 leading-[1.2]">{{.Heading}}</h1>
       </div>
-      {{block "actions" .}}{{end}}
+      <div class="flex items-center gap-3 shrink-0">
+        <div class="flex items-center gap-2 bg-surface border border-line rounded-lg px-3 py-2 text-[13px] text-slate-700">
+          <i class="hgi hgi-stroke hgi-rounded hgi-calendar-03 text-base text-slate-500"></i>
+          {{today}}
+        </div>
+        {{block "actions" .}}{{end}}
+      </div>
     </div>
 
     {{block "content" .}}{{end}}
   </main>
 
-  {{block "sidebar" .}}{{end}}
+  {{block "rightpanel" .}}{{end}}
 
 </div>
 
 <script src="{{.AdminPath}}/static/js/app.min.js" defer></script>
 {{block "scripts" .}}{{end}}
+<div id="toast-container" class="fixed top-6 right-6 z-[400] flex flex-col gap-3 w-[340px] pointer-events-none"></div>
+{{template "confirm-modal" .}}
 </body>
 </html>
 {{end}}

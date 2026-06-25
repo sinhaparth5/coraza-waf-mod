@@ -27,8 +27,9 @@ dist: generate
 	mkdir -p $(DIST)
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o $(DIST)/$(BINARY)-linux-amd64 .
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o $(DIST)/$(BINARY)-linux-arm64 .
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o $(DIST)/$(BINARY)-windows-amd64.exe .
 
 # Run after `make dist`. Produces dist/checksums.txt for users to verify
 # their download with `sha256sum --check checksums.txt`.
 checksums:
-	cd $(DIST) && sha256sum $(BINARY)-linux-amd64 $(BINARY)-linux-arm64 > checksums.txt
+	cd $(DIST) && sha256sum $(BINARY)-linux-amd64 $(BINARY)-linux-arm64 $(BINARY)-windows-amd64.exe > checksums.txt

@@ -6,3 +6,4 @@
 waf.db
 waf.db-shm
 waf.db-wal
+GeoLite2-Country_*/

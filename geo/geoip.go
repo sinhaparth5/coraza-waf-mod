@@ -18,8 +18,8 @@ type Blocker struct {
 	rules  map[string]string // key: "appName:CC" or ":CC" (global) → "block"|"allow"
 }
 
-// New opens the MaxMind .mmdb file and loads geo rules from the DB.
-// If dbPath is empty, geo lookups are disabled (all requests pass).
+// New opens the configured MaxMind .mmdb file and loads geo rules from the DB.
+// If dbPath is empty, it falls back to the bundled GeoLite2 Country database.
 func New(dbPath string, db *storage.DB) (*Blocker, error) {
 	g := &Blocker{}
 
@@ -31,7 +31,16 @@ func New(dbPath string, db *storage.DB) (*Blocker, error) {
 		g.reader = reader
 		log.Printf("geo: loaded MaxMind DB from %s", dbPath)
 	} else {
-		log.Printf("geo: no db_path configured, geo blocking disabled")
+		data, err := embeddedFS.ReadFile("GeoLite2-Country.mmdb")
+		if err != nil {
+			return nil, fmt.Errorf("geoip read bundled GeoLite2-Country.mmdb: %w", err)
+		}
+		reader, err := geoip2.FromBytes(data)
+		if err != nil {
+			return nil, fmt.Errorf("geoip open bundled GeoLite2-Country.mmdb: %w", err)
+		}
+		g.reader = reader
+		log.Printf("geo: loaded bundled MaxMind GeoLite2-Country.mmdb")
 	}
 
 	return g, g.Reload(db)

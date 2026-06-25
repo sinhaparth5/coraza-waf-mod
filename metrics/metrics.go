@@ -41,15 +41,21 @@ var (
 		Name: "coraza_waf_blocked_total",
 		Help: "Requests denied by the Coraza WAF, labeled by app and the matched rule's action.",
 	}, []string{"app", "action"})
+
+	RateLimitedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "coraza_rate_limited_total",
+		Help: "Requests denied by the per-IP rate limiter, labeled by app.",
+	}, []string{"app"})
 )
 
-// currentDB/currentRegistry back the gauges below. Set once from main.go
-// after both are constructed; read lazily on every scrape rather than
-// polled on a timer, matching the rest of this codebase's preference for
+// currentDB/currentRegistry/currentLimiter back the gauges below. Set once
+// from main.go after each is constructed; read lazily on every scrape rather
+// than polled on a timer, matching the rest of this codebase's preference for
 // passive/pull-based observation over background polling loops.
 var (
 	currentDB       *storage.DB
 	currentRegistry interface{ List() []storage.Service }
+	currentLimiter  interface{ TrackedIPs() int }
 )
 
 // SetDB makes the log-write queue depth visible to /metrics.
@@ -57,6 +63,9 @@ func SetDB(db *storage.DB) { currentDB = db }
 
 // SetRegistry makes the configured-service count visible to /metrics.
 func SetRegistry(r interface{ List() []storage.Service }) { currentRegistry = r }
+
+// SetLimiter makes the per-IP bucket count visible to /metrics.
+func SetLimiter(l interface{ TrackedIPs() int }) { currentLimiter = l }
 
 var _ = promauto.NewGaugeFunc(prometheus.GaugeOpts{
 	Name: "coraza_log_queue_depth",
@@ -76,6 +85,16 @@ var _ = promauto.NewGaugeFunc(prometheus.GaugeOpts{
 		return 0
 	}
 	return float64(len(currentRegistry.List()))
+})
+
+var _ = promauto.NewGaugeFunc(prometheus.GaugeOpts{
+	Name: "coraza_rate_limit_tracked_ips",
+	Help: "Number of per-IP token buckets currently held in memory by the rate limiter.",
+}, func() float64 {
+	if currentLimiter == nil {
+		return 0
+	}
+	return float64(currentLimiter.TrackedIPs())
 })
 
 // RecordRequest updates the request-volume counter and latency histogram.

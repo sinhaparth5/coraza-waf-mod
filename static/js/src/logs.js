@@ -2,7 +2,9 @@
   var wrapper = document.getElementById('log-wrapper');
   var feed = document.getElementById('log-feed');
   var isHistory = wrapper && wrapper.dataset.history === 'true';
+  var adminPath = document.body.dataset.adminPath || '';
   var paused = false;
+  var stream;
 
   function togglePause() {
     paused = !paused;
@@ -31,7 +33,23 @@
       if (!paused) wrapper.scrollTop = 0;
     });
     obs.observe(feed, { childList: true });
+
+    if (window.EventSource) {
+      stream = new EventSource(adminPath + '/logs/stream');
+      stream.onmessage = function (e) {
+        feed.insertAdjacentHTML('afterbegin', e.data);
+      };
+    }
   }
+
+  function closeStream() {
+    if (!stream) return;
+    stream.close();
+    stream = null;
+  }
+
+  window.addEventListener('pagehide', closeStream);
+  window.addEventListener('beforeunload', closeStream);
 
   // The server stores/filters everything in UTC. datetime-local inputs are
   // always in the browser's local time, so convert in both directions: show

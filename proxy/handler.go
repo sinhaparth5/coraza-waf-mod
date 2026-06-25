@@ -13,6 +13,7 @@ import (
 	"coraza-waf-mod/blocklist"
 	"coraza-waf-mod/geo"
 	"coraza-waf-mod/metrics"
+	"coraza-waf-mod/ratelimit"
 	"coraza-waf-mod/services"
 	"coraza-waf-mod/storage"
 	"coraza-waf-mod/ui"
@@ -28,16 +29,18 @@ type Handler struct {
 	db          *storage.DB
 	ipbl        *blocklist.IPBlocklist
 	geoBl       *geo.Blocker
+	ratelimit   *ratelimit.Limiter
 	broadcaster *ui.LogBroadcaster
 	registry    *services.Registry
 }
 
-func NewHandler(registry *services.Registry, engine *waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, bc *ui.LogBroadcaster) *Handler {
+func NewHandler(registry *services.Registry, engine *waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, rl *ratelimit.Limiter, bc *ui.LogBroadcaster) *Handler {
 	return &Handler{
 		waf:         engine,
 		db:          db,
 		ipbl:        ipbl,
 		geoBl:       geoBl,
+		ratelimit:   rl,
 		broadcaster: bc,
 		registry:    registry,
 	}
@@ -60,18 +63,31 @@ func (h *Handler) Handle(c echo.Context) error {
 	_, _, country := h.geoBl.Check(clientIP, appName)
 
 	// 1. IP blocklist — fastest check, no inspection needed.
-	if blocked, reason := h.ipbl.Check(clientIP, appName); blocked {
-		log.Printf("IP blocked %s [%s]", clientIP, reason)
+	blockedByIP, ipReason := h.ipbl.Check(clientIP, appName)
+	if blockedByIP {
 		metrics.IPBlockedTotal.WithLabelValues(appName).Inc()
-		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, reason, time.Since(start))
+		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, ipReason, time.Since(start))
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied"})
 	}
 
+	// 1.5 Rate limit — cheap per-IP throttle, before geo/WAF inspection.
+	allowed, retryAfter := h.ratelimit.Allow(clientIP)
+	if !allowed {
+		metrics.RateLimitedTotal.WithLabelValues(appName).Inc()
+		h.logBlocked(r, appName, clientIP, country, http.StatusTooManyRequests, 0, "rate_limited", time.Since(start))
+		secs := int(retryAfter.Seconds())
+		if secs < 1 {
+			secs = 1
+		}
+		c.Response().Header().Set("Retry-After", strconv.Itoa(secs))
+		return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
+	}
+
 	// 2. Geo blocklist — country-level block.
-	if blocked, reason, _ := h.geoBl.Check(clientIP, appName); blocked {
-		log.Printf("Geo blocked %s (%s) [%s]", clientIP, country, reason)
+	blockedByGeo, geoReason, _ := h.geoBl.Check(clientIP, appName)
+	if blockedByGeo {
 		metrics.GeoBlockedTotal.WithLabelValues(appName, country).Inc()
-		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, reason, time.Since(start))
+		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, geoReason, time.Since(start))
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied", "country": country})
 	}
 
@@ -87,7 +103,6 @@ func (h *Handler) Handle(c echo.Context) error {
 		if status == 0 {
 			status = http.StatusForbidden
 		}
-		log.Printf("WAF blocked %s %s (rule %d, action %s)", clientIP, r.RequestURI, result.RuleID, result.Action)
 		metrics.WAFBlockedTotal.WithLabelValues(appName, result.Action).Inc()
 		h.logBlocked(r, appName, clientIP, country, status, result.RuleID, result.Action, time.Since(start))
 		return c.JSON(status, map[string]any{"error": "request blocked", "rule_id": result.RuleID})

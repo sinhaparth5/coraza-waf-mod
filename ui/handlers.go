@@ -3,6 +3,7 @@ package ui
 import (
 	"bytes"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -22,7 +23,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 )
 
-//go:embed templates/*
+//go:embed templates
 var templateFS embed.FS
 
 var funcs = template.FuncMap{
@@ -32,6 +33,7 @@ var funcs = template.FuncMap{
 	"fmtTime":     func(t time.Time) string { return t.Format("02 Jan 15:04:05") },
 	"fmtTimeFull": func(t time.Time) string { return t.UTC().Format("2006-01-02 15:04:05 UTC") },
 	"fmtDur":      func(ms int64) string { return fmt.Sprintf("%dms", ms) },
+	"today":       func() string { return time.Now().Format("2 January 2006") },
 	"truncate": func(s string, n int) string {
 		if len(s) <= n {
 			return s
@@ -44,8 +46,9 @@ var funcs = template.FuncMap{
 		}
 		return s[:10]
 	},
-	"add": func(a, b int) int { return a + b },
-	"sub": func(a, b int) int { return a - b },
+	"add":   func(a, b int) int { return a + b },
+	"sub":   func(a, b int) int { return a - b },
+	"isOdd": func(i int) bool { return i%2 == 1 },
 	"map": func(pairs ...any) (map[string]any, error) {
 		if len(pairs)%2 != 0 {
 			return nil, fmt.Errorf("map: odd number of args")
@@ -72,17 +75,23 @@ type Handler struct {
 	broadcaster *LogBroadcaster
 	tmpls       map[string]*template.Template
 	staticJS    fs.FS
+	staticImgs  fs.FS
 }
 
 // NewHandler builds the UI handler. jsFS must contain the minified JS
 // assets at "static/js/dist/*" (see assets.go in the repo root); it's
-// served under /<admin_path>/static/js/.
-func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS) (*Handler, error) {
+// served under /<admin_path>/static/js/. imgsFS must contain
+// "static/imgs/*"; it's served under /<admin_path>/static/imgs/.
+func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS) (*Handler, error) {
 	sub, err := fs.Sub(jsFS, "static/js/dist")
 	if err != nil {
 		return nil, fmt.Errorf("sub static/js/dist: %w", err)
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub}
+	imgsSub, err := fs.Sub(imgsFS, "static/imgs")
+	if err != nil {
+		return nil, fmt.Errorf("sub static/imgs: %w", err)
+	}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -93,8 +102,8 @@ func (h *Handler) parseTemplates() error {
 	pages := []string{"dashboard", "logs", "ip_rules", "geo_rules", "services"}
 	h.tmpls = make(map[string]*template.Template, len(pages))
 	for _, page := range pages {
-		// log_row.html is included everywhere so logs.html can use {{template "log-row"}}
 		t, err := template.New("").Funcs(funcs).ParseFS(templateFS,
+			"templates/components/*.html",
 			"templates/log_row.html",
 			"templates/base.html",
 			"templates/"+page+".html",
@@ -129,6 +138,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	}))
 
 	g.StaticFS("/static/js", h.staticJS)
+	g.StaticFS("/static/imgs", h.staticImgs)
 	g.GET("/metrics", echo.WrapHandler(metrics.Handler()))
 
 	g.GET("", h.Dashboard)
@@ -161,7 +171,7 @@ func (h *Handler) Dashboard(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	recent, err := h.db.ListRequests(false, "", 20, 0)
+	recent, err := h.db.ListRequests(false, "", 10, 0)
 	if err != nil {
 		return err
 	}
@@ -173,22 +183,31 @@ func (h *Handler) Dashboard(c echo.Context) error {
 	if stats.TotalToday > 0 {
 		blockRate = stats.BlockedToday * 100 / stats.TotalToday
 	}
-	// SVG donut arcs: circumference of r=50 circle ≈ 314
-	const circ = 314
-	blockedArc := 0
-	allowedArc := circ
-	if stats.TotalToday > 0 {
-		blockedArc = stats.BlockedToday * circ / stats.TotalToday
-		allowedArc = circ - blockedArc
+	// SVG donut: r=74 circle has circumference ~465. Drawn as a 240° open
+	// gauge (310 of those 465 units), with a 7-unit gap between the
+	// allowed/blocked segments so the rounded caps read as a true break.
+	const circ = 465
+	const arc240 = circ * 240 / 360
+	const gap = 7
+	hasTraffic := stats.TotalToday > 0
+	allowedArc, blockedArc, blockedOffset := 0, 0, 0
+	if hasTraffic {
+		usable := arc240 - gap
+		blockedArc = stats.BlockedToday * usable / stats.TotalToday
+		allowedArc = usable - blockedArc
+		blockedOffset = -(allowedArc + gap)
 	}
 	return h.render(c, "dashboard", map[string]any{
-		"Stats":      stats,
-		"Recent":     recent,
-		"TopBlocked": topBlocked,
-		"BlockRate":  blockRate,
-		"AllowedArc": allowedArc,
-		"BlockedArc": blockedArc,
-		"Apps":       h.registry.List(),
+		"Stats":         stats,
+		"Recent":        recent,
+		"TopBlocked":    topBlocked,
+		"BlockRate":     blockRate,
+		"HasTraffic":    hasTraffic,
+		"TrackArc":      arc240,
+		"AllowedArc":    allowedArc,
+		"BlockedArc":    blockedArc,
+		"BlockedOffset": blockedOffset,
+		"Apps":          h.registry.List(),
 	})
 }
 
@@ -232,7 +251,15 @@ func (h *Handler) NotificationsStream(c echo.Context) error {
 			if !entry.Blocked {
 				continue
 			}
-			fmt.Fprintf(w, "data: %d\n\n", h.unreadAlertCount())
+			fmt.Fprintf(w, "event: count\ndata: %d\n\n", h.unreadAlertCount())
+			toastData, _ := json.Marshal(map[string]string{
+				"action":  entry.Action,
+				"ip":      entry.RealIP,
+				"country": entry.Country,
+				"method":  entry.Method,
+				"path":    entry.Path,
+			})
+			fmt.Fprintf(w, "event: toast\ndata: %s\n\n", toastData)
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}
@@ -415,14 +442,75 @@ func (h *Handler) LogsStream(c echo.Context) error {
 
 // ── IP Rules ───────────────────────────────────────────────────────────────────
 
+// ruleActivityRow is one entry in the "Rule activity, last 7 days" timeline
+// shown above the IP rules list: which day a rule was added, on a 0-6 scale
+// where 6 is today.
+type ruleActivityRow struct {
+	Label    string
+	RuleType string
+	DayIndex int
+}
+
+// recentRuleActivity builds the day labels (oldest to today) and the rows for
+// rules created within the last 7 days, newest first, capped at 6 rows.
+func recentRuleActivity(label func(i int) string, ruleType func(i int) string, createdAt func(i int) time.Time, n int) (dayLabels []string, dayIdx []int, rows []ruleActivityRow) {
+	now := time.Now()
+	for i := 0; i < 7; i++ {
+		dayLabels = append(dayLabels, now.AddDate(0, 0, -(6-i)).Format("Mon"))
+		dayIdx = append(dayIdx, i)
+	}
+	cutoff := now.AddDate(0, 0, -7)
+	for i := 0; i < n && len(rows) < 6; i++ {
+		ts := createdAt(i)
+		if ts.Before(cutoff) {
+			continue
+		}
+		daysAgo := int(now.Sub(ts).Hours() / 24)
+		if daysAgo < 0 {
+			daysAgo = 0
+		}
+		if daysAgo > 6 {
+			daysAgo = 6
+		}
+		rows = append(rows, ruleActivityRow{Label: label(i), RuleType: ruleType(i), DayIndex: 6 - daysAgo})
+	}
+	return
+}
+
 func (h *Handler) IPRulesPage(c echo.Context) error {
 	rules, err := h.db.ListIPRules()
 	if err != nil {
 		return err
 	}
+	blockCount, allowCount := 0, 0
+	for _, r := range rules {
+		if r.RuleType == "block" {
+			blockCount++
+		} else {
+			allowCount++
+		}
+	}
+	blockPct, allowPct := 0, 0
+	if total := len(rules); total > 0 {
+		blockPct = blockCount * 100 / total
+		allowPct = allowCount * 100 / total
+	}
+	dayLabels, dayIdx, activity := recentRuleActivity(
+		func(i int) string { return rules[i].IP },
+		func(i int) string { return rules[i].RuleType },
+		func(i int) time.Time { return rules[i].CreatedAt },
+		len(rules),
+	)
 	return h.render(c, "ip_rules", map[string]any{
-		"Rules": rules,
-		"Apps":  h.registry.List(),
+		"Rules":      rules,
+		"Apps":       h.registry.List(),
+		"BlockCount": blockCount,
+		"AllowCount": allowCount,
+		"BlockPct":   blockPct,
+		"AllowPct":   allowPct,
+		"DayLabels":  dayLabels,
+		"DayIdx":     dayIdx,
+		"Activity":   activity,
 	})
 }
 
@@ -466,9 +554,26 @@ func (h *Handler) GeoRulesPage(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	blockCount, allowCount := 0, 0
+	for _, r := range rules {
+		if r.RuleType == "block" {
+			blockCount++
+		} else {
+			allowCount++
+		}
+	}
+	blockPct, allowPct := 0, 0
+	if total := len(rules); total > 0 {
+		blockPct = blockCount * 100 / total
+		allowPct = allowCount * 100 / total
+	}
 	return h.render(c, "geo_rules", map[string]any{
-		"Rules": rules,
-		"Apps":  h.registry.List(),
+		"Rules":      rules,
+		"Apps":       h.registry.List(),
+		"BlockCount": blockCount,
+		"AllowCount": allowCount,
+		"BlockPct":   blockPct,
+		"AllowPct":   allowPct,
 	})
 }
 
@@ -724,6 +829,17 @@ func (h *Handler) render(c echo.Context, page string, data map[string]any) error
 		data["AlertCount"] = h.unreadAlertCount()
 	}
 	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
+	// no-store keeps these pages out of the browser's back/forward cache.
+	// Without it, navigating away leaves the previous page (and its live
+	// notifications/logs EventSource — see app.js and logs.html) frozen in
+	// bfcache instead of torn down, so each connection stays open for as long
+	// as that bfcache entry survives. A few quick page navigations can pile
+	// up more open SSE connections than Chrome's ~6-per-origin HTTP/1.1 limit
+	// allows, stalling every other request behind them for as long as it
+	// takes bfcache to evict an old entry. It's also the right call for an
+	// authenticated admin panel regardless — these pages shouldn't be
+	// restorable from cache after logout.
+	c.Response().Header().Set("Cache-Control", "no-store")
 	return t.ExecuteTemplate(c.Response().Writer, "base", data)
 }
 
