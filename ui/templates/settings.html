@@ -1,0 +1,74 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="max-w-[640px] flex flex-col gap-6">
+
+  {{if .CredentialErr}}
+  <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3">
+    {{.CredentialErr}}
+  </div>
+  {{end}}
+
+  <!-- ── Account credentials ──────────────────────────────────────────────── -->
+  <div class="card p-6">
+    <h2 class="text-[15px] font-bold text-slate-800 mb-1">Account</h2>
+    <p class="text-[13px] text-slate-500 mb-5">Change your login email or password. You will be signed out after saving.</p>
+
+    <form action="{{.AdminPath}}/settings/credentials" method="POST" class="flex flex-col gap-4">
+
+      <div>
+        <label class="block text-[13px] font-semibold text-slate-700 mb-1">Current email</label>
+        <p class="text-[13px] text-slate-500 bg-surface border border-line rounded-lg px-3 py-2 font-mono">{{.AdminEmail}}</p>
+      </div>
+
+      <div>
+        <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="new_email">New email <span class="font-normal text-slate-400">(leave blank to keep current)</span></label>
+        <input id="new_email" name="new_email" type="email" placeholder="new@example.com"
+               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition"/>
+      </div>
+
+      <div>
+        <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="new_password">New password <span class="font-normal text-slate-400">(leave blank to keep current)</span></label>
+        <input id="new_password" name="new_password" type="password" placeholder="Min 8 characters"
+               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition"/>
+      </div>
+
+      <div>
+        <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="confirm_password">Confirm new password</label>
+        <input id="confirm_password" name="confirm_password" type="password" placeholder="Repeat new password"
+               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition"/>
+      </div>
+
+      <div>
+        <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="current_password">Current password <span class="text-red-500">*</span></label>
+        <input id="current_password" name="current_password" type="password" placeholder="Required to confirm changes"
+               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition" required/>
+      </div>
+
+      <div class="pt-1">
+        <button type="submit" class="btn-primary px-6">Save changes</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ── Database backup ───────────────────────────────────────────────────── -->
+  <div class="card p-6">
+    <h2 class="text-[15px] font-bold text-slate-800 mb-1">Database backup</h2>
+    <p class="text-[13px] text-slate-500 mb-4">Downloads a consistent snapshot of <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded">waf.db</code> — all request logs, services, IP/geo rules, and settings. Safe to run while the WAF is live.</p>
+    <a href="{{.AdminPath}}/settings/backup"
+       class="inline-flex items-center gap-2 rounded-full bg-surface border border-line text-slate-700 text-[13px] font-medium px-5 py-2 hover:bg-canvas transition-colors">
+      <i class="hgi hgi-stroke hgi-rounded hgi-download-02 text-base text-slate-500"></i>
+      Download waf.db
+    </a>
+  </div>
+
+  <!-- ── WAF hot-reload ────────────────────────────────────────────────────── -->
+  <div class="card p-6">
+    <h2 class="text-[15px] font-bold text-slate-800 mb-1">WAF rules</h2>
+    <p class="text-[13px] text-slate-500 mb-1">To reload custom WAF rules from <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded">rules_dir</code> without restarting, send SIGHUP to the process:</p>
+    <pre class="mt-3 bg-slate-900 text-green-400 text-[12px] font-mono rounded-lg px-4 py-3 overflow-x-auto">kill -HUP $(pidof coraza-waf-mod)</pre>
+    <p class="mt-2 text-[12px] text-slate-400">The engine swaps in-place — in-flight requests complete with the old ruleset, new requests use the reloaded one.</p>
+  </div>
+
+</div>
+{{end}}

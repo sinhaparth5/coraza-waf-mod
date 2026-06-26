@@ -1,11 +1,14 @@
 package storage
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 )
 
@@ -22,26 +25,45 @@ const logQueueSize = 10000
 const slowWriteThreshold = 500 * time.Millisecond
 
 type DB struct {
-	conn     *sql.DB
-	logQueue chan RequestLog
-	logDone  chan struct{}
+	conn        *sql.DB
+	logQueue    chan RequestLog
+	logDone     chan struct{}
+	broadcastFn func(RequestLog)
+}
+
+// SetBroadcastFn registers a callback invoked after each successful DB insert,
+// with entry.ID set to the real row ID. Called from main.go to wire the UI
+// broadcaster without importing ui from storage.
+func (db *DB) SetBroadcastFn(fn func(RequestLog)) {
+	db.broadcastFn = fn
 }
 
 // RequestLog is one row in the requests table.
 type RequestLog struct {
-	Timestamp time.Time
-	AppName   string
-	RealIP    string
-	Country   string // ISO 3166-1 alpha-2, e.g. "US", "CN"
-	Method    string
-	Host      string
-	Path      string
-	Status    int
-	Blocked   bool
-	RuleID    int
-	Action    string
-	UserAgent string
-	Duration  int64 // milliseconds
+	ID          int // populated after DB insert; 0 until then
+	Timestamp   time.Time
+	AppName     string
+	RealIP      string
+	ProxyIP     string // raw TCP RemoteAddr (CDN/LB edge IP when behind Cloudflare)
+	Country     string // ISO 3166-1 alpha-2, e.g. "US", "CN"
+	Method      string
+	Host        string
+	Path        string
+	Query       string // raw query string (without leading "?")
+	Status      int
+	Blocked     bool
+	RuleID      int
+	Action      string
+	UserAgent   string
+	Duration    int64  // milliseconds
+	HeadersJSON string // JSON-encoded map[string]string of request headers
+	RequestID   string // random hex per-request correlation ID
+	Proto       string // HTTP/1.1, HTTP/2.0, etc.
+	TLSVersion  string // "TLS 1.3", "TLS 1.2", "" for plaintext
+	TLSCipher   string // e.g. "TLS_AES_128_GCM_SHA256"
+	TLSSNI      string // SNI hostname from TLS ClientHello
+	ASN         uint   // autonomous system number
+	Org         string // ISP / organization name
 }
 
 func Open(path string) (*DB, error) {
@@ -84,12 +106,18 @@ func (db *DB) runLogWorker() {
 	defer close(db.logDone)
 	for entry := range db.logQueue {
 		writeStart := time.Now()
-		err := db.InsertRequest(entry)
+		id, err := db.InsertRequest(entry)
 		dur := time.Since(writeStart)
 		if err != nil {
 			log.Printf("storage: async request log write failed after %s: %v", dur, err)
-		} else if dur >= slowWriteThreshold {
-			log.Printf("storage: slow request log write, took %s (queue depth now %d)", dur, db.QueueDepth())
+		} else {
+			if dur >= slowWriteThreshold {
+				log.Printf("storage: slow request log write, took %s (queue depth now %d)", dur, db.QueueDepth())
+			}
+			if db.broadcastFn != nil {
+				entry.ID = int(id)
+				db.broadcastFn(entry)
+			}
 		}
 	}
 }
@@ -121,28 +149,50 @@ func (db *DB) Close() error {
 
 func (db *DB) migrate() error {
 	// Idempotent column migration for existing databases.
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN country TEXT NOT NULL DEFAULT ''`)        //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_mode TEXT NOT NULL DEFAULT 'none'`)   //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_cert_path TEXT NOT NULL DEFAULT ''`)  //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_key_path TEXT NOT NULL DEFAULT ''`)   //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_expires_at TEXT NOT NULL DEFAULT ''`) //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN country TEXT NOT NULL DEFAULT ''`)         //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN proxy_ip TEXT NOT NULL DEFAULT ''`)           //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN headers_json TEXT NOT NULL DEFAULT ''`)       //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN request_id TEXT NOT NULL DEFAULT ''`)         //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN proto TEXT NOT NULL DEFAULT ''`)              //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_version TEXT NOT NULL DEFAULT ''`)        //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_cipher TEXT NOT NULL DEFAULT ''`)         //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_sni TEXT NOT NULL DEFAULT ''`)            //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN asn_num INTEGER NOT NULL DEFAULT 0`)          //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN org TEXT NOT NULL DEFAULT ''`)                //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN query TEXT NOT NULL DEFAULT ''`)              //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_mode TEXT NOT NULL DEFAULT 'none'`)          //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_cert_path TEXT NOT NULL DEFAULT ''`)         //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_key_path TEXT NOT NULL DEFAULT ''`)          //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_expires_at TEXT NOT NULL DEFAULT ''`)        //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_rps REAL NOT NULL DEFAULT 0`)         //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_burst INTEGER NOT NULL DEFAULT 0`)    //nolint
 
 	_, err := db.conn.Exec(`
 	CREATE TABLE IF NOT EXISTS requests (
-		id          INTEGER PRIMARY KEY AUTOINCREMENT,
-		ts          DATETIME NOT NULL,
-		app_name    TEXT NOT NULL,
-		real_ip     TEXT NOT NULL,
-		country     TEXT NOT NULL DEFAULT '',
-		method      TEXT NOT NULL,
-		host        TEXT NOT NULL,
-		path        TEXT NOT NULL,
-		status      INTEGER NOT NULL,
-		blocked     INTEGER NOT NULL DEFAULT 0,
-		rule_id     INTEGER NOT NULL DEFAULT 0,
-		action      TEXT NOT NULL DEFAULT '',
-		user_agent  TEXT NOT NULL DEFAULT '',
-		duration_ms INTEGER NOT NULL DEFAULT 0
+		id           INTEGER PRIMARY KEY AUTOINCREMENT,
+		ts           DATETIME NOT NULL,
+		app_name     TEXT NOT NULL,
+		real_ip      TEXT NOT NULL,
+		proxy_ip     TEXT NOT NULL DEFAULT '',
+		country      TEXT NOT NULL DEFAULT '',
+		method       TEXT NOT NULL,
+		host         TEXT NOT NULL,
+		path         TEXT NOT NULL,
+		query        TEXT NOT NULL DEFAULT '',
+		status       INTEGER NOT NULL,
+		blocked      INTEGER NOT NULL DEFAULT 0,
+		rule_id      INTEGER NOT NULL DEFAULT 0,
+		action       TEXT NOT NULL DEFAULT '',
+		user_agent   TEXT NOT NULL DEFAULT '',
+		duration_ms  INTEGER NOT NULL DEFAULT 0,
+		headers_json TEXT NOT NULL DEFAULT '',
+		request_id   TEXT NOT NULL DEFAULT '',
+		proto        TEXT NOT NULL DEFAULT '',
+		tls_version  TEXT NOT NULL DEFAULT '',
+		tls_cipher   TEXT NOT NULL DEFAULT '',
+		tls_sni      TEXT NOT NULL DEFAULT '',
+		asn_num      INTEGER NOT NULL DEFAULT 0,
+		org          TEXT NOT NULL DEFAULT ''
 	);
 	CREATE INDEX IF NOT EXISTS idx_requests_ts         ON requests(ts);
 	CREATE INDEX IF NOT EXISTS idx_requests_ip         ON requests(real_ip);
@@ -174,16 +224,23 @@ func (db *DB) migrate() error {
 	);
 
 	CREATE TABLE IF NOT EXISTS services (
-		id             INTEGER PRIMARY KEY AUTOINCREMENT,
-		name           TEXT NOT NULL UNIQUE,
-		host           TEXT NOT NULL DEFAULT '',
-		prefix         TEXT NOT NULL DEFAULT '',
-		backend        TEXT NOT NULL,
-		created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		tls_mode       TEXT NOT NULL DEFAULT 'none',
-		tls_cert_path  TEXT NOT NULL DEFAULT '',
-		tls_key_path   TEXT NOT NULL DEFAULT '',
-		tls_expires_at TEXT NOT NULL DEFAULT ''
+		id               INTEGER PRIMARY KEY AUTOINCREMENT,
+		name             TEXT NOT NULL UNIQUE,
+		host             TEXT NOT NULL DEFAULT '',
+		prefix           TEXT NOT NULL DEFAULT '',
+		backend          TEXT NOT NULL,
+		created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		tls_mode         TEXT NOT NULL DEFAULT 'none',
+		tls_cert_path    TEXT NOT NULL DEFAULT '',
+		tls_key_path     TEXT NOT NULL DEFAULT '',
+		tls_expires_at   TEXT NOT NULL DEFAULT '',
+		rate_limit_rps   REAL NOT NULL DEFAULT 0,
+		rate_limit_burst INTEGER NOT NULL DEFAULT 0
+	);
+
+	CREATE TABLE IF NOT EXISTS sessions (
+		token      TEXT PRIMARY KEY,
+		created_at TEXT NOT NULL
 	);
 	`)
 	if err != nil {
@@ -300,22 +357,24 @@ func (db *DB) ListGeoRules() ([]GeoRule, error) {
 // on-demand via Let's Encrypt/autocert). TLSExpiresAt is RFC3339, "" if
 // unknown or not yet issued.
 type Service struct {
-	ID           int
-	Name         string
-	Host         string
-	Prefix       string
-	Backend      string
-	CreatedAt    time.Time
-	TLSMode      string
-	TLSCertPath  string
-	TLSKeyPath   string
-	TLSExpiresAt string
+	ID             int
+	Name           string
+	Host           string
+	Prefix         string
+	Backend        string
+	CreatedAt      time.Time
+	TLSMode        string
+	TLSCertPath    string
+	TLSKeyPath     string
+	TLSExpiresAt   string
+	RateLimitRPS   float64
+	RateLimitBurst int
 }
 
-func (db *DB) AddService(name, host, prefix, backend string) error {
+func (db *DB) AddService(name, host, prefix, backend string, rps float64, burst int) error {
 	_, err := db.conn.Exec(
-		`INSERT INTO services (name, host, prefix, backend) VALUES (?, ?, ?, ?)`,
-		name, host, prefix, backend,
+		`INSERT INTO services (name, host, prefix, backend, rate_limit_rps, rate_limit_burst) VALUES (?, ?, ?, ?, ?, ?)`,
+		name, host, prefix, backend, rps, burst,
 	)
 	return err
 }
@@ -349,9 +408,20 @@ func (db *DB) ClearServiceTLS(id int) error {
 	return db.SetServiceTLS(id, "none", "", "", "")
 }
 
+// SetServiceRateLimit configures a per-service per-IP rate limit.
+// rps=0 disables per-service limiting for this service (falls through to the
+// global limiter only).
+func (db *DB) SetServiceRateLimit(id int, rps float64, burst int) error {
+	_, err := db.conn.Exec(
+		`UPDATE services SET rate_limit_rps = ?, rate_limit_burst = ? WHERE id = ?`,
+		rps, burst, id,
+	)
+	return err
+}
+
 func (db *DB) ListServices() ([]Service, error) {
 	rows, err := db.conn.Query(
-		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at FROM services ORDER BY created_at ASC`,
+		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst FROM services ORDER BY created_at ASC`,
 	)
 	if err != nil {
 		return nil, err
@@ -361,7 +431,7 @@ func (db *DB) ListServices() ([]Service, error) {
 	var out []Service
 	for rows.Next() {
 		var s Service
-		if err := rows.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -373,9 +443,9 @@ func (db *DB) ListServices() ([]Service, error) {
 func (db *DB) GetService(id int) (Service, error) {
 	var s Service
 	err := db.conn.QueryRow(
-		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at FROM services WHERE id = ?`,
+		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst FROM services WHERE id = ?`,
 		id,
-	).Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt)
+	).Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst)
 	return s, err
 }
 
@@ -400,34 +470,102 @@ func (db *DB) MigrateConfigApps(apps []ConfigApp) error {
 		return nil
 	}
 	for _, a := range apps {
-		if err := db.AddService(a.Name, a.Host, a.Prefix, a.Backend); err != nil {
+		if err := db.AddService(a.Name, a.Host, a.Prefix, a.Backend, 0, 0); err != nil {
 			return fmt.Errorf("migrate app %q: %w", a.Name, err)
 		}
 	}
 	return db.setMeta(metaKeyServicesMigrated, "1")
 }
 
-// InsertRequest writes one request log entry.
-func (db *DB) InsertRequest(r RequestLog) error {
-	_, err := db.conn.Exec(`
+// InsertRequest writes one request log entry and returns the new row ID.
+func (db *DB) InsertRequest(r RequestLog) (int64, error) {
+	res, err := db.conn.Exec(`
 		INSERT INTO requests
-			(ts, app_name, real_ip, country, method, host, path, status, blocked, rule_id, action, user_agent, duration_ms)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			(ts, app_name, real_ip, proxy_ip, country, method, host, path, query,
+			 status, blocked, rule_id, action, user_agent, duration_ms, headers_json,
+			 request_id, proto, tls_version, tls_cipher, tls_sni, asn_num, org)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.Timestamp.UTC(),
 		r.AppName,
 		r.RealIP,
+		r.ProxyIP,
 		r.Country,
 		r.Method,
 		r.Host,
 		r.Path,
+		r.Query,
 		r.Status,
 		boolToInt(r.Blocked),
 		r.RuleID,
 		r.Action,
 		r.UserAgent,
 		r.Duration,
+		r.HeadersJSON,
+		r.RequestID,
+		r.Proto,
+		r.TLSVersion,
+		r.TLSCipher,
+		r.TLSSNI,
+		r.ASN,
+		r.Org,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	id, err := res.LastInsertId()
+	return id, err
+}
+
+// LogDetail is the full representation of one request log row, including
+// headers and enrichment fields omitted from list queries for performance.
+type LogDetail struct {
+	ID          int
+	Timestamp   time.Time
+	AppName     string
+	RealIP      string
+	ProxyIP     string
+	Country     string
+	Method      string
+	Host        string
+	Path        string
+	Query       string
+	Status      int
+	Blocked     bool
+	RuleID      int
+	Action      string
+	UserAgent   string
+	Duration    int64
+	HeadersJSON string
+	RequestID   string
+	Proto       string
+	TLSVersion  string
+	TLSCipher   string
+	TLSSNI      string
+	ASN         uint
+	Org         string
+}
+
+// GetRequestByID fetches a single request log entry including all enrichment
+// fields and headers. Returns sql.ErrNoRows when the id does not exist.
+func (db *DB) GetRequestByID(id int) (*LogDetail, error) {
+	var d LogDetail
+	var blocked int
+	err := db.conn.QueryRow(`
+		SELECT id, ts, app_name, real_ip, proxy_ip, country, method, host, path, query,
+		       status, blocked, rule_id, action, user_agent, duration_ms, headers_json,
+		       request_id, proto, tls_version, tls_cipher, tls_sni, asn_num, org
+		FROM requests WHERE id = ?`, id).Scan(
+		&d.ID, &d.Timestamp, &d.AppName, &d.RealIP, &d.ProxyIP, &d.Country,
+		&d.Method, &d.Host, &d.Path, &d.Query,
+		&d.Status, &blocked, &d.RuleID, &d.Action, &d.UserAgent, &d.Duration,
+		&d.HeadersJSON, &d.RequestID, &d.Proto, &d.TLSVersion, &d.TLSCipher,
+		&d.TLSSNI, &d.ASN, &d.Org,
+	)
+	if err != nil {
+		return nil, err
+	}
+	d.Blocked = blocked == 1
+	return &d, nil
 }
 
 // --- Query helpers (used by dashboard later) ---
@@ -729,6 +867,14 @@ func (db *DB) PruneOldRequests(days int) (int64, error) {
 
 const metaKeyNotificationsSeenAt = "notifications_seen_at"
 
+// GetAcmeEmail returns the Let's Encrypt contact email stored in the DB, or
+// "" if none has been set yet. Used by the TLS startup path and the admin UI.
+func (db *DB) GetAcmeEmail() (string, error) { return db.getMeta("acme_email") }
+
+// SetAcmeEmail stores the Let's Encrypt contact email. Must be set before
+// any service can use auto-issue TLS.
+func (db *DB) SetAcmeEmail(email string) error { return db.setMeta("acme_email", email) }
+
 func (db *DB) getMeta(key string) (string, error) {
 	var v string
 	err := db.conn.QueryRow(`SELECT value FROM meta WHERE key = ?`, key).Scan(&v)
@@ -769,6 +915,111 @@ func (db *DB) NotificationsSeenAt() (time.Time, error) {
 // notifications, resetting the unread badge count going forward.
 func (db *DB) MarkNotificationsSeen() error {
 	return db.setMeta(metaKeyNotificationsSeenAt, time.Now().UTC().Format(time.RFC3339Nano))
+}
+
+// ── Backup ───────────────────────────────────────────────────────────────────
+
+// BackupTo writes a consistent, fully-vacuumed copy of the database to path.
+// VACUUM INTO is safe to call while the DB is live — SQLite holds a read lock
+// for the duration and writes a fresh, defragmented file.
+func (db *DB) BackupTo(path string) error {
+	_, err := db.conn.Exec(`VACUUM INTO ?`, path)
+	return err
+}
+
+// ── Admin auth & sessions ─────────────────────────────────────────────────────
+
+const sessionTTL = 24 * time.Hour
+
+// SeedTestAdmin creates a default admin account (admin@localhost / admin123)
+// if no admin credentials exist in the DB yet. Called once on startup during
+// development; production installs replace this via the install script.
+func (db *DB) SeedTestAdmin() error {
+	email, _ := db.getMeta("admin_email")
+	if email != "" {
+		return nil
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("seed admin: %w", err)
+	}
+	if err := db.setMeta("admin_email", "admin@localhost"); err != nil {
+		return err
+	}
+	return db.setMeta("admin_password_hash", string(hash))
+}
+
+func (db *DB) GetAdminEmail() (string, error) { return db.getMeta("admin_email") }
+
+// UpdateAdminCredentials replaces the stored email and/or password hash.
+// Pass empty string for either field to leave it unchanged.
+// Invalidates all existing sessions so active sessions can't persist with stale credentials.
+func (db *DB) UpdateAdminCredentials(email, newPassword string) error {
+	if email != "" {
+		if err := db.setMeta("admin_email", email); err != nil {
+			return err
+		}
+	}
+	if newPassword != "" {
+		hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+		if err != nil {
+			return fmt.Errorf("hash password: %w", err)
+		}
+		if err := db.setMeta("admin_password_hash", string(hash)); err != nil {
+			return err
+		}
+	}
+	// Invalidate all sessions — anyone logged in must re-authenticate.
+	_, err := db.conn.Exec(`DELETE FROM sessions`)
+	return err
+}
+
+// CheckAdminPassword validates password against the stored bcrypt hash.
+// Returns (false, nil) for any mismatch so callers can't distinguish "no
+// user" from "wrong password" — avoids leaking whether an email is registered.
+func (db *DB) CheckAdminPassword(password string) (bool, error) {
+	hash, err := db.getMeta("admin_password_hash")
+	if err != nil || hash == "" {
+		return false, err
+	}
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil, nil
+}
+
+// CreateSession generates a random token, stores it, and returns it for use
+// as a session cookie value.
+func (db *DB) CreateSession() (string, error) {
+	b := make([]byte, 32)
+	rand.Read(b) //nolint — never errors on modern platforms
+	token := hex.EncodeToString(b)
+	_, err := db.conn.Exec(
+		`INSERT INTO sessions (token, created_at) VALUES (?, ?)`,
+		token, time.Now().UTC().Format(time.RFC3339),
+	)
+	return token, err
+}
+
+// ValidateSession returns true if the token exists in the DB and was created
+// within the last 24 hours.
+func (db *DB) ValidateSession(token string) (bool, error) {
+	var createdAt string
+	err := db.conn.QueryRow(`SELECT created_at FROM sessions WHERE token = ?`, token).Scan(&createdAt)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	t, parseErr := time.Parse(time.RFC3339, createdAt)
+	if parseErr != nil {
+		return false, nil
+	}
+	return time.Since(t) < sessionTTL, nil
+}
+
+// DeleteSession removes the token on logout.
+func (db *DB) DeleteSession(token string) error {
+	_, err := db.conn.Exec(`DELETE FROM sessions WHERE token = ?`, token)
+	return err
 }
 
 func boolToInt(b bool) int {

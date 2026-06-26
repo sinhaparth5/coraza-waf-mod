@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -20,7 +21,6 @@ import (
 	"coraza-waf-mod/storage"
 
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 )
 
 //go:embed templates
@@ -99,8 +99,15 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 }
 
 func (h *Handler) parseTemplates() error {
-	pages := []string{"dashboard", "logs", "ip_rules", "geo_rules", "services"}
-	h.tmpls = make(map[string]*template.Template, len(pages))
+	// Standalone login page — does not use base.html.
+	login, err := template.New("login").Funcs(funcs).ParseFS(templateFS, "templates/login.html")
+	if err != nil {
+		return fmt.Errorf("parse template login: %w", err)
+	}
+
+	pages := []string{"dashboard", "logs", "ip_rules", "geo_rules", "services", "settings"}
+	h.tmpls = make(map[string]*template.Template, len(pages)+1)
+	h.tmpls["login"] = login
 	for _, page := range pages {
 		t, err := template.New("").Funcs(funcs).ParseFS(templateFS,
 			"templates/components/*.html",
@@ -129,16 +136,40 @@ func (h *Handler) parseTemplates() error {
 	return nil
 }
 
-// Register mounts all admin routes on e under cfg.Admin.Path with basic auth.
+const sessionCookie = "cz_session"
+
+// sessionAuth is the session-cookie middleware that guards every admin route.
+// Unauthenticated requests are redirected to the login page.
+func (h *Handler) sessionAuth(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		cookie, err := c.Cookie(sessionCookie)
+		if err != nil || cookie.Value == "" {
+			return c.Redirect(http.StatusFound, h.cfg.Admin.Path+"/login")
+		}
+		valid, err := h.db.ValidateSession(cookie.Value)
+		if err != nil || !valid {
+			return c.Redirect(http.StatusFound, h.cfg.Admin.Path+"/login")
+		}
+		return next(c)
+	}
+}
+
+// Register mounts all admin routes on e under cfg.Admin.Path.
+// Login/logout are public; everything else is behind sessionAuth.
 func (h *Handler) Register(e *echo.Echo) {
 	base := h.cfg.Admin.Path
-	g := e.Group(base)
-	g.Use(middleware.BasicAuth(func(user, pass string, _ echo.Context) (bool, error) {
-		return user == h.cfg.Admin.Username && pass == h.cfg.Admin.Password, nil
-	}))
 
-	g.StaticFS("/static/js", h.staticJS)
-	g.StaticFS("/static/imgs", h.staticImgs)
+	// Public routes — no session required.
+	e.GET(base+"/login", h.LoginPage)
+	e.POST(base+"/login", h.LoginPost)
+	e.POST(base+"/logout", h.Logout)
+	// Static assets are public so the login page can load spirals/JS before auth.
+	e.StaticFS(base+"/static/js", h.staticJS)
+	e.StaticFS(base+"/static/imgs", h.staticImgs)
+
+	g := e.Group(base)
+	g.Use(h.sessionAuth)
+
 	g.GET("/metrics", echo.WrapHandler(metrics.Handler()))
 
 	g.GET("", h.Dashboard)
@@ -149,6 +180,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.GET("/api/threats", h.ThreatsSeries)
 	g.GET("/logs", h.Logs)
 	g.GET("/logs/stream", h.LogsStream)
+	g.GET("/logs/:id", h.LogDetail)
 	g.GET("/ip-rules", h.IPRulesPage)
 	g.POST("/ip-rules", h.AddIPRule)
 	g.DELETE("/ip-rules/:id", h.DeleteIPRule)
@@ -162,6 +194,73 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/services/tls/upload", h.UploadServiceTLS)
 	g.POST("/services/tls/auto", h.EnableServiceAutoTLS)
 	g.POST("/services/tls/clear", h.ClearServiceTLS)
+	g.POST("/services/ratelimit", h.SetServiceRateLimit)
+	g.POST("/settings/acme-email", h.SaveAcmeEmail)
+	g.GET("/settings", h.SettingsPage)
+	g.POST("/settings/credentials", h.ChangeCredentials)
+	g.GET("/settings/backup", h.BackupDB)
+}
+
+// ── Login / logout ────────────────────────────────────────────────────────────
+
+func (h *Handler) LoginPage(c echo.Context) error {
+	// Redirect already-authenticated users straight to the dashboard.
+	if cookie, err := c.Cookie(sessionCookie); err == nil && cookie.Value != "" {
+		if valid, _ := h.db.ValidateSession(cookie.Value); valid {
+			return c.Redirect(http.StatusFound, h.cfg.Admin.Path)
+		}
+	}
+	return h.renderLogin(c, "")
+}
+
+func (h *Handler) LoginPost(c echo.Context) error {
+	email := strings.TrimSpace(c.FormValue("email"))
+	password := c.FormValue("password")
+
+	adminEmail, _ := h.db.GetAdminEmail()
+	ok, _ := h.db.CheckAdminPassword(password)
+	// Constant-time comparison: always check both email and password
+	// (same error message for both) so an attacker can't enumerate emails.
+	if email != adminEmail || !ok {
+		return h.renderLogin(c, "Invalid email or password.")
+	}
+
+	token, err := h.db.CreateSession()
+	if err != nil {
+		return h.renderLogin(c, "Internal error — please try again.")
+	}
+
+	c.SetCookie(&http.Cookie{
+		Name:     sessionCookie,
+		Value:    token,
+		HttpOnly: true,
+		Path:     "/",
+		MaxAge:   int((24 * time.Hour).Seconds()),
+		SameSite: http.SameSiteLaxMode,
+	})
+	return c.Redirect(http.StatusFound, h.cfg.Admin.Path)
+}
+
+func (h *Handler) Logout(c echo.Context) error {
+	if cookie, err := c.Cookie(sessionCookie); err == nil {
+		h.db.DeleteSession(cookie.Value) //nolint
+	}
+	c.SetCookie(&http.Cookie{
+		Name:     sessionCookie,
+		Value:    "",
+		HttpOnly: true,
+		Path:     "/",
+		MaxAge:   -1,
+	})
+	return c.Redirect(http.StatusFound, h.cfg.Admin.Path+"/login")
+}
+
+func (h *Handler) renderLogin(c echo.Context, errMsg string) error {
+	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
+	return h.tmpls["login"].ExecuteTemplate(c.Response(), "login", map[string]any{
+		"Error":     errMsg,
+		"AdminPath": h.cfg.Admin.Path,
+	})
 }
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
@@ -440,42 +539,54 @@ func (h *Handler) LogsStream(c echo.Context) error {
 	}
 }
 
+// LogDetail returns the full detail of one request log entry as JSON,
+// including the proxy IP and captured request headers. Used by the
+// client-side detail modal on the Logs page.
+func (h *Handler) LogDetail(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
+	}
+	d, err := h.db.GetRequestByID(id)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "not found"})
+	}
+
+	// Parse headers_json into a plain map for the response.
+	var headers map[string]string
+	if d.HeadersJSON != "" {
+		_ = json.Unmarshal([]byte(d.HeadersJSON), &headers)
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"id":          d.ID,
+		"request_id":  d.RequestID,
+		"timestamp":   d.Timestamp.UTC().Format(time.RFC3339),
+		"app_name":    d.AppName,
+		"real_ip":     d.RealIP,
+		"proxy_ip":    d.ProxyIP,
+		"country":     d.Country,
+		"method":      d.Method,
+		"host":        d.Host,
+		"path":        d.Path,
+		"query":       d.Query,
+		"status":      d.Status,
+		"blocked":     d.Blocked,
+		"rule_id":     d.RuleID,
+		"action":      d.Action,
+		"user_agent":  d.UserAgent,
+		"duration_ms": d.Duration,
+		"proto":       d.Proto,
+		"tls_version": d.TLSVersion,
+		"tls_cipher":  d.TLSCipher,
+		"tls_sni":     d.TLSSNI,
+		"asn":         d.ASN,
+		"org":         d.Org,
+		"headers":     headers,
+	})
+}
+
 // ── IP Rules ───────────────────────────────────────────────────────────────────
-
-// ruleActivityRow is one entry in the "Rule activity, last 7 days" timeline
-// shown above the IP rules list: which day a rule was added, on a 0-6 scale
-// where 6 is today.
-type ruleActivityRow struct {
-	Label    string
-	RuleType string
-	DayIndex int
-}
-
-// recentRuleActivity builds the day labels (oldest to today) and the rows for
-// rules created within the last 7 days, newest first, capped at 6 rows.
-func recentRuleActivity(label func(i int) string, ruleType func(i int) string, createdAt func(i int) time.Time, n int) (dayLabels []string, dayIdx []int, rows []ruleActivityRow) {
-	now := time.Now()
-	for i := 0; i < 7; i++ {
-		dayLabels = append(dayLabels, now.AddDate(0, 0, -(6-i)).Format("Mon"))
-		dayIdx = append(dayIdx, i)
-	}
-	cutoff := now.AddDate(0, 0, -7)
-	for i := 0; i < n && len(rows) < 6; i++ {
-		ts := createdAt(i)
-		if ts.Before(cutoff) {
-			continue
-		}
-		daysAgo := int(now.Sub(ts).Hours() / 24)
-		if daysAgo < 0 {
-			daysAgo = 0
-		}
-		if daysAgo > 6 {
-			daysAgo = 6
-		}
-		rows = append(rows, ruleActivityRow{Label: label(i), RuleType: ruleType(i), DayIndex: 6 - daysAgo})
-	}
-	return
-}
 
 func (h *Handler) IPRulesPage(c echo.Context) error {
 	rules, err := h.db.ListIPRules()
@@ -495,12 +606,6 @@ func (h *Handler) IPRulesPage(c echo.Context) error {
 		blockPct = blockCount * 100 / total
 		allowPct = allowCount * 100 / total
 	}
-	dayLabels, dayIdx, activity := recentRuleActivity(
-		func(i int) string { return rules[i].IP },
-		func(i int) string { return rules[i].RuleType },
-		func(i int) time.Time { return rules[i].CreatedAt },
-		len(rules),
-	)
 	return h.render(c, "ip_rules", map[string]any{
 		"Rules":      rules,
 		"Apps":       h.registry.List(),
@@ -508,9 +613,6 @@ func (h *Handler) IPRulesPage(c echo.Context) error {
 		"AllowCount": allowCount,
 		"BlockPct":   blockPct,
 		"AllowPct":   allowPct,
-		"DayLabels":  dayLabels,
-		"DayIdx":     dayIdx,
-		"Activity":   activity,
 	})
 }
 
@@ -678,7 +780,16 @@ func (h *Handler) AddService(c echo.Context) error {
 		prefix = matchValue
 	}
 
-	if err := h.db.AddService(name, host, prefix, backend); err != nil {
+	rps, _ := strconv.ParseFloat(c.FormValue("rps"), 64)
+	burst, _ := strconv.Atoi(c.FormValue("burst"))
+	if rps < 0 {
+		rps = 0
+	}
+	if burst < 0 {
+		burst = 0
+	}
+
+	if err := h.db.AddService(name, host, prefix, backend, rps, burst); err != nil {
 		return err
 	}
 	if err := h.registry.Reload(h.db); err != nil {
@@ -761,9 +872,9 @@ func (h *Handler) UploadServiceTLS(c echo.Context) error {
 }
 
 // EnableServiceAutoTLS marks a service for on-demand Let's Encrypt issuance.
-// The actual certificate is obtained lazily by autocert on the first real
-// HTTPS handshake for that domain — this just flips it on and reloads the
-// registry's HostPolicy so that handshake is allowed to proceed.
+// If no ACME email is stored in the DB yet, it fires a need-acme-email event
+// so the UI can prompt the user before proceeding — without an email Let's
+// Encrypt cannot register an account and cert issuance will always fail.
 func (h *Handler) EnableServiceAutoTLS(c echo.Context) error {
 	id, err := strconv.Atoi(c.FormValue("service_id"))
 	if err != nil {
@@ -777,12 +888,49 @@ func (h *Handler) EnableServiceAutoTLS(c echo.Context) error {
 		return h.tlsModalError(c, "TLS requires a host-matched service (this one matches by path prefix)")
 	}
 
+	email, err := h.db.GetAcmeEmail()
+	if err != nil {
+		return err
+	}
+	if email == "" {
+		// No email yet — ask the UI to collect it before proceeding.
+		c.Response().Header().Set("HX-Trigger",
+			fmt.Sprintf(`{"need-acme-email":{"service_id":%d}}`, id))
+		return c.String(http.StatusOK, "")
+	}
+
 	if err := h.db.SetServiceTLS(id, "auto", "", "", ""); err != nil {
 		return err
 	}
 	if err := h.registry.Reload(h.db); err != nil {
 		return err
 	}
+	return h.tlsSaved(c)
+}
+
+// SaveAcmeEmail stores the Let's Encrypt contact email and, if a service_id
+// is provided, immediately enables auto-TLS for that service so the user
+// doesn't have to click "Enable" twice after filling in their email.
+func (h *Handler) SaveAcmeEmail(c echo.Context) error {
+	email := strings.TrimSpace(c.FormValue("email"))
+	if email == "" || !strings.Contains(email, "@") {
+		c.Response().Header().Set("HX-Retarget", "#acme-email-error")
+		c.Response().Header().Set("HX-Reswap", "innerHTML")
+		return c.String(http.StatusOK, "Enter a valid email address.")
+	}
+	if err := h.db.SetAcmeEmail(email); err != nil {
+		return err
+	}
+	// If the caller passed a service_id, enable auto-TLS for it now.
+	if id, err := strconv.Atoi(c.FormValue("service_id")); err == nil && id > 0 {
+		if err := h.db.SetServiceTLS(id, "auto", "", "", ""); err != nil {
+			return err
+		}
+	}
+	if err := h.registry.Reload(h.db); err != nil {
+		return err
+	}
+	c.Response().Header().Set("HX-Trigger", "acme-email-saved")
 	return h.tlsSaved(c)
 }
 
@@ -801,7 +949,88 @@ func (h *Handler) ClearServiceTLS(c echo.Context) error {
 	return h.tlsSaved(c)
 }
 
+func (h *Handler) SetServiceRateLimit(c echo.Context) error {
+	id, err := strconv.Atoi(c.FormValue("service_id"))
+	if err != nil {
+		return c.String(http.StatusBadRequest, "invalid service")
+	}
+	rps, _ := strconv.ParseFloat(c.FormValue("rps"), 64)
+	burst, _ := strconv.Atoi(c.FormValue("burst"))
+	if rps < 0 {
+		rps = 0
+	}
+	if burst < 0 {
+		burst = 0
+	}
+	if err := h.db.SetServiceRateLimit(id, rps, burst); err != nil {
+		return err
+	}
+	if err := h.registry.Reload(h.db); err != nil {
+		return err
+	}
+	w := c.Response().Writer
+	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
+	c.Response().Header().Set("HX-Trigger", "rl-saved")
+	fmt.Fprint(w, `<div id="rl-error" hx-swap-oob="true"></div>`)
+	return h.tmpls["services"].ExecuteTemplate(w, "services-rows", h.serviceViews())
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+func (h *Handler) SettingsPage(c echo.Context) error {
+	email, _ := h.db.GetAdminEmail()
+	return h.render(c, "settings", map[string]any{
+		"AdminEmail": email,
+	})
+}
+
+func (h *Handler) ChangeCredentials(c echo.Context) error {
+	currentPassword := c.FormValue("current_password")
+	newEmail := strings.TrimSpace(c.FormValue("new_email"))
+	newPassword := c.FormValue("new_password")
+	confirmPassword := c.FormValue("confirm_password")
+
+	email, _ := h.db.GetAdminEmail()
+
+	renderErr := func(msg string) error {
+		return h.render(c, "settings", map[string]any{
+			"AdminEmail":    email,
+			"CredentialErr": msg,
+		})
+	}
+
+	ok, _ := h.db.CheckAdminPassword(currentPassword)
+	if !ok {
+		return renderErr("Current password is incorrect.")
+	}
+	if newPassword != "" && newPassword != confirmPassword {
+		return renderErr("New passwords do not match.")
+	}
+	if newPassword != "" && len(newPassword) < 8 {
+		return renderErr("New password must be at least 8 characters.")
+	}
+	if err := h.db.UpdateAdminCredentials(newEmail, newPassword); err != nil {
+		return renderErr("Failed to update credentials — please try again.")
+	}
+	// Credentials changed — force re-login.
+	if cookie, err := c.Cookie(sessionCookie); err == nil {
+		h.db.DeleteSession(cookie.Value) //nolint
+	}
+	c.SetCookie(&http.Cookie{Name: sessionCookie, Value: "", HttpOnly: true, Path: "/", MaxAge: -1})
+	return c.Redirect(http.StatusFound, h.cfg.Admin.Path+"/login")
+}
+
+func (h *Handler) BackupDB(c echo.Context) error {
+	tmp := fmt.Sprintf("%s/coraza-backup-%d.db", os.TempDir(), time.Now().UnixNano())
+	if err := h.db.BackupTo(tmp); err != nil {
+		return fmt.Errorf("backup: %w", err)
+	}
+	defer os.Remove(tmp)
+	filename := fmt.Sprintf("coraza-waf-%s.db", time.Now().Format("2006-01-02"))
+	return c.Attachment(tmp, filename)
+}
 
 func (h *Handler) render(c echo.Context, page string, data map[string]any) error {
 	t, ok := h.tmpls[page]
@@ -818,6 +1047,7 @@ func (h *Handler) render(c echo.Context, page string, data map[string]any) error
 		"ip_rules":  "IP Rules",
 		"geo_rules": "Geo Rules",
 		"services":  "Services",
+		"settings":  "Settings",
 	}
 	if _, ok := data["Heading"]; !ok {
 		data["Heading"] = headings[page]

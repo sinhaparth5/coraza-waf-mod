@@ -48,13 +48,30 @@
         <p class="text-[12px] text-slate-500 mt-[10px]">Host matches the request's Host header exactly; prefix matches the start of the URL path.</p>
       </div>
 
-      <!-- Step 3: Backend -->
+      <!-- Step 3: Backend + optional rate limit -->
       <div class="wizard-step hidden" data-step="3">
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Backend URL</label>
         <input name="backend" type="text" placeholder="http://127.0.0.1:3000"
           class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] font-mono outline-none text-slate-800 bg-white"/>
         <p class="step-error hidden text-[12px] text-red-500 mt-[6px]">This field is required.</p>
         <p class="text-[12px] text-slate-500 mt-[10px]">Where the WAF forwards allowed traffic once it's passed inspection.</p>
+
+        <div class="border-t border-canvas mt-5 pt-4">
+          <p class="text-[12px] text-slate-500 mb-3 font-medium">Rate Limit <span class="font-normal text-slate-400">(optional)</span></p>
+          <div class="flex gap-3">
+            <div class="flex-1">
+              <label class="block text-[11px] text-slate-400 mb-[5px]">Requests / second</label>
+              <input name="rps" type="number" min="0" step="0.1" placeholder="e.g. 10"
+                class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+            </div>
+            <div class="flex-1">
+              <label class="block text-[11px] text-slate-400 mb-[5px]">Burst</label>
+              <input name="burst" type="number" min="0" placeholder="auto (2× RPS)"
+                class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+            </div>
+          </div>
+          <p class="text-[12px] text-slate-400 mt-[8px]">Leave blank to use the global limit from config.yaml.</p>
+        </div>
       </div>
 
       <!-- Step 4: Review -->
@@ -134,6 +151,59 @@
     </form>
   </div>
 </div>
+
+<!-- ── ACME Email Modal ── -->
+<div id="acme-email-modal-overlay" class="hidden flex fixed inset-0 bg-slate-900/[.45] z-[200] items-center justify-center">
+  <div class="card w-[400px] p-6">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-9 h-9 rounded-full bg-brand-tint flex items-center justify-center shrink-0">
+        <i class="hgi hgi-stroke hgi-rounded hgi-certificate-01 text-base text-brand-dark"></i>
+      </div>
+      <div>
+        <h2 class="text-[17px] font-bold text-slate-900">Let's Encrypt email</h2>
+        <p class="text-[12px] text-slate-500">Required to register your ACME account</p>
+      </div>
+      <button type="button" id="acme-email-modal-close" class="ml-auto bg-none border-none cursor-pointer text-slate-500 text-lg leading-none">&times;</button>
+    </div>
+    <form id="acme-email-form" hx-post="/admin/settings/acme-email" hx-target="#services-body" hx-swap="innerHTML">
+      <input type="hidden" name="service_id" id="acme-email-service-id"/>
+      <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Email address</label>
+      <input id="acme-email-input" name="email" type="email" placeholder="you@example.com" autocomplete="email"
+        class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white mb-3"/>
+      <div id="acme-email-error" class="text-[12px] text-red-500 mb-3"></div>
+      <p class="text-[12px] text-slate-400 mb-4 leading-[1.5]">Let's Encrypt sends renewal notices and important account alerts to this address. It is not shown publicly.</p>
+      <button type="submit" class="btn-primary w-full">Save &amp; enable auto-TLS</button>
+    </form>
+  </div>
+</div>
+
+<!-- ── Rate Limit Modal ── -->
+<div id="rl-modal-overlay" class="hidden flex fixed inset-0 bg-slate-900/[.45] z-[200] items-center justify-center">
+  <div class="card w-[380px] p-6">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-[17px] font-bold text-slate-900">Rate Limit — <span id="rl-modal-service-name" class="text-brand"></span></h2>
+      <button type="button" id="rl-modal-close" class="bg-none border-none cursor-pointer text-slate-500 text-lg leading-none">&times;</button>
+    </div>
+    <form id="rl-form" hx-post="/admin/services/ratelimit" hx-target="#services-body" hx-swap="innerHTML">
+      <input type="hidden" name="service_id" id="rl-service-id"/>
+      <div class="flex gap-3 mb-3">
+        <div class="flex-1">
+          <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Requests / second</label>
+          <input id="rl-rps" name="rps" type="number" min="0" step="0.1" placeholder="e.g. 10"
+            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+        </div>
+        <div class="flex-1">
+          <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Burst</label>
+          <input id="rl-burst" name="burst" type="number" min="0" placeholder="auto (2× RPS)"
+            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+        </div>
+      </div>
+      <p class="text-[12px] text-slate-400 mb-4 leading-[1.5]">Set 0 or leave blank to fall through to the global limit from config.yaml.</p>
+      <button type="submit" class="btn-primary w-full">Save</button>
+    </form>
+    <div id="rl-error" class="text-[12px] text-red-500 mt-[10px]"></div>
+  </div>
+</div>
 {{end}}
 
 {{define "services-rows"}}
@@ -171,6 +241,14 @@
       </button>
     </span>
     {{end}}
+    {{if gt .RateLimitRPS 0.0}}
+    <span class="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-[2px] rounded-full">{{printf "%.0f" .RateLimitRPS}}/s</span>
+    {{end}}
+    <button type="button" class="rl-manage-btn inline-flex items-center gap-[5px] text-[11px] font-medium text-slate-500 bg-transparent border border-line rounded-full px-3 py-[5px] cursor-pointer font-sans hover:border-slate-400 transition-colors duration-150"
+      data-id="{{.ID}}" data-name="{{.Name}}" data-rps="{{.RateLimitRPS}}" data-burst="{{.RateLimitBurst}}">
+      <i class="hgi hgi-stroke hgi-rounded hgi-time-04 text-xs"></i>
+      Rate Limit
+    </button>
     <span class="text-[12px] text-slate-400 whitespace-nowrap">{{fmtTime .CreatedAt}}</span>
     {{template "remove-btn" (map "URL" (printf "/admin/services/%d" .ID) "Target" "#services-body" "Confirm" (printf "Remove service %s?" .Name))}}
   </div>

@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"coraza-waf-mod/ratelimit"
 	"coraza-waf-mod/storage"
 
 	"golang.org/x/crypto/acme/autocert"
@@ -80,15 +81,16 @@ type Registry struct {
 	mu        sync.RWMutex
 	list      []storage.Service
 	proxies   map[string]*httputil.ReverseProxy
-	certs     map[string]*tls.Certificate // host (lowercase) -> uploaded custom cert
-	autoHosts map[string]bool             // host (lowercase) -> true if tls_mode == "auto"
+	limiters  map[string]*ratelimit.Limiter // service name -> per-service limiter (nil if not configured)
+	certs     map[string]*tls.Certificate   // host (lowercase) -> uploaded custom cert
+	autoHosts map[string]bool               // host (lowercase) -> true if tls_mode == "auto"
 
 	healthMu sync.RWMutex
 	health   map[string]bool // service name -> reachable; absent = not checked yet
 }
 
 func New(db *storage.DB) (*Registry, error) {
-	r := &Registry{health: make(map[string]bool)}
+	r := &Registry{health: make(map[string]bool), limiters: make(map[string]*ratelimit.Limiter)}
 	return r, r.Reload(db)
 }
 
@@ -154,12 +156,31 @@ func (r *Registry) Reload(db *storage.DB) error {
 		}
 	}
 
+	// Build per-service rate limiters for any service that has RPS configured.
+	newLimiters := make(map[string]*ratelimit.Limiter, len(list))
+	for _, s := range list {
+		if s.RateLimitRPS > 0 {
+			burst := s.RateLimitBurst
+			if burst <= 0 {
+				burst = int(s.RateLimitRPS) * 2
+			}
+			newLimiters[s.Name] = ratelimit.NewWithParams(s.RateLimitRPS, burst)
+		}
+	}
+
 	r.mu.Lock()
+	oldLimiters := r.limiters
 	r.list = list
 	r.proxies = proxies
+	r.limiters = newLimiters
 	r.certs = certs
 	r.autoHosts = autoHosts
 	r.mu.Unlock()
+
+	// Stop old janitor goroutines after the swap so in-flight checks still work.
+	for _, l := range oldLimiters {
+		l.Stop()
+	}
 
 	// Drop health entries for services that no longer exist, so a removed
 	// (or renamed) service can't leave a stale dot behind.
@@ -176,6 +197,20 @@ func (r *Registry) Reload(db *storage.DB) error {
 	r.healthMu.Unlock()
 
 	return nil
+}
+
+// AllowService checks the per-service rate limiter for the named service and
+// client IP. Returns a zero Result (Allowed: true, Limit: 0) if the service
+// has no per-service limit configured. Falls through — it does not replace
+// the global limiter in proxy/handler.go.
+func (r *Registry) AllowService(name, ip string) ratelimit.Result {
+	r.mu.RLock()
+	l := r.limiters[name]
+	r.mu.RUnlock()
+	if l == nil {
+		return ratelimit.Result{Allowed: true}
+	}
+	return l.Allow(ip)
 }
 
 // Match picks the service for a request. Path-prefix rules are more
@@ -287,10 +322,10 @@ func (r *Registry) markHealth(name string, healthy bool) {
 
 // GetCertificateFunc returns a tls.Config.GetCertificate callback that picks
 // a certificate by SNI hostname: a per-service uploaded cert first, then
-// autocert (if am is non-nil and the host is configured for "auto" mode),
-// then the static fallback (e.g. a legacy config.yaml custom cert), in that
-// order. Returns an error if none apply, failing that handshake.
-func (r *Registry) GetCertificateFunc(am *autocert.Manager, fallback *tls.Certificate) func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+// autocert (if am is non-nil and the host is configured for "auto" mode).
+// Returns an error if neither applies, failing that TLS handshake cleanly
+// without affecting other domains that do have certs configured.
+func (r *Registry) GetCertificateFunc(am *autocert.Manager) func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 		host := strings.ToLower(hello.ServerName)
 
@@ -304,9 +339,6 @@ func (r *Registry) GetCertificateFunc(am *autocert.Manager, fallback *tls.Certif
 		}
 		if isAuto && am != nil {
 			return am.GetCertificate(hello)
-		}
-		if fallback != nil {
-			return fallback, nil
 		}
 		return nil, fmt.Errorf("no certificate configured for %q", hello.ServerName)
 	}

@@ -30,25 +30,11 @@ type WAFConfig struct {
 	RulesDir string `yaml:"rules_dir"`
 }
 
-// TLSConfig controls how the proxy presents TLS to clients.
-// mode: "off"    — plain HTTP only (default)
-// mode: "auto"   — Let's Encrypt via ACME; certs cached in CacheDir
-// mode: "custom" — user-provided cert + key files
+// TLSConfig holds deployment-level TLS settings. Certificate configuration
+// (ACME email, per-service certs) is managed entirely from the admin UI and
+// stored in the database — nothing cert-related lives in config.yaml anymore.
 type TLSConfig struct {
-	Mode     string          `yaml:"mode"`      // "off" | "auto" | "custom"
-	CacheDir string          `yaml:"cache_dir"` // where certs are stored (default: "./certs")
-	Auto     AutoTLSConfig   `yaml:"auto"`
-	Custom   CustomTLSConfig `yaml:"custom"`
-}
-
-type AutoTLSConfig struct {
-	Domains []string `yaml:"domains"` // domains to issue certs for
-	Email   string   `yaml:"email"`   // contact email for Let's Encrypt
-}
-
-type CustomTLSConfig struct {
-	CertFile string `yaml:"cert_file"` // path to PEM certificate
-	KeyFile  string `yaml:"key_file"`  // path to PEM private key
+	CacheDir string `yaml:"cache_dir"` // where Let's Encrypt certs are cached (default: "./certs")
 }
 
 type GeoConfig struct {
@@ -95,12 +81,8 @@ func applyDefaults(cfg *Config) {
 	if cfg.ListenAddr == "" {
 		cfg.ListenAddr = ":8080"
 	}
-	if cfg.ListenAddrTLS == "" {
-		cfg.ListenAddrTLS = ":443"
-	}
-	if cfg.TLS.Mode == "" {
-		cfg.TLS.Mode = "off"
-	}
+	// ListenAddrTLS has no default — HTTPS only starts when explicitly set.
+	// Set it to ":443" (or ":8443" for dev) in config.yaml to enable TLS.
 	if cfg.TLS.CacheDir == "" {
 		cfg.TLS.CacheDir = "./certs"
 	}

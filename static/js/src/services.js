@@ -52,13 +52,18 @@
     var matchType = form.querySelector('input[name="match_type"]:checked').value;
     var matchValue = form.querySelector('input[name="match_value"]').value;
     var backend = form.querySelector('input[name="backend"]').value;
+    var rps = parseFloat(form.querySelector('input[name="rps"]').value) || 0;
+    var burst = parseInt(form.querySelector('input[name="burst"]').value) || 0;
 
-    review.innerHTML = '';
-    [
+    var pairs = [
       ['Name', name],
       [matchType === 'host' ? 'Host' : 'Path prefix', matchValue],
       ['Backend', backend],
-    ].forEach(function (pair) {
+    ];
+    if (rps > 0) pairs.push(['Rate limit', rps + '/s' + (burst > 0 ? ', burst ' + burst : ', burst auto')]);
+
+    review.innerHTML = '';
+    pairs.forEach(function (pair) {
       var row = document.createElement('div');
       row.className = 'flex justify-between gap-[10px]';
       var label = document.createElement('span');
@@ -150,4 +155,79 @@
 
   // Server fires this (via HX-Trigger) after a successful save/clear.
   document.body.addEventListener('tls-saved', closeModal);
+})();
+
+// ACME email modal — shown when auto-TLS is requested but no email is stored.
+(function () {
+  var overlay  = document.getElementById('acme-email-modal-overlay');
+  if (!overlay) return;
+
+  var closeBtn  = document.getElementById('acme-email-modal-close');
+  var idInput   = document.getElementById('acme-email-service-id');
+  var emailInput = document.getElementById('acme-email-input');
+
+  function openModal(serviceId) {
+    idInput.value = serviceId || '';
+    document.getElementById('acme-email-error').textContent = '';
+    overlay.classList.remove('hidden');
+    emailInput.focus();
+  }
+
+  function closeModal() { overlay.classList.add('hidden'); }
+
+  closeBtn.addEventListener('click', closeModal);
+  overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closeModal();
+  });
+
+  // Server fires this when EnableServiceAutoTLS finds no email in DB.
+  document.body.addEventListener('need-acme-email', function (e) {
+    openModal(e.detail && e.detail.service_id);
+  });
+
+  // Server fires this after SaveAcmeEmail succeeds — close both modals.
+  document.body.addEventListener('acme-email-saved', function () {
+    closeModal();
+    var tlsOverlay = document.getElementById('tls-modal-overlay');
+    if (tlsOverlay) tlsOverlay.classList.add('hidden');
+  });
+})();
+
+// Rate Limit modal — set or clear per-service rate limiting.
+(function () {
+  var overlay = document.getElementById('rl-modal-overlay');
+  if (!overlay) return;
+
+  var nameLabel = document.getElementById('rl-modal-service-name');
+  var closeBtn  = document.getElementById('rl-modal-close');
+  var idInput   = document.getElementById('rl-service-id');
+  var rpsInput  = document.getElementById('rl-rps');
+  var burstInput = document.getElementById('rl-burst');
+
+  function openModal(id, name, rps, burst) {
+    idInput.value    = id;
+    nameLabel.textContent = name;
+    rpsInput.value   = rps > 0 ? rps : '';
+    burstInput.value = burst > 0 ? burst : '';
+    overlay.classList.remove('hidden');
+    rpsInput.focus();
+  }
+
+  function closeModal() { overlay.classList.add('hidden'); }
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.rl-manage-btn');
+    if (btn) openModal(btn.dataset.id, btn.dataset.name,
+                       parseFloat(btn.dataset.rps) || 0,
+                       parseInt(btn.dataset.burst) || 0);
+  });
+
+  closeBtn.addEventListener('click', closeModal);
+  overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closeModal();
+  });
+
+  document.body.addEventListener('rl-saved', closeModal);
 })();

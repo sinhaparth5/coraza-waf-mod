@@ -1,0 +1,13 @@
+services:
+  waf:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/config.yaml:ro
+      - waf-data:/data
+    environment:
+      - CONFIG=/config.yaml
+
+volumes:
+  waf-data:

@@ -146,4 +146,155 @@
 
 {{define "scripts"}}
 <script src="{{.AdminPath}}/static/js/logs.min.js" defer></script>
+
+<!-- ── Request Detail Modal ──────────────────────────────────── -->
+<div id="log-detail-backdrop"
+     class="hidden fixed inset-0 z-[300] flex items-center justify-center p-4"
+     style="background:rgba(15,23,42,.45);backdrop-filter:blur(4px);">
+  <div id="log-detail-modal"
+       class="bg-white rounded-[28px] border border-line w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden"
+       style="box-shadow:0 24px 80px rgba(0,0,0,.18);">
+
+    <!-- Modal header bar -->
+    <div class="flex items-center gap-3 px-6 py-4 border-b border-canvas shrink-0">
+      <span id="ld-method" class="mono text-[11px] font-bold bg-slate-100 text-slate-600 px-2 py-[3px] rounded shrink-0"></span>
+      <span id="ld-path"   class="mono text-[13px] text-slate-700 flex-1 truncate min-w-0"></span>
+      <span id="ld-status" class="font-bold text-[15px] shrink-0 tabular-nums"></span>
+      <button id="log-detail-close"
+              class="w-8 h-8 flex items-center justify-center rounded-full bg-surface border border-line text-slate-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors cursor-pointer shrink-0 ml-1">
+        <i class="hgi hgi-stroke hgi-rounded hgi-cancel-01 text-[13px]"></i>
+      </button>
+    </div>
+
+    <!-- Scrollable body -->
+    <div class="overflow-y-auto p-6 flex flex-col gap-6">
+
+      <!-- ① Overview -->
+      <div class="grid grid-cols-2 gap-x-8 gap-y-4">
+        <div>
+          <p class="ld-label">Timestamp (UTC)</p>
+          <p id="ld-ts" class="mono text-[13px] text-slate-700"></p>
+        </div>
+        <div>
+          <p class="ld-label">Duration</p>
+          <p id="ld-dur" class="mono text-[13px] text-slate-700"></p>
+        </div>
+        <div>
+          <p class="ld-label">App / Service</p>
+          <p id="ld-app" class="text-[13px] text-brand font-semibold"></p>
+        </div>
+        <div>
+          <p class="ld-label">Country</p>
+          <p id="ld-country" class="text-[13px] text-slate-700 flex items-center gap-2"></p>
+        </div>
+        <div>
+          <p class="ld-label">Host</p>
+          <p id="ld-host" class="mono text-[13px] text-slate-700 truncate"></p>
+        </div>
+        <div>
+          <p class="ld-label">Query String</p>
+          <p id="ld-query" class="mono text-[12px] text-slate-500 break-all"></p>
+        </div>
+        <div class="col-span-2">
+          <p class="ld-label">User Agent</p>
+          <p id="ld-ua" class="text-[12px] text-slate-600 break-all"></p>
+        </div>
+        <div class="col-span-2">
+          <p class="ld-label">Request ID</p>
+          <p id="ld-reqid" class="mono text-[12px] text-slate-500 select-all"></p>
+        </div>
+      </div>
+
+      <!-- ② IP Addresses -->
+      <div>
+        <p class="ld-section-title">IP Addresses</p>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+            <p class="text-[10px] text-amber-600 font-semibold uppercase tracking-[.06em] mb-2">Real Client IP</p>
+            <p id="ld-real-ip" class="mono text-[15px] font-bold text-amber-700 break-all"></p>
+            <p class="text-[11px] text-amber-400 mt-1">CF-Connecting-IP / X-Forwarded-For</p>
+          </div>
+          <div class="bg-slate-50 border border-line rounded-2xl p-4">
+            <p class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.06em] mb-2">Proxy / CDN IP</p>
+            <p id="ld-proxy-ip" class="mono text-[15px] font-bold text-slate-600 break-all"></p>
+            <p class="text-[11px] text-slate-400 mt-1">direct TCP connection source</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ③ Network (ASN / ISP) -->
+      <div>
+        <p class="ld-section-title">Network</p>
+        <div class="bg-surface border border-line rounded-2xl overflow-hidden">
+          <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
+            <i class="hgi hgi-stroke hgi-rounded hgi-wifi-router-01 text-slate-400 text-[16px] shrink-0"></i>
+            <div class="flex-1 min-w-0">
+              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">ASN</p>
+              <p id="ld-asn" class="mono text-[13px] text-slate-700"></p>
+            </div>
+          </div>
+          <div class="flex items-center gap-3 px-4 py-3">
+            <i class="hgi hgi-stroke hgi-rounded hgi-building-04 text-slate-400 text-[16px] shrink-0"></i>
+            <div class="flex-1 min-w-0">
+              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">ISP / Organization</p>
+              <p id="ld-org" class="text-[13px] text-slate-700"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ④ Connection (protocol + TLS) -->
+      <div>
+        <p class="ld-section-title">Connection</p>
+        <div class="bg-surface border border-line rounded-2xl overflow-hidden">
+          <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
+            <i class="hgi hgi-stroke hgi-rounded hgi-layers-01 text-slate-400 text-[16px] shrink-0"></i>
+            <div class="flex-1 min-w-0">
+              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">Protocol</p>
+              <p id="ld-proto" class="mono text-[13px] text-slate-700"></p>
+            </div>
+          </div>
+          <div id="ld-tls-row" class="flex items-center gap-3 px-4 py-3 border-b border-line">
+            <i class="hgi hgi-stroke hgi-rounded hgi-shield-key text-slate-400 text-[16px] shrink-0"></i>
+            <div class="flex-1 min-w-0">
+              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">TLS</p>
+              <p id="ld-tls" class="mono text-[13px] text-slate-700"></p>
+            </div>
+          </div>
+          <div id="ld-sni-row" class="flex items-center gap-3 px-4 py-3">
+            <i class="hgi hgi-stroke hgi-rounded hgi-tag-01 text-slate-400 text-[16px] shrink-0"></i>
+            <div class="flex-1 min-w-0">
+              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">SNI (server name)</p>
+              <p id="ld-sni" class="mono text-[13px] text-slate-700"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ⑤ Security — only when blocked -->
+      <div id="ld-security" class="hidden">
+        <p class="ld-section-title">Security Decision</p>
+        <div class="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-start gap-3">
+          <i class="hgi hgi-stroke hgi-rounded hgi-shield-minus text-red-500 text-[22px] shrink-0 mt-[1px]"></i>
+          <div>
+            <p class="text-[13px] font-semibold text-red-700">Request Blocked</p>
+            <p id="ld-block-reason" class="text-[12px] text-red-500 mt-[3px]"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ⑥ Request Headers -->
+      <div>
+        <p class="ld-section-title">Request Headers</p>
+        <div id="ld-headers" class="bg-surface rounded-2xl border border-line overflow-hidden text-[12px]"></div>
+      </div>
+
+    </div><!-- /body -->
+  </div><!-- /modal -->
+</div><!-- /backdrop -->
+
+<style>
+  .ld-label { font-size:10px; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
+  .ld-section-title { font-size:10px; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:.06em; margin-bottom:10px; }
+</style>
 {{end}}

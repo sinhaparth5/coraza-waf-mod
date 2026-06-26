@@ -40,6 +40,20 @@ type Limiter struct {
 	stop chan struct{}
 }
 
+// NewWithParams builds an always-enabled Limiter directly from RPS and burst
+// values, for use by per-service limiters that don't come from config.yaml.
+func NewWithParams(rps float64, burst int) *Limiter {
+	l := &Limiter{
+		enabled: true,
+		rate:    rps,
+		burst:   float64(burst),
+		buckets: make(map[string]*bucket),
+		stop:    make(chan struct{}),
+	}
+	go l.runJanitor()
+	return l
+}
+
 // New builds a Limiter from config. When cfg.Enabled is false, Allow always
 // returns true and no janitor goroutine is started.
 func New(cfg config.RateLimitConfig) *Limiter {
@@ -56,12 +70,19 @@ func New(cfg config.RateLimitConfig) *Limiter {
 	return l
 }
 
+// Result is the outcome of a single Allow call.
+type Result struct {
+	Allowed    bool
+	RetryAfter time.Duration // duration until the next token refills; >0 only when !Allowed
+	Remaining  int           // floor of tokens remaining after this request; 0 when blocked
+	Limit      float64       // configured RPS (0 means limiter is disabled / no limit)
+	Burst      int           // configured burst capacity
+}
+
 // Allow reports whether a request from ip may proceed, consuming one token.
-// When blocked, retryAfter is the time until the bucket refills enough for
-// the next token; when allowed, it is zero.
-func (l *Limiter) Allow(ip string) (allowed bool, retryAfter time.Duration) {
+func (l *Limiter) Allow(ip string) Result {
 	if !l.enabled {
-		return true, 0
+		return Result{Allowed: true}
 	}
 
 	now := time.Now()
@@ -72,7 +93,7 @@ func (l *Limiter) Allow(ip string) (allowed bool, retryAfter time.Duration) {
 	if !ok {
 		b = &bucket{tokens: l.burst - 1, lastRefill: now}
 		l.buckets[ip] = b
-		return true, 0
+		return Result{Allowed: true, Remaining: int(b.tokens), Limit: l.rate, Burst: int(l.burst)}
 	}
 
 	elapsed := now.Sub(b.lastRefill).Seconds()
@@ -84,10 +105,16 @@ func (l *Limiter) Allow(ip string) (allowed bool, retryAfter time.Duration) {
 
 	if b.tokens < 1 {
 		waitSecs := (1 - b.tokens) / l.rate
-		return false, time.Duration(waitSecs * float64(time.Second))
+		return Result{
+			Allowed:    false,
+			RetryAfter: time.Duration(waitSecs * float64(time.Second)),
+			Remaining:  0,
+			Limit:      l.rate,
+			Burst:      int(l.burst),
+		}
 	}
 	b.tokens--
-	return true, 0
+	return Result{Allowed: true, Remaining: int(b.tokens), Limit: l.rate, Burst: int(l.burst)}
 }
 
 // TrackedIPs returns the number of per-IP buckets currently in memory.

@@ -1,26 +1,13 @@
 # ─── Network ─────────────────────────────────────────────────────────────────
-listen_addr:     ":8080"  # HTTP port (change to :80 in production with TLS)
-listen_addr_tls: ":443"   # HTTPS port (only used when tls.mode is auto or custom)
+listen_addr: ":8080"
+# Uncomment to enable HTTPS (TLS cert config is managed from the admin UI):
+# listen_addr_tls: ":443"
 
 # ─── TLS ─────────────────────────────────────────────────────────────────────
-# mode: "off"    — plain HTTP (default, good for local dev / behind Cloudflare)
-# mode: "auto"   — Let's Encrypt; server must be publicly reachable on port 80
-# mode: "custom" — bring your own cert + key files
+# Certificate config (ACME email, per-service certs) lives in the admin UI.
+# Only the cache directory for Let's Encrypt files is set here.
 tls:
-  mode: "off"
-  cache_dir: "./certs"   # Let's Encrypt certs cached here; also store custom certs here
-
-  # Uncomment for Let's Encrypt:
-  # auto:
-  #   domains:
-  #     - "example.com"
-  #     - "www.example.com"
-  #   email: "admin@example.com"
-
-  # Uncomment for custom cert:
-  # custom:
-  #   cert_file: "./certs/cert.pem"
-  #   key_file:  "./certs/key.pem"
+  cache_dir: "./certs"
 
 # ─── Geo Blocking ────────────────────────────────────────────────────────────
 # The binary includes a bundled GeoLite2-Country.mmdb. Leave db_path empty to

@@ -1,5 +1,5 @@
 {{define "log-row"}}
-<div class="flex items-center gap-[22px] px-6 py-3 border-b border-canvas text-[13px] transition-colors duration-100 {{if .Blocked}}bg-red-50{{end}}">
+<div data-log-id="{{.ID}}" class="flex items-center gap-[22px] px-6 py-3 border-b border-canvas text-[13px] transition-colors duration-100 cursor-pointer hover:bg-surface {{if .Blocked}}bg-red-50 hover:bg-red-100{{end}}">
   <span class="mono text-slate-500 shrink-0 w-[104px] whitespace-nowrap tabular-nums">{{fmtTime .Timestamp}}</span>
   <span class="text-brand font-semibold shrink-0 w-[94px] truncate">{{truncate .AppName 10}}</span>
   <span class="shrink-0 w-[150px] flex items-center gap-[7px]">

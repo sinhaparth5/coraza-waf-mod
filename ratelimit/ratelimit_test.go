@@ -15,8 +15,8 @@ func TestDisabledAlwaysAllows(t *testing.T) {
 	l := New(config.RateLimitConfig{Enabled: false})
 	defer l.Stop()
 	for i := 0; i < 1000; i++ {
-		ok, wait := l.Allow("1.2.3.4")
-		if !ok || wait != 0 {
+		res := l.Allow("1.2.3.4")
+		if !res.Allowed || res.RetryAfter != 0 {
 			t.Fatalf("disabled limiter should always allow")
 		}
 	}
@@ -28,19 +28,18 @@ func TestBurstAllowedThenBlocked(t *testing.T) {
 
 	// First 3 requests (burst) must be allowed.
 	for i := 0; i < 3; i++ {
-		ok, _ := l.Allow("10.0.0.1")
-		if !ok {
+		if res := l.Allow("10.0.0.1"); !res.Allowed {
 			t.Fatalf("request %d should be allowed within burst", i+1)
 		}
 	}
 
 	// 4th request must be blocked.
-	ok, wait := l.Allow("10.0.0.1")
-	if ok {
+	res := l.Allow("10.0.0.1")
+	if res.Allowed {
 		t.Fatal("request beyond burst should be blocked")
 	}
-	if wait <= 0 {
-		t.Fatalf("retryAfter should be > 0, got %v", wait)
+	if res.RetryAfter <= 0 {
+		t.Fatalf("retryAfter should be > 0, got %v", res.RetryAfter)
 	}
 }
 
@@ -51,13 +50,29 @@ func TestRetryAfterIsReasonable(t *testing.T) {
 	defer l.Stop()
 
 	l.Allow("10.0.0.2") // drains burst
-	ok, wait := l.Allow("10.0.0.2")
-	if ok {
+	res := l.Allow("10.0.0.2")
+	if res.Allowed {
 		t.Fatal("second request should be blocked")
 	}
 	// At 2 req/s, one token refills in 500ms — allow some tolerance.
-	if wait < 400*time.Millisecond || wait > 600*time.Millisecond {
-		t.Fatalf("retryAfter out of expected range [400ms,600ms], got %v", wait)
+	if res.RetryAfter < 400*time.Millisecond || res.RetryAfter > 600*time.Millisecond {
+		t.Fatalf("retryAfter out of expected range [400ms,600ms], got %v", res.RetryAfter)
+	}
+}
+
+func TestResultCarriesLimitInfo(t *testing.T) {
+	l := New(cfg(5, 10))
+	defer l.Stop()
+
+	res := l.Allow("10.0.0.9")
+	if res.Limit != 5 {
+		t.Fatalf("expected Limit=5, got %v", res.Limit)
+	}
+	if res.Burst != 10 {
+		t.Fatalf("expected Burst=10, got %d", res.Burst)
+	}
+	if res.Remaining < 0 {
+		t.Fatalf("Remaining should be >= 0, got %d", res.Remaining)
 	}
 }
 
@@ -66,8 +81,7 @@ func TestDifferentIPsAreIndependent(t *testing.T) {
 	defer l.Stop()
 
 	l.Allow("10.0.0.1") // drains 10.0.0.1's bucket
-	ok, _ := l.Allow("10.0.0.2")
-	if !ok {
+	if res := l.Allow("10.0.0.2"); !res.Allowed {
 		t.Fatal("10.0.0.2 should not be affected by 10.0.0.1's exhausted bucket")
 	}
 }
@@ -77,15 +91,13 @@ func TestTokensRefillOverTime(t *testing.T) {
 	defer l.Stop()
 
 	l.Allow("10.0.0.3") // drain
-	ok, _ := l.Allow("10.0.0.3")
-	if ok {
+	if res := l.Allow("10.0.0.3"); res.Allowed {
 		t.Fatal("should be blocked immediately after drain")
 	}
 
 	// After 150ms a new token (at 10 req/s = 100ms/token) should have accrued.
 	time.Sleep(150 * time.Millisecond)
-	ok, _ = l.Allow("10.0.0.3")
-	if !ok {
+	if res := l.Allow("10.0.0.3"); !res.Allowed {
 		t.Fatal("should be allowed after waiting for token to refill")
 	}
 }

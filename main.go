@@ -6,14 +6,15 @@
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"log"
 	"net/http"
 	"os"
-	"strings"
+	"os/signal"
+	"syscall"
 	"time"
 
+	"coraza-waf-mod/asn"
 	"coraza-waf-mod/blocklist"
 	"coraza-waf-mod/config"
 	"coraza-waf-mod/geo"
@@ -69,6 +70,11 @@ func main() {
 	}
 	defer db.Close()
 
+	if err := db.SeedTestAdmin(); err != nil {
+		log.Fatalf("seed admin: %v", err)
+	}
+	log.Printf("admin login: admin@localhost / admin123  (change after first login)")
+
 	ipbl, err := blocklist.NewIPBlocklist(db)
 	if err != nil {
 		log.Fatalf("ip blocklist: %v", err)
@@ -82,6 +88,14 @@ func main() {
 
 	rl := ratelimit.New(cfg.RateLimit)
 	defer rl.Stop()
+
+	asnLookup, err := asn.New()
+	if err != nil {
+		log.Printf("asn: failed to load ASN database, ASN/org lookup disabled: %v", err)
+		asnLookup = nil
+	} else {
+		defer asnLookup.Close()
+	}
 
 	// One-time migration: legacy config.yaml apps: entries become rows in
 	// the services table, so the admin Services page is the source of
@@ -103,6 +117,9 @@ func main() {
 	metrics.SetLimiter(rl)
 
 	broadcaster := ui.NewLogBroadcaster()
+	// Wire broadcaster into the DB log worker so every insert is pushed to the
+	// SSE stream with the real row ID, not a zero placeholder.
+	db.SetBroadcastFn(broadcaster.Broadcast)
 
 	e := echo.New()
 	e.HideBanner = true
@@ -123,118 +140,80 @@ func main() {
 	}
 	uiHandler.Register(e)
 
-	h := proxy.NewHandler(registry, engine, db, ipbl, geoBl, rl, broadcaster)
+	h := proxy.NewHandler(registry, engine, db, ipbl, geoBl, rl, asnLookup)
 	e.Any("/*", h.Handle)
 
-	appCount := len(registry.List())
-	switch cfg.TLS.Mode {
-	case "auto":
-		startAutoTLS(e, cfg, registry, appCount)
-	case "custom":
-		startCustomTLS(e, cfg, registry, appCount)
-	default:
-		log.Printf("coraza-waf listening on %s (plain HTTP, waf=%v, apps=%d)",
-			cfg.ListenAddr, cfg.WAF.Enabled, appCount)
-		if err := e.Start(cfg.ListenAddr); err != nil {
-			log.Fatalf("server: %v", err)
-		}
-	}
-}
-
-// buildAutocertManager sets up Let's Encrypt issuance covering both the
-// legacy static tls.auto.domains list and every service whose tls_mode is
-// "auto" (added live from the admin UI, not config.yaml). Returns nil if no
-// email is configured — ACME requires one for account registration, so
-// per-service auto-issue simply can't work without it.
-func buildAutocertManager(cfg *config.Config, registry *services.Registry) *autocert.Manager {
-	if cfg.TLS.Auto.Email == "" {
-		return nil
-	}
-	if err := os.MkdirAll(cfg.TLS.CacheDir, 0700); err != nil {
-		log.Fatalf("cannot create cert cache dir %s: %v", cfg.TLS.CacheDir, err)
-	}
-
-	legacyDomains := cfg.TLS.Auto.Domains
-	registryPolicy := registry.HostPolicy()
-	policy := func(ctx context.Context, host string) error {
-		for _, d := range legacyDomains {
-			if strings.EqualFold(d, host) {
-				return nil
-			}
-		}
-		return registryPolicy(ctx, host)
-	}
-
-	return &autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: policy,
-		Cache:      autocert.DirCache(cfg.TLS.CacheDir),
-		Email:      cfg.TLS.Auto.Email,
-	}
-}
-
-// startAutoTLS starts HTTPS using Let's Encrypt certificates — for the
-// legacy tls.auto.domains list and/or any service configured for per-service
-// auto-issue. HTTP on cfg.ListenAddr handles ACME challenges and redirects
-// to HTTPS. Per-service uploaded custom certs still take priority by SNI
-// even while the global mode is "auto" (see Registry.GetCertificateFunc).
-func startAutoTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, appCount int) {
-	tlsCfg := cfg.TLS
-
-	if tlsCfg.Auto.Email == "" {
-		log.Fatal("tls.auto.email is required for Let's Encrypt")
-	}
-
-	m := buildAutocertManager(cfg, registry)
-
-	// HTTP server: handles ACME HTTP-01 challenge + redirects everything else to HTTPS.
-	httpSrv := &http.Server{
-		Addr:    cfg.ListenAddr,
-		Handler: m.HTTPHandler(http.HandlerFunc(httpsRedirect)),
-	}
+	// SIGHUP: reload the WAF engine (picks up changes to rules_dir) without
+	// restarting. Services hot-reload on every UI change via registry.Reload,
+	// so SIGHUP is only needed for WAF rule updates.
 	go func() {
-		log.Printf("HTTP (ACME + redirect) on %s", cfg.ListenAddr)
-		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("http redirect server: %v", err)
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGHUP)
+		for range sigCh {
+			log.Printf("SIGHUP: reloading WAF engine...")
+			newEngine, err := waf.New(cfg.WAF)
+			if err != nil {
+				log.Printf("SIGHUP: WAF reload failed, keeping existing engine: %v", err)
+				continue
+			}
+			h.ReloadWAF(newEngine)
 		}
 	}()
 
-	// HTTPS server: per-service custom cert (by SNI) > autocert > none.
-	s := e.TLSServer
-	s.Addr = cfg.ListenAddrTLS
-	s.TLSConfig = &tls.Config{GetCertificate: registry.GetCertificateFunc(m, nil)}
+	appCount := len(registry.List())
 
-	log.Printf("coraza-waf listening on %s (Let's Encrypt TLS, domains=%v, waf=%v, apps=%d)",
-		cfg.ListenAddrTLS, tlsCfg.Auto.Domains, cfg.WAF.Enabled, appCount)
-
-	if err := e.StartServer(s); err != nil {
-		log.Fatalf("tls server: %v", err)
+	// TLS only starts when listen_addr_tls is explicitly set in config.yaml.
+	// Certificate config (ACME email, per-service certs) lives entirely in the DB.
+	if cfg.ListenAddrTLS != "" {
+		startTLS(e, cfg, registry, db, appCount)
+		return
+	}
+	log.Printf("coraza-waf listening on %s (plain HTTP, waf=%v, apps=%d)",
+		cfg.ListenAddr, cfg.WAF.Enabled, appCount)
+	if err := e.Start(cfg.ListenAddr); err != nil {
+		log.Fatalf("server: %v", err)
 	}
 }
 
-// startCustomTLS starts HTTPS using a user-supplied certificate and key as
-// the fallback, with per-service uploaded certs (and per-service auto-issue,
-// if tls.auto.email is set) taking priority by SNI.
-func startCustomTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, appCount int) {
-	tlsCfg := cfg.TLS
+// startTLS is the single entry point for HTTPS. It reads the ACME contact
+// email from the DB (not config.yaml), builds an autocert manager if present,
+// then starts HTTP on cfg.ListenAddr (ACME challenge handler + HTTPS redirect)
+// and HTTPS on cfg.ListenAddrTLS. Per-service custom certs take priority over
+// autocert by SNI (see services.Registry.GetCertificateFunc).
+func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db *storage.DB, appCount int) {
+	email, _ := db.GetAcmeEmail()
 
-	if tlsCfg.Custom.CertFile == "" || tlsCfg.Custom.KeyFile == "" {
-		log.Fatal("tls.custom.cert_file and tls.custom.key_file are required for custom TLS mode")
-	}
-	fallback, err := tls.LoadX509KeyPair(tlsCfg.Custom.CertFile, tlsCfg.Custom.KeyFile)
-	if err != nil {
-		log.Fatalf("load custom TLS cert: %v", err)
+	var am *autocert.Manager
+	if email != "" {
+		if err := os.MkdirAll(cfg.TLS.CacheDir, 0700); err != nil {
+			log.Fatalf("cannot create cert cache dir %s: %v", cfg.TLS.CacheDir, err)
+		}
+		am = &autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: registry.HostPolicy(),
+			Cache:      autocert.DirCache(cfg.TLS.CacheDir),
+			Email:      email,
+		}
 	}
 
-	m := buildAutocertManager(cfg, registry)
+	// HTTP: ACME HTTP-01 challenge handler (if autocert active) + HTTPS redirect.
+	var httpHandler http.Handler = http.HandlerFunc(httpsRedirect)
+	if am != nil {
+		httpHandler = am.HTTPHandler(httpHandler)
+	}
+	go func() {
+		log.Printf("coraza-waf HTTP (ACME/redirect) on %s", cfg.ListenAddr)
+		srv := &http.Server{Addr: cfg.ListenAddr, Handler: httpHandler}
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("http server: %v", err)
+		}
+	}()
 
 	s := e.TLSServer
 	s.Addr = cfg.ListenAddrTLS
-	s.TLSConfig = &tls.Config{GetCertificate: registry.GetCertificateFunc(m, &fallback)}
+	s.TLSConfig = &tls.Config{GetCertificate: registry.GetCertificateFunc(am)}
 
-	log.Printf("coraza-waf listening on %s (custom TLS, cert=%s, waf=%v, apps=%d)",
-		cfg.ListenAddrTLS, tlsCfg.Custom.CertFile, cfg.WAF.Enabled, appCount)
-
+	log.Printf("coraza-waf TLS on %s (waf=%v, apps=%d)", cfg.ListenAddrTLS, cfg.WAF.Enabled, appCount)
 	if err := e.StartServer(s); err != nil {
 		log.Fatalf("tls server: %v", err)
 	}

@@ -80,6 +80,10 @@
       <i class="hgi hgi-stroke hgi-rounded hgi-settings-01 text-base"></i>
       Services
     </a>
+    <a href="/admin/settings" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "settings"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+      <i class="hgi hgi-stroke hgi-rounded hgi-user-account text-base"></i>
+      Settings
+    </a>
   </nav>
 
   <!-- Account -->
@@ -87,6 +91,14 @@
     <div class="flex items-center gap-3 px-3 py-[10px]">
       <div class="w-8 h-8 rounded-full bg-navy flex items-center justify-center text-white text-[12px] font-bold shrink-0">A</div>
       <span class="text-[13px] font-semibold text-slate-800 flex-1 truncate">Admin</span>
+      <div class="flex items-center gap-1 shrink-0">
+      <!-- Logout -->
+      <form action="{{.AdminPath}}/logout" method="POST" class="contents">
+        <button type="submit" title="Sign out"
+                class="w-8 h-8 rounded-full bg-surface border border-line flex items-center justify-center text-slate-500 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors cursor-pointer">
+          <i class="hgi hgi-stroke hgi-rounded hgi-logout-02 text-[14px]"></i>
+        </button>
+      </form>
       <div class="relative shrink-0">
         <button id="notif-btn" class="w-8 h-8 rounded-full bg-surface border border-line flex items-center justify-center text-slate-500 cursor-pointer relative">
           <i class="hgi hgi-stroke hgi-rounded hgi-notification-03 text-[14px]"></i>
@@ -96,6 +108,7 @@
         </button>
         <div id="notif-panel" class="hidden absolute bottom-10 left-0 w-[300px] bg-white border border-line rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,.12)] z-[100]"></div>
       </div>
+      </div><!-- end flex gap-1 -->
     </div>
   </div>
 </aside>
