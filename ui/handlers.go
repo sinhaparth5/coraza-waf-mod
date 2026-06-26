@@ -18,6 +18,7 @@ import (
 	"coraza-waf-mod/config"
 	"coraza-waf-mod/geo"
 	"coraza-waf-mod/metrics"
+	"coraza-waf-mod/ratelimit"
 	"coraza-waf-mod/services"
 	"coraza-waf-mod/storage"
 
@@ -79,13 +80,14 @@ type Handler struct {
 	staticImgs       fs.FS
 	reloadBot        func(*challenge.Challenger)
 	buildChallenger  func(enabled bool, threshold, ttl int) *challenge.Challenger
+	reloadRateLimit  func() // reads DB config, rebuilds backend in the proxy handler
 }
 
 // NewHandler builds the UI handler. jsFS must contain the minified JS
 // assets at "static/js/dist/*" (see assets.go in the repo root); it's
 // served under /<admin_path>/static/js/. imgsFS must contain
 // "static/imgs/*"; it's served under /<admin_path>/static/imgs/.
-func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger) (*Handler, error) {
+func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func()) (*Handler, error) {
 	sub, err := fs.Sub(jsFS, "static/js/dist")
 	if err != nil {
 		return nil, fmt.Errorf("sub static/js/dist: %w", err)
@@ -94,7 +96,7 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 	if err != nil {
 		return nil, fmt.Errorf("sub static/imgs: %w", err)
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -201,6 +203,8 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/services/bot/:id", h.SetServiceBotMode)
 	g.POST("/settings/acme-email", h.SaveAcmeEmail)
 	g.POST("/settings/bot", h.SaveBotSettings)
+	g.POST("/settings/ratelimit", h.SaveRateLimitConfig)
+	g.POST("/settings/ratelimit/test", h.TestRedisConnection)
 	g.GET("/settings", h.SettingsPage)
 	g.POST("/settings/credentials", h.ChangeCredentials)
 	g.GET("/settings/backup", h.BackupDB)
@@ -991,11 +995,18 @@ func (h *Handler) SetServiceRateLimit(c echo.Context) error {
 func (h *Handler) SettingsPage(c echo.Context) error {
 	email, _ := h.db.GetAdminEmail()
 	botEnabled, botThreshold, botTTL, _ := h.db.GetBotSettings()
+	redisAddr, _, _ := h.db.GetRedisConfig()
+	rlBackend := "memory"
+	if redisAddr != "" {
+		rlBackend = "redis"
+	}
 	return h.render(c, "settings", map[string]any{
 		"AdminEmail":   email,
 		"BotEnabled":   botEnabled,
 		"BotThreshold": botThreshold,
 		"BotTTL":       botTTL,
+		"RLBackend":    rlBackend,
+		"RLRedisAddr":  redisAddr,
 	})
 }
 
@@ -1049,6 +1060,74 @@ func (h *Handler) SetServiceBotMode(c echo.Context) error {
 	w := c.Response().Writer
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	return h.tmpls["services"].ExecuteTemplate(w, "services-rows", h.serviceViews())
+}
+
+// SaveRateLimitConfig persists the rate-limit backend choice (memory+SQLite or
+// Redis) and hot-reloads the active backend in the proxy handler.
+func (h *Handler) SaveRateLimitConfig(c echo.Context) error {
+	backend := c.FormValue("rl_backend")
+	addr := strings.TrimSpace(c.FormValue("rl_redis_addr"))
+	password := c.FormValue("rl_redis_password")
+
+	rlErr := ""
+	if backend == "redis" {
+		if addr == "" {
+			rlErr = "Redis address must not be empty."
+		} else if err := ratelimit.PingRedis(addr, password); err != nil {
+			rlErr = "Redis connection failed: " + err.Error()
+		} else if err := h.db.SetRedisConfig(addr, password); err != nil {
+			rlErr = "Failed to save: " + err.Error()
+		}
+	} else {
+		if err := h.db.SetRedisConfig("", ""); err != nil {
+			rlErr = "Failed to save: " + err.Error()
+		}
+	}
+
+	if rlErr == "" && h.reloadRateLimit != nil {
+		h.reloadRateLimit()
+	}
+
+	email, _ := h.db.GetAdminEmail()
+	botEnabled, botThreshold, botTTL, _ := h.db.GetBotSettings()
+	rlBackend := backend
+	rlAddr := addr
+	if rlErr != "" && backend != "redis" {
+		// Revert display to stored config on error.
+		if storedAddr, _, _ := h.db.GetRedisConfig(); storedAddr != "" {
+			rlBackend = "redis"
+			rlAddr = storedAddr
+		} else {
+			rlBackend = "memory"
+		}
+	}
+	return h.render(c, "settings", map[string]any{
+		"AdminEmail":   email,
+		"BotEnabled":   botEnabled,
+		"BotThreshold": botThreshold,
+		"BotTTL":       botTTL,
+		"RLBackend":    rlBackend,
+		"RLRedisAddr":  rlAddr,
+		"RLSaveOK":     rlErr == "",
+		"RLError":      rlErr,
+	})
+}
+
+// TestRedisConnection tests reachability of a Redis server without saving anything.
+// Returns a small HTML fragment consumed by HTMX to show inline status.
+func (h *Handler) TestRedisConnection(c echo.Context) error {
+	addr := strings.TrimSpace(c.FormValue("rl_redis_addr"))
+	password := c.FormValue("rl_redis_password")
+	if addr == "" {
+		return c.HTML(http.StatusOK,
+			`<span class="text-red-600 text-[13px]">Address is required.</span>`)
+	}
+	if err := ratelimit.PingRedis(addr, password); err != nil {
+		return c.HTML(http.StatusOK,
+			`<span class="text-red-600 text-[13px]">Connection failed: `+template.HTMLEscapeString(err.Error())+`</span>`)
+	}
+	return c.HTML(http.StatusOK,
+		`<span class="text-brand text-[13px] font-medium">Connected successfully.</span>`)
 }
 
 func (h *Handler) ChangeCredentials(c echo.Context) error {

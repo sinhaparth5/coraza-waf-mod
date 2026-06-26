@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	"coraza-waf-mod/ratelimit"
+
 	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 )
@@ -250,6 +252,12 @@ func (db *DB) migrate() error {
 	CREATE TABLE IF NOT EXISTS sessions (
 		token      TEXT PRIMARY KEY,
 		created_at TEXT NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS rate_state (
+		ip          TEXT PRIMARY KEY,
+		tokens      REAL NOT NULL,
+		last_refill TEXT NOT NULL
 	);
 	`)
 	if err != nil {
@@ -1123,6 +1131,86 @@ func (db *DB) ValidateSession(token string) (bool, error) {
 func (db *DB) DeleteSession(token string) error {
 	_, err := db.conn.Exec(`DELETE FROM sessions WHERE token = ?`, token)
 	return err
+}
+
+// ── Rate limit state (StateStore impl) ───────────────────────────────────────
+
+// SaveRateLimitState persists all in-memory token-bucket states to SQLite.
+// It replaces the whole table in a single transaction — called every 10 s by
+// Limiter.StartPersistence so restarts pick up near-current state.
+func (db *DB) SaveRateLimitState(states []ratelimit.BucketState) error {
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint
+	if _, err := tx.Exec(`DELETE FROM rate_state`); err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(`INSERT INTO rate_state (ip, tokens, last_refill) VALUES (?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, s := range states {
+		if _, err := stmt.Exec(s.IP, s.Tokens, s.LastRefill.UTC().Format(time.RFC3339Nano)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// LoadRateLimitState reads all persisted bucket states. Called once at startup
+// before traffic starts, so there's no concurrency concern.
+func (db *DB) LoadRateLimitState() ([]ratelimit.BucketState, error) {
+	rows, err := db.conn.Query(`SELECT ip, tokens, last_refill FROM rate_state`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ratelimit.BucketState
+	for rows.Next() {
+		var s ratelimit.BucketState
+		var ts string
+		if err := rows.Scan(&s.IP, &s.Tokens, &ts); err != nil {
+			return nil, err
+		}
+		if t, err := time.Parse(time.RFC3339Nano, ts); err == nil {
+			s.LastRefill = t
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// PurgeRateLimitState deletes bucket states whose last_refill is before before,
+// keeping the rate_state table from growing unboundedly.
+func (db *DB) PurgeRateLimitState(before time.Time) error {
+	_, err := db.conn.Exec(
+		`DELETE FROM rate_state WHERE last_refill < ?`,
+		before.UTC().Format(time.RFC3339Nano),
+	)
+	return err
+}
+
+// GetRedisConfig returns the stored Redis address and password (both empty if
+// Redis is not configured and in-memory+SQLite persistence is active).
+func (db *DB) GetRedisConfig() (addr, password string, err error) {
+	addr, err = db.getMeta("redis_addr")
+	if err != nil {
+		return
+	}
+	password, err = db.getMeta("redis_password")
+	return
+}
+
+// SetRedisConfig persists the Redis backend address and password.
+// Pass empty strings to clear the Redis config and revert to in-memory+SQLite.
+func (db *DB) SetRedisConfig(addr, password string) error {
+	if err := db.setMeta("redis_addr", addr); err != nil {
+		return err
+	}
+	return db.setMeta("redis_password", password)
 }
 
 func boolToInt(b bool) int {

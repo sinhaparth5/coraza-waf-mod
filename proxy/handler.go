@@ -37,11 +37,12 @@ type Handler struct {
 	waf          *waf.Engine
 	challengerMu sync.RWMutex
 	challenger   *challenge.Challenger // nil = bot protection disabled
+	ratelimitMu  sync.RWMutex
+	ratelimit    ratelimit.Backend
 	db           *storage.DB
 	ipbl         *blocklist.IPBlocklist
 	geoBl        *geo.Blocker
 	asnLookup    *asn.Lookup
-	ratelimit    *ratelimit.Limiter
 	registry     *services.Registry
 }
 
@@ -93,9 +94,23 @@ func (h *Handler) ServeChallengeVerify(w http.ResponseWriter, r *http.Request) {
 	ch.ServeVerify(w, r)
 }
 
+// ReloadRateLimit swaps in a new rate-limit backend without dropping in-flight
+// requests. The old backend is stopped after the swap. Pass nil to disable
+// rate limiting (the Allow call becomes a no-op for nil Backend).
+func (h *Handler) ReloadRateLimit(backend ratelimit.Backend) {
+	h.ratelimitMu.Lock()
+	old := h.ratelimit
+	h.ratelimit = backend
+	h.ratelimitMu.Unlock()
+	if old != nil {
+		old.Stop()
+	}
+	log.Printf("rate limit backend reloaded")
+}
+
 // NewHandler builds the proxy pipeline. Pass nil for ch to disable bot
 // protection / JS challenge (the default when bot_protection.enabled = false).
-func NewHandler(registry *services.Registry, engine *waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, rl *ratelimit.Limiter, asnLookup *asn.Lookup, ch *challenge.Challenger) *Handler {
+func NewHandler(registry *services.Registry, engine *waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, rl ratelimit.Backend, asnLookup *asn.Lookup, ch *challenge.Challenger) *Handler {
 	return &Handler{
 		waf:        engine,
 		db:         db,
@@ -183,7 +198,15 @@ func (h *Handler) Handle(c echo.Context) error {
 	}
 
 	// 1.5 Rate limit — cheap per-IP throttle, before geo/WAF inspection.
-	rlRes := h.ratelimit.Allow(clientIP)
+	h.ratelimitMu.RLock()
+	rlBackend := h.ratelimit
+	h.ratelimitMu.RUnlock()
+	var rlRes ratelimit.Result
+	if rlBackend != nil {
+		rlRes = rlBackend.Allow(clientIP)
+	} else {
+		rlRes = ratelimit.Result{Allowed: true}
+	}
 	setRateLimitHeaders(c.Response().Header(), rlRes)
 	if !rlRes.Allowed {
 		metrics.RateLimitedTotal.WithLabelValues(appName).Inc()

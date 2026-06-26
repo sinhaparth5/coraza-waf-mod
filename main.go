@@ -88,7 +88,10 @@ func main() {
 	}
 	defer geoBl.Close()
 
-	rl := ratelimit.New(cfg.RateLimit)
+	// Choose rate-limit backend: Redis (multi-node) or in-process Limiter
+	// with SQLite write-back persistence (single-node, survives restarts).
+	redisAddr, redisPwd, _ := db.GetRedisConfig()
+	rl := buildRateLimit(cfg, db, redisAddr, redisPwd)
 	defer rl.Stop()
 
 	asnLookup, err := asn.New()
@@ -172,7 +175,16 @@ func main() {
 		h.ReloadBotProtection(newCh)
 	}
 
-	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs, reloadBot, buildChallenger)
+	// reloadRateLimit is called from the Settings page when the rate-limit
+	// backend config changes. Reads the current DB config and hot-swaps
+	// the backend in the proxy handler — no restart needed.
+	reloadRateLimit := func() {
+		addr, pwd, _ := db.GetRedisConfig()
+		newBackend := buildRateLimit(cfg, db, addr, pwd)
+		h.ReloadRateLimit(newBackend)
+	}
+
+	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs, reloadBot, buildChallenger, reloadRateLimit)
 	if err != nil {
 		log.Fatalf("ui init: %v", err)
 	}
@@ -312,4 +324,27 @@ func runPruneOnly(cfgPath string) {
 func httpsRedirect(w http.ResponseWriter, r *http.Request) {
 	target := "https://" + r.Host + r.URL.RequestURI()
 	http.Redirect(w, r, target, http.StatusMovedPermanently)
+}
+
+// buildRateLimit creates the appropriate rate-limit backend.
+// When redisAddr is non-empty, it tries Redis (multi-node); on failure or when
+// empty, it falls back to the in-process Limiter with SQLite write-back
+// persistence so token-bucket state survives restarts.
+func buildRateLimit(cfg *config.Config, db *storage.DB, redisAddr, redisPwd string) ratelimit.Backend {
+	if redisAddr != "" {
+		rb, err := ratelimit.NewRedisBackend(redisAddr, redisPwd, cfg.RateLimit.RequestsPerSecond, cfg.RateLimit.Burst)
+		if err != nil {
+			log.Printf("rate limit: redis connect failed (%v), falling back to in-memory+SQLite", err)
+		} else {
+			log.Printf("rate limit: using Redis backend at %s", redisAddr)
+			return rb
+		}
+	}
+	l := ratelimit.New(cfg.RateLimit)
+	if states, err := db.LoadRateLimitState(); err == nil && len(states) > 0 {
+		l.RestoreFrom(states)
+		log.Printf("rate limit: restored %d buckets from SQLite", len(states))
+	}
+	l.StartPersistence(db)
+	return l
 }

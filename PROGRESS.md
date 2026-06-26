@@ -114,10 +114,18 @@ A single-binary Go WAF + reverse proxy with embedded Coraza, SQLite storage, and
 
 > **Config migration direction:** all Phase 7 settings (bot enable/disable, threshold, TTL) are stored in the DB and managed from the admin UI. `config.yaml`'s `bot_protection:` block is read once as a fallback default on first startup only, then ignored. This is the same pattern as TLS (Phase 6): once the user has touched the Settings page, `config.yaml` is no longer a competing source of truth.
 
-### Phase 8 — Redis-Backed Rate Limiting & Traffic Management (not started)
-- [ ] Redis-backed rate limiter for login endpoints and heavy DB-backed routes (brute-force + L7 volumetric abuse protection)
-- [ ] Per-IP / per-route configurable limits in `config.yaml`
-- [ ] Supersedes the in-process token-bucket placeholder noted in Phase 6
+### Phase 8 — Rate Limiting with SQLite Persistence + Optional Redis ✅ COMPLETE
+- [x] **`Backend` interface** (`ratelimit/ratelimit.go`): `Allow(ip) Result`, `TrackedIPs() int`, `Stop()` — both in-process `Limiter` and `RedisBackend` satisfy it; callers don't need to know which is active.
+- [x] **SQLite write-back persistence** for in-process limiter: `Snapshot()` / `RestoreFrom()` / `StartPersistence(StateStore)` methods on `Limiter`. Goroutine saves bucket state every 10 s via `storage.DB.SaveRateLimitState` + purges idle entries. State is restored on startup so token buckets survive restarts without resetting. `rate_state` table added to SQLite (migration + CREATE TABLE).
+- [x] **Redis backend** (`ratelimit/redis.go`): `RedisBackend` — token bucket implemented as an atomic Lua script (`HMGET`/`HMSET`/`EXPIRE`) so multi-node deployments share exact rate-limit state. Fails open (allows) on Redis timeout/unavailability to never block legitimate traffic. `PingRedis(addr, password)` one-shot connectivity test used by the Settings page "Test connection" button.
+- [x] **Backend hot-reload**: `proxy.Handler.ReloadRateLimit(ratelimit.Backend)` swaps the active backend behind a `sync.RWMutex` while the server is running — same pattern as `ReloadWAF` / `ReloadBotProtection`.
+- [x] **`buildRateLimit` helper** in `main.go`: checks DB for Redis config → tries `NewRedisBackend`, logs fallback on connect failure, otherwise creates in-memory `Limiter` with `RestoreFrom` + `StartPersistence`. Called on startup and inside the `reloadRateLimit` callback.
+- [x] **Settings page card** (`ui/templates/settings.html`): two-option backend selector (Memory+SQLite / Redis), Redis address + password fields (hidden until Redis is selected), HTMX "Test connection" button (returns inline success/error without a page reload), "Save & apply" applies immediately via `reloadRateLimit` callback.
+- [x] **`SaveRateLimitConfig` handler** (`ui/handlers.go`): pings Redis before saving, returns descriptive error on connect failure; on success saves to DB and calls `reloadRateLimit()`.
+- [x] **`TestRedisConnection` handler** (`ui/handlers.go`): lightweight HTMX fragment response for the test button — no DB writes.
+- [x] `go.mod` updated with `github.com/redis/go-redis/v9 v9.21.0`.
+
+> **Config migration direction (continued from Phase 7):** Redis URL and password are stored in the DB `meta` table (`redis_addr`, `redis_password`), not in `config.yaml`. The rate-limit backend choice (memory vs. Redis) is managed entirely from the Settings page — no restart required to switch backends.
 
 ### Phase 9 — Dynamic Virtual Patching (not started)
 - [ ] Admin UI to toggle individual CRS rule IDs on/off (handle false positives without editing config files or restarting)
@@ -133,6 +141,21 @@ A single-binary Go WAF + reverse proxy with embedded Coraza, SQLite storage, and
 - [ ] Export Coraza's full JSON audit log detail (not just the summary fields currently in `requests`) for blocked transactions
 - [ ] Pluggable export sink (webhook / file / syslog) so users can forward to an external SIEM
 - [ ] Dashboard view of full audit detail per blocked request (matched rule chain, not just final rule ID)
+
+---
+
+## Deferred / Backlog Items
+
+### CIDR range support in IP Rules
+Current IP blocklist (`blocklist/ip.go`) does exact string equality — blocking `2405:200:802:2100:f4a5:f8aa:1234:5678` blocks only that one address. ISPs like Airtel assign IPv6 from large dynamic pools (often a `/64` per subscriber, `/32` or wider for the whole ISP), so a single-address block is ineffective against them.
+
+**What to add:**
+- `ip_rules` entries can optionally contain a CIDR (e.g. `2405:200::/24` or `203.0.113.0/24`) — store as-is in the DB, same column
+- `blocklist.IPBlocklist` on `Reload()` separates rules into an exact-match map (current) and a `[]*net.IPNet` slice for CIDR entries
+- `Check()` tries exact map first (O(1)), then iterates CIDRs — in practice the CIDR list stays small (a few dozen at most) so linear scan is fine
+- UI input validation: accept both plain IPs and CIDR notation, reject malformed entries via `net.ParseCIDR`
+
+**Files to touch:** `blocklist/ip.go`, `ui/handlers.go` (AddIPRule validation), `ui/templates/ip_rules.html` (placeholder text update).
 
 ---
 
