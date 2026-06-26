@@ -231,3 +231,42 @@
 
   document.body.addEventListener('rl-saved', closeModal);
 })();
+
+// Bot Protection modal — set per-service bot mode (inherit / always / off).
+(function () {
+  var overlay   = document.getElementById('bot-modal-overlay');
+  if (!overlay) return;
+
+  var nameLabel = document.getElementById('bot-modal-service-name');
+  var closeBtn  = document.getElementById('bot-modal-close');
+  var form      = document.getElementById('bot-form');
+  var idInput   = document.getElementById('bot-service-id');
+
+  function openModal(id, name, mode) {
+    idInput.value = id;
+    nameLabel.textContent = name;
+    var adminPath = form.dataset.adminPath || '/admin';
+    form.setAttribute('hx-post', adminPath + '/services/bot/' + id);
+    htmx.process(form);
+    var radio = overlay.querySelector('input[value="' + (mode || 'inherit') + '"]');
+    if (radio) radio.checked = true;
+    overlay.classList.remove('hidden');
+  }
+
+  function closeModal() { overlay.classList.add('hidden'); }
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.bot-manage-btn');
+    if (btn) openModal(btn.dataset.id, btn.dataset.name, btn.dataset.mode);
+  });
+
+  closeBtn.addEventListener('click', closeModal);
+  overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closeModal();
+  });
+
+  document.body.addEventListener('htmx:afterRequest', function (e) {
+    if (e.detail.elt === form && e.detail.successful) closeModal();
+  });
+})();

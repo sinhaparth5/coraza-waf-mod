@@ -204,6 +204,49 @@
     <div id="rl-error" class="text-[12px] text-red-500 mt-[10px]"></div>
   </div>
 </div>
+
+<!-- ── Bot Protection Modal ── -->
+<div id="bot-modal-overlay" class="hidden flex fixed inset-0 bg-slate-900/[.45] z-[200] items-center justify-center">
+  <div class="card w-[420px] p-6">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-[17px] font-bold text-slate-900">Bot Protection — <span id="bot-modal-service-name" class="text-brand"></span></h2>
+      <button type="button" id="bot-modal-close" class="bg-none border-none cursor-pointer text-slate-500 text-lg leading-none">&times;</button>
+    </div>
+
+    <form id="bot-form" hx-post="{{.AdminPath}}/services/bot/0" hx-target="#services-body" hx-swap="innerHTML" data-admin-path="{{.AdminPath}}">
+      <input type="hidden" name="service_id" id="bot-service-id"/>
+
+      <p class="text-[12px] text-slate-500 mb-4 leading-[1.5]">Choose how bot protection applies to this service. The global setting is configured on the <a href="{{.AdminPath}}/settings" class="text-brand underline">Settings</a> page.</p>
+
+      <div class="flex flex-col gap-3 mb-5">
+        <label class="flex items-start gap-3 cursor-pointer p-3 rounded-xl border border-line hover:border-brand transition-colors has-[:checked]:border-brand has-[:checked]:bg-green-50">
+          <input type="radio" name="bot_mode" value="inherit" class="mt-[3px] shrink-0 accent-brand"/>
+          <div>
+            <p class="text-[13px] font-semibold text-slate-800">Inherit global setting</p>
+            <p class="text-[12px] text-slate-500 mt-[2px]">Use whatever is configured on the Settings page. This is the default.</p>
+          </div>
+        </label>
+        <label class="flex items-start gap-3 cursor-pointer p-3 rounded-xl border border-line hover:border-brand transition-colors has-[:checked]:border-brand has-[:checked]:bg-green-50">
+          <input type="radio" name="bot_mode" value="always" class="mt-[3px] shrink-0 accent-brand"/>
+          <div>
+            <p class="text-[13px] font-semibold text-slate-800">Always challenge</p>
+            <p class="text-[12px] text-slate-500 mt-[2px]">Every client must solve the JS challenge before reaching this service, regardless of their score. Useful for sensitive admin or API endpoints.</p>
+          </div>
+        </label>
+        <label class="flex items-start gap-3 cursor-pointer p-3 rounded-xl border border-line hover:border-brand transition-colors has-[:checked]:border-brand has-[:checked]:bg-green-50">
+          <input type="radio" name="bot_mode" value="off" class="mt-[3px] shrink-0 accent-brand"/>
+          <div>
+            <p class="text-[13px] font-semibold text-slate-800">Disabled for this service</p>
+            <p class="text-[12px] text-slate-500 mt-[2px]">No bot challenge for this service, even if globally enabled. Use for public APIs or monitoring endpoints hit by legitimate automation.</p>
+          </div>
+        </label>
+      </div>
+
+      <button type="submit" class="btn-primary w-full">Save</button>
+    </form>
+    <div id="bot-error" class="text-[12px] text-red-500 mt-[10px]"></div>
+  </div>
+</div>
 {{end}}
 
 {{define "services-rows"}}
@@ -248,6 +291,14 @@
       data-id="{{.ID}}" data-name="{{.Name}}" data-rps="{{.RateLimitRPS}}" data-burst="{{.RateLimitBurst}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-time-04 text-xs"></i>
       Rate Limit
+    </button>
+    {{if ne .BotMode "inherit"}}
+    <span class="text-[11px] font-semibold {{if eq .BotMode "always"}}bg-purple-100 text-purple-600{{else}}bg-slate-100 text-slate-500{{end}} px-2 py-[2px] rounded-full">Bot: {{.BotMode}}</span>
+    {{end}}
+    <button type="button" class="bot-manage-btn inline-flex items-center gap-[5px] text-[11px] font-medium text-slate-500 bg-transparent border border-line rounded-full px-3 py-[5px] cursor-pointer font-sans hover:border-slate-400 transition-colors duration-150"
+      data-id="{{.ID}}" data-name="{{.Name}}" data-mode="{{.BotMode}}">
+      <i class="hgi hgi-stroke hgi-rounded hgi-bot text-xs"></i>
+      Bot
     </button>
     <span class="text-[12px] text-slate-400 whitespace-nowrap">{{fmtTime .CreatedAt}}</span>
     {{template "remove-btn" (map "URL" (printf "/admin/services/%d" .ID) "Target" "#services-body" "Confirm" (printf "Remove service %s?" .Name))}}

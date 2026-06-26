@@ -460,6 +460,55 @@
     </div>
   </div>
 
+  <!-- Bot Shield card -->
+  <div class="rounded-[20px] border border-line bg-white shadow-[0_1px_24px_0_rgba(0,0,0,0.06)] p-5 relative overflow-hidden">
+
+    <!-- Icon -->
+    <div class="w-[46px] h-[46px] rounded-xl bg-[#D0FBFF] flex items-center justify-center absolute left-5 top-5">
+      <svg width="20" height="22" viewBox="0 0 20 33" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M9.6444 0C9.6444 9.47484 0 16.2896 0 23.1048C0 28.3374 4.31784 32.5793 9.6444 32.5793C14.9702 32.5793 19.2877 28.3374 19.2877 23.1048C19.2877 16.2896 9.6444 9.47484 9.6444 0ZM13.5241 27.9857H5.76324V25.9193L13.5241 25.9207V27.9857ZM13.5241 20.8364L10.6967 20.835V23.616H8.58996V20.835H5.76288V18.7686H8.58996V15.9905H10.6967V18.7686H13.5241V20.8364Z" fill="#478F96"/>
+      </svg>
+    </div>
+
+    <!-- Title -->
+    <p class="text-[13px] font-semibold text-slate-700 absolute left-[73px] top-[29px]">Bot Shield</p>
+
+    <!-- Bots stopped (big) + users passed (muted) -->
+    <div class="flex items-baseline gap-[6px] mt-[70px] mb-[6px]">
+      <span class="text-[32px] font-bold text-[#272927] leading-none">{{.BotStats.ChallengedToday}}</span>
+      <span class="text-[15px] font-bold text-slate-400">/ {{.BotStats.PassedToday}}</span>
+      <span class="text-[11px] font-semibold text-slate-400">today</span>
+    </div>
+
+    <!-- Labels -->
+    <div class="flex items-center gap-3 mb-4">
+      <span class="text-[11px] text-slate-500">bots challenged</span>
+      <span class="text-slate-300">·</span>
+      <span class="text-[11px] text-slate-500">users passed</span>
+    </div>
+
+    <!-- Badge -->
+    <span class="inline-flex items-center gap-1 py-[3px] px-[9px] rounded bg-[#D0FBFF] text-[11px] font-semibold text-[#2a7a81] mb-4">
+      {{if gt .BotStats.ChallengedToday 0}}{{.BotStats.ChallengedToday}} bots stopped{{else}}All clear{{end}}
+    </span>
+
+    <!-- Decorative area chart (same paths as the reference design) -->
+    <div class="w-full h-[52px] relative">
+      <svg width="100%" height="52" viewBox="0 0 232 52" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M37.2 33.2C22.5 34.8 12.1 33.2 0 28.4V52H232V22.6C219.9 14.1 219.7 3.8 200.3 0.6C178.3 -3 168.8 10.4 146.3 12.6C120.2 15.1 103 4.5 78.5 10C56.9 14.9 60.3 31.2 37.2 33.2Z" fill="url(#botgrad)"/>
+        <defs>
+          <linearGradient id="botgrad" x1="116" y1="8" x2="116" y2="52" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#D0FBFF"/>
+            <stop offset="1" stop-color="#DDF2F4" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+      </svg>
+      <svg width="100%" height="36" viewBox="0 0 232 36" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg" class="absolute left-0 top-0">
+        <path d="M0 28.4C12.1 33.2 22.5 34.8 37.2 33.2C60.3 31.2 56.9 14.9 78.5 10C103 4.5 120.2 15.1 146.3 12.6C168.8 10.4 178.3 -3 200.3 0.6C219.7 3.8 219.9 14.1 232 22.6" stroke="#76C893" stroke-width="1.5"/>
+      </svg>
+    </div>
+  </div>
+
   <!-- Heading -->
   <div class="flex items-center justify-between">
     <div>

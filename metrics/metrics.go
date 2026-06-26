@@ -46,6 +46,11 @@ var (
 		Name: "coraza_rate_limited_total",
 		Help: "Requests denied by the per-IP rate limiter, labeled by app.",
 	}, []string{"app"})
+
+	BotChallengedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "coraza_bot_challenged_total",
+		Help: "Requests redirected to the JS PoW challenge because their bot anomaly score exceeded the threshold.",
+	}, []string{"app"})
 )
 
 // currentDB/currentRegistry/currentLimiter back the gauges below. Set once

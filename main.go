@@ -16,8 +16,10 @@ import (
 
 	"coraza-waf-mod/asn"
 	"coraza-waf-mod/blocklist"
+	"coraza-waf-mod/challenge"
 	"coraza-waf-mod/config"
 	"coraza-waf-mod/geo"
+	ja3pkg "coraza-waf-mod/ja3"
 	"coraza-waf-mod/metrics"
 	"coraza-waf-mod/proxy"
 	"coraza-waf-mod/ratelimit"
@@ -121,6 +123,35 @@ func main() {
 	// SSE stream with the real row ID, not a zero placeholder.
 	db.SetBroadcastFn(broadcaster.Broadcast)
 
+	// Bot protection: DB is the source of truth (managed via Settings page).
+	// config.yaml BotProtection fields are only used as fallback defaults on
+	// first startup before the user has touched the Settings page.
+	botEnabled, botThreshold, botTTL, _ := db.GetBotSettings()
+	// If the DB has never been configured, seed from config.yaml defaults.
+	if !botEnabled && cfg.BotProtection.Enabled {
+		botEnabled = cfg.BotProtection.Enabled
+		botThreshold = cfg.BotProtection.AnomalyThreshold
+		botTTL = cfg.BotProtection.ChallengeTTLSeconds
+	}
+
+	secret, err := db.GetOrCreateChallengeSecret()
+	if err != nil {
+		log.Fatalf("challenge secret: %v", err)
+	}
+
+	buildChallenger := func(enabled bool, threshold, ttl int) *challenge.Challenger {
+		if !enabled {
+			return nil
+		}
+		return challenge.New(secret, ttl, threshold)
+	}
+
+	var ch *challenge.Challenger
+	if botEnabled {
+		ch = buildChallenger(true, botThreshold, botTTL)
+		log.Printf("bot protection enabled (threshold=%d, ttl=%ds)", botThreshold, botTTL)
+	}
+
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(middleware.Recover())
@@ -134,13 +165,30 @@ func main() {
 		},
 	}))
 
-	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs)
+	h := proxy.NewHandler(registry, engine, db, ipbl, geoBl, rl, asnLookup, ch)
+
+	// reloadBot is called from the Settings page when bot protection config changes.
+	reloadBot := func(newCh *challenge.Challenger) {
+		h.ReloadBotProtection(newCh)
+	}
+
+	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs, reloadBot, buildChallenger)
 	if err != nil {
 		log.Fatalf("ui init: %v", err)
 	}
 	uiHandler.Register(e)
 
-	h := proxy.NewHandler(registry, engine, db, ipbl, geoBl, rl, asnLookup)
+	// Challenge routes must be registered before the catch-all proxy route so
+	// Echo routes them to the challenger, not the backend.
+	e.GET("/_cz/challenge", func(c echo.Context) error {
+		h.ServeChallengePage(c.Response().Writer, c.Request())
+		return nil
+	})
+	e.POST("/_cz/verify", func(c echo.Context) error {
+		h.ServeChallengeVerify(c.Response().Writer, c.Request())
+		return nil
+	})
+
 	e.Any("/*", h.Handle)
 
 	// SIGHUP: reload the WAF engine (picks up changes to rules_dir) without
@@ -211,7 +259,21 @@ func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db 
 
 	s := e.TLSServer
 	s.Addr = cfg.ListenAddrTLS
-	s.TLSConfig = &tls.Config{GetCertificate: registry.GetCertificateFunc(am)}
+
+	getCert := registry.GetCertificateFunc(am)
+	s.TLSConfig = &tls.Config{
+		GetCertificate: getCert,
+		// Capture the ClientHello so we can compute a JA3 fingerprint for each
+		// connection. The hash is stored in ja3pkg's sync.Map keyed by remoteAddr
+		// and retrieved later in the proxy handler when the HTTP request arrives.
+		GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+			hash := ja3pkg.Compute(hello)
+			if hash != "" {
+				ja3pkg.Store(hello.Conn.RemoteAddr().String(), hash)
+			}
+			return nil, nil
+		},
+	}
 
 	log.Printf("coraza-waf TLS on %s (waf=%v, apps=%d)", cfg.ListenAddrTLS, cfg.WAF.Enabled, appCount)
 	if err := e.StartServer(s); err != nil {

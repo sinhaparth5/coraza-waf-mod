@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -64,6 +65,8 @@ type RequestLog struct {
 	TLSSNI      string // SNI hostname from TLS ClientHello
 	ASN         uint   // autonomous system number
 	Org         string // ISP / organization name
+	JA3Hash     string // JA3 TLS fingerprint MD5 hex; empty for plain HTTP
+	BotScore    int    // anomaly score from bot signal analysis (0 = clean)
 }
 
 func Open(path string) (*DB, error) {
@@ -160,12 +163,15 @@ func (db *DB) migrate() error {
 	db.conn.Exec(`ALTER TABLE requests ADD COLUMN asn_num INTEGER NOT NULL DEFAULT 0`)          //nolint
 	db.conn.Exec(`ALTER TABLE requests ADD COLUMN org TEXT NOT NULL DEFAULT ''`)                //nolint
 	db.conn.Exec(`ALTER TABLE requests ADD COLUMN query TEXT NOT NULL DEFAULT ''`)              //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN ja3_hash TEXT NOT NULL DEFAULT ''`)           //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN bot_score INTEGER NOT NULL DEFAULT 0`)        //nolint
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_mode TEXT NOT NULL DEFAULT 'none'`)          //nolint
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_cert_path TEXT NOT NULL DEFAULT ''`)         //nolint
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_key_path TEXT NOT NULL DEFAULT ''`)          //nolint
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_expires_at TEXT NOT NULL DEFAULT ''`)        //nolint
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_rps REAL NOT NULL DEFAULT 0`)         //nolint
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_burst INTEGER NOT NULL DEFAULT 0`)    //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN bot_mode TEXT NOT NULL DEFAULT 'inherit'`)       //nolint
 
 	_, err := db.conn.Exec(`
 	CREATE TABLE IF NOT EXISTS requests (
@@ -192,7 +198,9 @@ func (db *DB) migrate() error {
 		tls_cipher   TEXT NOT NULL DEFAULT '',
 		tls_sni      TEXT NOT NULL DEFAULT '',
 		asn_num      INTEGER NOT NULL DEFAULT 0,
-		org          TEXT NOT NULL DEFAULT ''
+		org          TEXT NOT NULL DEFAULT '',
+		ja3_hash     TEXT NOT NULL DEFAULT '',
+		bot_score    INTEGER NOT NULL DEFAULT 0
 	);
 	CREATE INDEX IF NOT EXISTS idx_requests_ts         ON requests(ts);
 	CREATE INDEX IF NOT EXISTS idx_requests_ip         ON requests(real_ip);
@@ -235,7 +243,8 @@ func (db *DB) migrate() error {
 		tls_key_path     TEXT NOT NULL DEFAULT '',
 		tls_expires_at   TEXT NOT NULL DEFAULT '',
 		rate_limit_rps   REAL NOT NULL DEFAULT 0,
-		rate_limit_burst INTEGER NOT NULL DEFAULT 0
+		rate_limit_burst INTEGER NOT NULL DEFAULT 0,
+		bot_mode         TEXT NOT NULL DEFAULT 'inherit'
 	);
 
 	CREATE TABLE IF NOT EXISTS sessions (
@@ -369,6 +378,7 @@ type Service struct {
 	TLSExpiresAt   string
 	RateLimitRPS   float64
 	RateLimitBurst int
+	BotMode        string // "inherit" | "always" | "off"
 }
 
 func (db *DB) AddService(name, host, prefix, backend string, rps float64, burst int) error {
@@ -419,9 +429,51 @@ func (db *DB) SetServiceRateLimit(id int, rps float64, burst int) error {
 	return err
 }
 
+// SetServiceBotMode sets the per-service bot protection override.
+// mode must be one of "inherit", "always", or "off".
+func (db *DB) SetServiceBotMode(id int, mode string) error {
+	_, err := db.conn.Exec(`UPDATE services SET bot_mode = ? WHERE id = ?`, mode, id)
+	return err
+}
+
+// GetBotSettings reads global bot protection settings from the meta table.
+// Returns defaults (disabled, threshold=8, ttl=3600) if not yet configured.
+func (db *DB) GetBotSettings() (enabled bool, threshold, ttl int, err error) {
+	threshold, ttl = 8, 3600
+	if v, e := db.getMeta("bot_enabled"); e == nil {
+		enabled = v == "1"
+	}
+	if v, e := db.getMeta("bot_threshold"); e == nil && v != "" {
+		if n, e2 := strconv.Atoi(v); e2 == nil && n > 0 {
+			threshold = n
+		}
+	}
+	if v, e := db.getMeta("bot_ttl"); e == nil && v != "" {
+		if n, e2 := strconv.Atoi(v); e2 == nil && n > 0 {
+			ttl = n
+		}
+	}
+	return
+}
+
+// SetBotSettings persists global bot protection settings to the meta table.
+func (db *DB) SetBotSettings(enabled bool, threshold, ttl int) error {
+	v := "0"
+	if enabled {
+		v = "1"
+	}
+	if err := db.setMeta("bot_enabled", v); err != nil {
+		return err
+	}
+	if err := db.setMeta("bot_threshold", strconv.Itoa(threshold)); err != nil {
+		return err
+	}
+	return db.setMeta("bot_ttl", strconv.Itoa(ttl))
+}
+
 func (db *DB) ListServices() ([]Service, error) {
 	rows, err := db.conn.Query(
-		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst FROM services ORDER BY created_at ASC`,
+		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode FROM services ORDER BY created_at ASC`,
 	)
 	if err != nil {
 		return nil, err
@@ -431,7 +483,7 @@ func (db *DB) ListServices() ([]Service, error) {
 	var out []Service
 	for rows.Next() {
 		var s Service
-		if err := rows.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -443,9 +495,9 @@ func (db *DB) ListServices() ([]Service, error) {
 func (db *DB) GetService(id int) (Service, error) {
 	var s Service
 	err := db.conn.QueryRow(
-		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst FROM services WHERE id = ?`,
+		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode FROM services WHERE id = ?`,
 		id,
-	).Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst)
+	).Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode)
 	return s, err
 }
 
@@ -483,8 +535,9 @@ func (db *DB) InsertRequest(r RequestLog) (int64, error) {
 		INSERT INTO requests
 			(ts, app_name, real_ip, proxy_ip, country, method, host, path, query,
 			 status, blocked, rule_id, action, user_agent, duration_ms, headers_json,
-			 request_id, proto, tls_version, tls_cipher, tls_sni, asn_num, org)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 request_id, proto, tls_version, tls_cipher, tls_sni, asn_num, org,
+			 ja3_hash, bot_score)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.Timestamp.UTC(),
 		r.AppName,
 		r.RealIP,
@@ -508,6 +561,8 @@ func (db *DB) InsertRequest(r RequestLog) (int64, error) {
 		r.TLSSNI,
 		r.ASN,
 		r.Org,
+		r.JA3Hash,
+		r.BotScore,
 	)
 	if err != nil {
 		return 0, err
@@ -543,6 +598,8 @@ type LogDetail struct {
 	TLSSNI      string
 	ASN         uint
 	Org         string
+	JA3Hash     string
+	BotScore    int
 }
 
 // GetRequestByID fetches a single request log entry including all enrichment
@@ -553,13 +610,14 @@ func (db *DB) GetRequestByID(id int) (*LogDetail, error) {
 	err := db.conn.QueryRow(`
 		SELECT id, ts, app_name, real_ip, proxy_ip, country, method, host, path, query,
 		       status, blocked, rule_id, action, user_agent, duration_ms, headers_json,
-		       request_id, proto, tls_version, tls_cipher, tls_sni, asn_num, org
+		       request_id, proto, tls_version, tls_cipher, tls_sni, asn_num, org,
+		       ja3_hash, bot_score
 		FROM requests WHERE id = ?`, id).Scan(
 		&d.ID, &d.Timestamp, &d.AppName, &d.RealIP, &d.ProxyIP, &d.Country,
 		&d.Method, &d.Host, &d.Path, &d.Query,
 		&d.Status, &blocked, &d.RuleID, &d.Action, &d.UserAgent, &d.Duration,
 		&d.HeadersJSON, &d.RequestID, &d.Proto, &d.TLSVersion, &d.TLSCipher,
-		&d.TLSSNI, &d.ASN, &d.Org,
+		&d.TLSSNI, &d.ASN, &d.Org, &d.JA3Hash, &d.BotScore,
 	)
 	if err != nil {
 		return nil, err
@@ -575,6 +633,32 @@ type Stats struct {
 	BlockedToday int
 	TotalAll     int
 	BlockedAll   int
+}
+
+// BotStats holds today's bot-challenge vs clean-pass counts.
+type BotStats struct {
+	ChallengedToday int // requests redirected to the JS PoW challenge today
+	PassedToday     int // requests that reached a backend without being blocked today
+}
+
+// GetBotStats returns today's bot-challenge count alongside clean (unblocked)
+// requests. Same UTC-midnight boundary trick as GetStats — no SQLite date funcs.
+func (db *DB) GetBotStats() BotStats {
+	now := time.Now().UTC()
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	var challenged, total, blocked int
+	db.conn.QueryRow( //nolint
+		`SELECT
+			COUNT(*) FILTER (WHERE action = 'bot_challenge'),
+			COUNT(*),
+			COUNT(*) FILTER (WHERE blocked = 1)
+		FROM requests WHERE ts >= ?`, startOfDay,
+	).Scan(&challenged, &total, &blocked)
+	passed := total - blocked
+	if passed < 0 {
+		passed = 0
+	}
+	return BotStats{ChallengedToday: challenged, PassedToday: passed}
 }
 
 // GetStats computes today/all-time totals. "Today" is a UTC midnight
@@ -866,6 +950,25 @@ func (db *DB) PruneOldRequests(days int) (int64, error) {
 }
 
 const metaKeyNotificationsSeenAt = "notifications_seen_at"
+
+// GetOrCreateChallengeSecret returns the HMAC secret used to sign JS challenge
+// tokens and bypass cookies. If no secret is stored yet, a random 64-char hex
+// string is generated and persisted so it survives restarts (a new secret on
+// every restart would invalidate all outstanding bypass cookies).
+func (db *DB) GetOrCreateChallengeSecret() (string, error) {
+	const key = "challenge_secret"
+	secret, err := db.getMeta(key)
+	if err == nil && secret != "" {
+		return secret, nil
+	}
+	// Generate a new random secret and persist it.
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate challenge secret: %w", err)
+	}
+	secret = hex.EncodeToString(b)
+	return secret, db.setMeta(key, secret)
+}
 
 // GetAcmeEmail returns the Let's Encrypt contact email stored in the DB, or
 // "" if none has been set yet. Used by the TLS startup path and the admin UI.

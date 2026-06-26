@@ -271,7 +271,28 @@
         </div>
       </div>
 
-      <!-- ⑤ Security — only when blocked -->
+      <!-- ⑤ Bot Analysis — hidden when no data -->
+      <div id="ld-bot-section" class="hidden">
+        <p class="ld-section-title">Bot Analysis</p>
+        <div class="bg-surface border border-line rounded-2xl overflow-hidden">
+          <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
+            <i class="hgi hgi-stroke hgi-rounded hgi-bot text-slate-400 text-[16px] shrink-0"></i>
+            <div class="flex-1 min-w-0">
+              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">Anomaly Score</p>
+              <p id="ld-bot-score" class="mono text-[13px] text-slate-700"></p>
+            </div>
+          </div>
+          <div class="flex items-center gap-3 px-4 py-3">
+            <i class="hgi hgi-stroke hgi-rounded hgi-fingerprint-01 text-slate-400 text-[16px] shrink-0"></i>
+            <div class="flex-1 min-w-0">
+              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">JA3 Fingerprint</p>
+              <p id="ld-ja3" class="mono text-[13px] text-slate-700 break-all"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ⑥ Security — only when blocked -->
       <div id="ld-security" class="hidden">
         <p class="ld-section-title">Security Decision</p>
         <div class="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-start gap-3">

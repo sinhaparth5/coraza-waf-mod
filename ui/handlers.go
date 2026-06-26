@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"coraza-waf-mod/blocklist"
+	"coraza-waf-mod/challenge"
 	"coraza-waf-mod/config"
 	"coraza-waf-mod/geo"
 	"coraza-waf-mod/metrics"
@@ -67,22 +68,24 @@ var funcs = template.FuncMap{
 
 // Handler holds all UI dependencies.
 type Handler struct {
-	cfg         *config.Config
-	db          *storage.DB
-	ipbl        *blocklist.IPBlocklist
-	geoBl       *geo.Blocker
-	registry    *services.Registry
-	broadcaster *LogBroadcaster
-	tmpls       map[string]*template.Template
-	staticJS    fs.FS
-	staticImgs  fs.FS
+	cfg              *config.Config
+	db               *storage.DB
+	ipbl             *blocklist.IPBlocklist
+	geoBl            *geo.Blocker
+	registry         *services.Registry
+	broadcaster      *LogBroadcaster
+	tmpls            map[string]*template.Template
+	staticJS         fs.FS
+	staticImgs       fs.FS
+	reloadBot        func(*challenge.Challenger)
+	buildChallenger  func(enabled bool, threshold, ttl int) *challenge.Challenger
 }
 
 // NewHandler builds the UI handler. jsFS must contain the minified JS
 // assets at "static/js/dist/*" (see assets.go in the repo root); it's
 // served under /<admin_path>/static/js/. imgsFS must contain
 // "static/imgs/*"; it's served under /<admin_path>/static/imgs/.
-func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS) (*Handler, error) {
+func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger) (*Handler, error) {
 	sub, err := fs.Sub(jsFS, "static/js/dist")
 	if err != nil {
 		return nil, fmt.Errorf("sub static/js/dist: %w", err)
@@ -91,7 +94,7 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 	if err != nil {
 		return nil, fmt.Errorf("sub static/imgs: %w", err)
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -195,7 +198,9 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/services/tls/auto", h.EnableServiceAutoTLS)
 	g.POST("/services/tls/clear", h.ClearServiceTLS)
 	g.POST("/services/ratelimit", h.SetServiceRateLimit)
+	g.POST("/services/bot/:id", h.SetServiceBotMode)
 	g.POST("/settings/acme-email", h.SaveAcmeEmail)
+	g.POST("/settings/bot", h.SaveBotSettings)
 	g.GET("/settings", h.SettingsPage)
 	g.POST("/settings/credentials", h.ChangeCredentials)
 	g.GET("/settings/backup", h.BackupDB)
@@ -296,6 +301,7 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		allowedArc = usable - blockedArc
 		blockedOffset = -(allowedArc + gap)
 	}
+	botStats := h.db.GetBotStats()
 	return h.render(c, "dashboard", map[string]any{
 		"Stats":         stats,
 		"Recent":        recent,
@@ -307,6 +313,7 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		"BlockedArc":    blockedArc,
 		"BlockedOffset": blockedOffset,
 		"Apps":          h.registry.List(),
+		"BotStats":      botStats,
 	})
 }
 
@@ -582,6 +589,8 @@ func (h *Handler) LogDetail(c echo.Context) error {
 		"tls_sni":     d.TLSSNI,
 		"asn":         d.ASN,
 		"org":         d.Org,
+		"ja3_hash":    d.JA3Hash,
+		"bot_score":   d.BotScore,
 		"headers":     headers,
 	})
 }
@@ -981,9 +990,65 @@ func (h *Handler) SetServiceRateLimit(c echo.Context) error {
 
 func (h *Handler) SettingsPage(c echo.Context) error {
 	email, _ := h.db.GetAdminEmail()
+	botEnabled, botThreshold, botTTL, _ := h.db.GetBotSettings()
 	return h.render(c, "settings", map[string]any{
-		"AdminEmail": email,
+		"AdminEmail":   email,
+		"BotEnabled":   botEnabled,
+		"BotThreshold": botThreshold,
+		"BotTTL":       botTTL,
 	})
+}
+
+// SaveBotSettings persists global bot-protection settings and hot-reloads the
+// challenger so changes take effect without a server restart.
+func (h *Handler) SaveBotSettings(c echo.Context) error {
+	enabled := c.FormValue("bot_enabled") == "1"
+	threshold, _ := strconv.Atoi(c.FormValue("bot_threshold"))
+	ttl, _ := strconv.Atoi(c.FormValue("bot_ttl"))
+	if threshold <= 0 {
+		threshold = 8
+	}
+	if ttl <= 0 {
+		ttl = 3600
+	}
+
+	if err := h.db.SetBotSettings(enabled, threshold, ttl); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	if h.reloadBot != nil && h.buildChallenger != nil {
+		h.reloadBot(h.buildChallenger(enabled, threshold, ttl))
+	}
+
+	email, _ := h.db.GetAdminEmail()
+	return h.render(c, "settings", map[string]any{
+		"AdminEmail":    email,
+		"BotEnabled":    enabled,
+		"BotThreshold":  threshold,
+		"BotTTL":        ttl,
+		"BotSaveOK":     true,
+	})
+}
+
+// SetServiceBotMode sets the per-service bot protection override (inherit / always / off).
+func (h *Handler) SetServiceBotMode(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
+	}
+	mode := c.FormValue("bot_mode")
+	if mode != "inherit" && mode != "always" && mode != "off" {
+		mode = "inherit"
+	}
+	if err := h.db.SetServiceBotMode(id, mode); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	if err := h.registry.Reload(h.db); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	w := c.Response().Writer
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return h.tmpls["services"].ExecuteTemplate(w, "services-rows", h.serviceViews())
 }
 
 func (h *Handler) ChangeCredentials(c echo.Context) error {

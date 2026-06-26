@@ -7,15 +7,16 @@ import (
 )
 
 type Config struct {
-	ListenAddr    string          `yaml:"listen_addr"`
-	ListenAddrTLS string          `yaml:"listen_addr_tls"`
-	Apps          []App           `yaml:"apps"`
-	WAF           WAFConfig       `yaml:"waf"`
-	TLS           TLSConfig       `yaml:"tls"`
-	Geo           GeoConfig       `yaml:"geo"`
-	DB            DBConfig        `yaml:"db"`
-	Admin         AdminConfig     `yaml:"admin"`
-	RateLimit     RateLimitConfig `yaml:"rate_limit"`
+	ListenAddr    string              `yaml:"listen_addr"`
+	ListenAddrTLS string              `yaml:"listen_addr_tls"`
+	Apps          []App               `yaml:"apps"`
+	WAF           WAFConfig           `yaml:"waf"`
+	TLS           TLSConfig           `yaml:"tls"`
+	Geo           GeoConfig           `yaml:"geo"`
+	DB            DBConfig            `yaml:"db"`
+	Admin         AdminConfig         `yaml:"admin"`
+	RateLimit     RateLimitConfig     `yaml:"rate_limit"`
+	BotProtection BotProtectionConfig `yaml:"bot_protection"`
 }
 
 type App struct {
@@ -64,6 +65,21 @@ type RateLimitConfig struct {
 	Burst             int     `yaml:"burst"`
 }
 
+// BotProtectionConfig controls the JS proof-of-work challenge and bot signal
+// scoring. Disabled by default; enable once you understand how it will affect
+// your traffic (it challenges any client whose anomaly score reaches the
+// threshold, including automated monitoring or API clients without browsers).
+type BotProtectionConfig struct {
+	Enabled    bool `yaml:"enabled"`
+	// AnomalyThreshold is the bot signal score at which a JS challenge is
+	// issued. Default 8. Scanners (sqlmap, nikto, etc.) always score ≥ 10
+	// and are challenged regardless.
+	AnomalyThreshold int `yaml:"anomaly_threshold"`
+	// ChallengeTTLSeconds is how long the bypass cookie stays valid after a
+	// successful solve (default 3600 = 1 hour).
+	ChallengeTTLSeconds int `yaml:"challenge_ttl"`
+}
+
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -100,5 +116,11 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.RateLimit.Burst <= 0 {
 		cfg.RateLimit.Burst = 20
+	}
+	if cfg.BotProtection.AnomalyThreshold <= 0 {
+		cfg.BotProtection.AnomalyThreshold = 8
+	}
+	if cfg.BotProtection.ChallengeTTLSeconds <= 0 {
+		cfg.BotProtection.ChallengeTTLSeconds = 3600
 	}
 }

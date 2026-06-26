@@ -17,7 +17,10 @@ import (
 
 	"coraza-waf-mod/asn"
 	"coraza-waf-mod/blocklist"
+	"coraza-waf-mod/bot"
+	"coraza-waf-mod/challenge"
 	"coraza-waf-mod/geo"
+	ja3pkg "coraza-waf-mod/ja3"
 	"coraza-waf-mod/metrics"
 	"coraza-waf-mod/ratelimit"
 	"coraza-waf-mod/services"
@@ -30,14 +33,16 @@ import (
 const serverHeader = "Coraza WAF Mod"
 
 type Handler struct {
-	wafMu     sync.RWMutex
-	waf       *waf.Engine
-	db        *storage.DB
-	ipbl      *blocklist.IPBlocklist
-	geoBl     *geo.Blocker
-	asnLookup *asn.Lookup
-	ratelimit *ratelimit.Limiter
-	registry  *services.Registry
+	wafMu        sync.RWMutex
+	waf          *waf.Engine
+	challengerMu sync.RWMutex
+	challenger   *challenge.Challenger // nil = bot protection disabled
+	db           *storage.DB
+	ipbl         *blocklist.IPBlocklist
+	geoBl        *geo.Blocker
+	asnLookup    *asn.Lookup
+	ratelimit    *ratelimit.Limiter
+	registry     *services.Registry
 }
 
 // ReloadWAF swaps in a freshly built WAF engine without dropping in-flight
@@ -49,15 +54,57 @@ func (h *Handler) ReloadWAF(e *waf.Engine) {
 	log.Printf("WAF engine reloaded")
 }
 
-func NewHandler(registry *services.Registry, engine *waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, rl *ratelimit.Limiter, asnLookup *asn.Lookup) *Handler {
+// ReloadBotProtection swaps the JS challenge configuration at runtime without
+// a restart. Pass nil to disable bot protection. Called from the Settings page.
+func (h *Handler) ReloadBotProtection(ch *challenge.Challenger) {
+	h.challengerMu.Lock()
+	h.challenger = ch
+	h.challengerMu.Unlock()
+	if ch != nil {
+		log.Printf("bot protection reloaded (threshold=%d)", ch.Threshold())
+	} else {
+		log.Printf("bot protection disabled")
+	}
+}
+
+// ServeChallengePage proxies to the active challenger's page handler, if any.
+// Registered as GET /_cz/challenge so the route always exists even when bot
+// protection is toggled on/off at runtime.
+func (h *Handler) ServeChallengePage(w http.ResponseWriter, r *http.Request) {
+	h.challengerMu.RLock()
+	ch := h.challenger
+	h.challengerMu.RUnlock()
+	if ch == nil {
+		http.NotFound(w, r)
+		return
+	}
+	ch.ServePage(w, r)
+}
+
+// ServeChallengeVerify proxies to the active challenger's verify handler.
+func (h *Handler) ServeChallengeVerify(w http.ResponseWriter, r *http.Request) {
+	h.challengerMu.RLock()
+	ch := h.challenger
+	h.challengerMu.RUnlock()
+	if ch == nil {
+		http.NotFound(w, r)
+		return
+	}
+	ch.ServeVerify(w, r)
+}
+
+// NewHandler builds the proxy pipeline. Pass nil for ch to disable bot
+// protection / JS challenge (the default when bot_protection.enabled = false).
+func NewHandler(registry *services.Registry, engine *waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, rl *ratelimit.Limiter, asnLookup *asn.Lookup, ch *challenge.Challenger) *Handler {
 	return &Handler{
-		waf:       engine,
-		db:        db,
-		ipbl:      ipbl,
-		geoBl:     geoBl,
-		asnLookup: asnLookup,
-		ratelimit: rl,
-		registry:  registry,
+		waf:        engine,
+		db:         db,
+		ipbl:       ipbl,
+		geoBl:      geoBl,
+		asnLookup:  asnLookup,
+		ratelimit:  rl,
+		registry:   registry,
+		challenger: ch,
 	}
 }
 
@@ -80,6 +127,16 @@ func (h *Handler) Handle(c echo.Context) error {
 	// Enrich once per request — all lookups are in-process memory reads.
 	asnNum, org := h.asnLookup.Lookup(clientIP)
 	tlsVer, tlsCipher, tlsSNI := tlsInfo(r)
+
+	// Bot signal analysis + JA3 fingerprint (both O(1), no I/O).
+	botAnalysis := bot.Analyze(r)
+	// JA3: prefer the Cloudflare header (only set when RemoteAddr is a CF IP),
+	// then fall back to the per-connection store populated by TLS handshake.
+	ja3Hash := r.Header.Get("Cf-Ja3-Fp")
+	if ja3Hash == "" {
+		ja3Hash = ja3pkg.Get(r.RemoteAddr)
+	}
+
 	meta := reqMeta{
 		RequestID:  reqID,
 		Proto:      r.Proto,
@@ -89,6 +146,29 @@ func (h *Handler) Handle(c echo.Context) error {
 		ASN:        asnNum,
 		Org:        org,
 		Query:      r.URL.RawQuery,
+		JA3Hash:    ja3Hash,
+		BotScore:   botAnalysis.Score,
+	}
+
+	// Bot protection: challenge clients based on global setting + per-service override.
+	// challengerMu guards live hot-reloads from the Settings page.
+	h.challengerMu.RLock()
+	ch := h.challenger
+	h.challengerMu.RUnlock()
+
+	if ch != nil && !botAnalysis.IsTrustedCrawler {
+		svcMode := "inherit"
+		if app != nil && app.BotMode != "" {
+			svcMode = app.BotMode
+		}
+		if svcMode != "off" && !ch.PassedChallenge(r) {
+			score := botAnalysis.Score
+			if svcMode == "always" || score >= ch.Threshold() {
+				metrics.BotChallengedTotal.WithLabelValues(appName).Inc()
+				h.logBlocked(r, appName, clientIP, "", http.StatusTemporaryRedirect, 0, "bot_challenge", time.Since(start), meta)
+				return c.Redirect(http.StatusTemporaryRedirect, ch.ChallengeURL(r.RequestURI))
+			}
+		}
 	}
 
 	// Country lookup (used for logging even when not geo-blocked).
@@ -215,6 +295,8 @@ type reqMeta struct {
 	ASN        uint
 	Org        string
 	Query      string
+	JA3Hash    string
+	BotScore   int
 }
 
 func (h *Handler) logRequest(r *http.Request, appName, clientIP, country string, status int, wafResult *waf.Result, dur time.Duration, m reqMeta) {
@@ -242,6 +324,8 @@ func (h *Handler) logRequest(r *http.Request, appName, clientIP, country string,
 		TLSSNI:      m.TLSSNI,
 		ASN:         m.ASN,
 		Org:         m.Org,
+		JA3Hash:     m.JA3Hash,
+		BotScore:    m.BotScore,
 	})
 }
 
@@ -270,6 +354,8 @@ func (h *Handler) logBlocked(r *http.Request, appName, clientIP, country string,
 		TLSSNI:      m.TLSSNI,
 		ASN:         m.ASN,
 		Org:         m.Org,
+		JA3Hash:     m.JA3Hash,
+		BotScore:    m.BotScore,
 	})
 }
 

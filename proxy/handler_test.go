@@ -64,7 +64,7 @@ func newTestHandler(t *testing.T, backend *httptest.Server) *proxy.Handler {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	t.Cleanup(func() { rl.Stop() })
 
-	return proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil)
+	return proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil)
 }
 
 func TestNormalRequestProxied(t *testing.T) {
@@ -153,7 +153,7 @@ func TestIPBlocklistBlocks(t *testing.T) {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 
-	h2 := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil)
+	h2 := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil)
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -189,7 +189,7 @@ func TestRateLimitReturns429(t *testing.T) {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: true, RequestsPerSecond: 1, Burst: 1})
 	defer rl.Stop()
 
-	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil)
+	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil)
 	e := echo.New()
 
 	sendReq := func() int {
@@ -230,7 +230,7 @@ func TestCFConnectingIPUsedAsRealIP(t *testing.T) {
 	defer rl.Stop()
 
 	_ = capturedRemote
-	h2 := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil)
+	h2 := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil)
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -268,7 +268,7 @@ func TestCFConnectingIPSpoofIgnored(t *testing.T) {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 
-	h2 := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil)
+	h2 := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil)
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -311,7 +311,7 @@ func TestRateLimitHeadersPresent(t *testing.T) {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 
-	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil)
+	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil)
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
