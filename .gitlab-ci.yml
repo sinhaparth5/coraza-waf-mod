@@ -1,0 +1,134 @@
+# ── Coraza WAF Mod CI/CD ─────────────────────────────────────────────────────
+# Triggers:
+#   • Every push / MR  → runs tests only
+#   • git tag v*       → tests → cross-compile → upload to Package Registry
+#                         → create GitLab Release with asset links
+#
+# To cut a release:
+#   git tag v1.0.0 && git push origin v1.0.0
+#
+# After the pipeline finishes the single-line installer works:
+#   curl -fsSL https://gitlab.com/sinhaparth5/coraza-waf-mod/-/raw/main/deploy/install.sh | sudo bash
+
+stages:
+  - test
+  - dist
+  - release
+
+variables:
+  PACKAGE_NAME: coraza-waf-mod
+  PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PACKAGE_NAME}"
+
+# ── Test ──────────────────────────────────────────────────────────────────────
+test:
+  stage: test
+  image: golang:1.25-alpine
+  before_script:
+    - apk add --no-cache make git
+  script:
+    - go test ./...
+  rules:
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+# ── Cross-compile release binaries ────────────────────────────────────────────
+dist:
+  stage: dist
+  image: golang:1.25-alpine
+  needs: [test]
+  before_script:
+    - apk add --no-cache make git
+  script:
+    - make dist
+    - make checksums
+  artifacts:
+    name: "${PACKAGE_NAME}-${CI_COMMIT_TAG}"
+    paths:
+      - dist/
+    expire_in: 7 days
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+/'
+
+# ── Upload binaries to the Generic Package Registry ───────────────────────────
+upload:
+  stage: release
+  image: alpine:latest
+  needs: [dist]
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - |
+      BASE="${PACKAGE_REGISTRY_URL}/${CI_COMMIT_TAG}"
+      for asset in \
+        dist/${PACKAGE_NAME}-linux-amd64 \
+        dist/${PACKAGE_NAME}-linux-arm64 \
+        dist/${PACKAGE_NAME}-windows-amd64.exe \
+        dist/checksums.txt; do
+        name="$(basename "$asset")"
+        echo "==> Uploading $name ..."
+        curl --fail --silent --show-error \
+          --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+          --upload-file "$asset" \
+          "${BASE}/${name}"
+        echo "    done."
+      done
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+/'
+
+# ── Create GitLab Release ─────────────────────────────────────────────────────
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs: [upload]
+  variables:
+    PKGS: "${PACKAGE_REGISTRY_URL}/${CI_COMMIT_TAG}"
+    INSTALL_URL: "https://gitlab.com/sinhaparth5/coraza-waf-mod/-/raw/main/deploy/install.sh"
+  script:
+    - echo "Publishing release ${CI_COMMIT_TAG}"
+  release:
+    tag_name: "${CI_COMMIT_TAG}"
+    name: "Coraza WAF Mod ${CI_COMMIT_TAG}"
+    description: |
+      ## Install (Linux)
+
+      ```bash
+      curl -fsSL https://gitlab.com/sinhaparth5/coraza-waf-mod/-/raw/main/deploy/install.sh | sudo bash
+      ```
+
+      Pin to this exact version:
+      ```bash
+      curl -fsSL https://gitlab.com/sinhaparth5/coraza-waf-mod/-/raw/main/deploy/install.sh | sudo CORAZA_VERSION=${CI_COMMIT_TAG} bash
+      ```
+
+      Re-running the installer is safe — it upgrades the binary and restarts the service without touching your existing config or database.
+
+      ## Verify checksums
+
+      ```bash
+      sha256sum --check checksums.txt
+      ```
+
+      ## What's inside the binary
+
+      Everything is embedded — no external files needed at runtime:
+      - Admin UI (HTMX + Tailwind templates + minified JS)
+      - Bundled GeoLite2 Country database (geo blocking)
+      - Bundled DB-IP ASN Lite database (ISP/org lookup)
+      - OWASP Core Rule Set (WAF rules)
+
+      The only files created on disk at runtime are `waf.db` (SQLite) and `certs/` (TLS, if enabled).
+    assets:
+      links:
+        - name: "coraza-waf-mod-linux-amd64"
+          url: "${PKGS}/coraza-waf-mod-linux-amd64"
+          link_type: package
+        - name: "coraza-waf-mod-linux-arm64"
+          url: "${PKGS}/coraza-waf-mod-linux-arm64"
+          link_type: package
+        - name: "coraza-waf-mod-windows-amd64.exe"
+          url: "${PKGS}/coraza-waf-mod-windows-amd64.exe"
+          link_type: package
+        - name: "checksums.txt"
+          url: "${PKGS}/checksums.txt"
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+/'

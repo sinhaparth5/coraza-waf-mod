@@ -1134,6 +1134,13 @@ func (db *DB) GetOrCreateChallengeSecret() (string, error) {
 // "" if none has been set yet. Used by the TLS startup path and the admin UI.
 func (db *DB) GetAcmeEmail() (string, error) { return db.getMeta("acme_email") }
 
+// GetPrimaryDomain returns the primary domain stored during setup (used for
+// ACME host policy so the admin UI domain gets an auto-issued cert).
+func (db *DB) GetPrimaryDomain() (string, error) { return db.getMeta("primary_domain") }
+
+// SetPrimaryDomain stores the primary domain for ACME certificate issuance.
+func (db *DB) SetPrimaryDomain(domain string) error { return db.setMeta("primary_domain", domain) }
+
 // SetAcmeEmail stores the Let's Encrypt contact email. Must be set before
 // any service can use auto-issue TLS.
 func (db *DB) SetAcmeEmail(email string) error { return db.setMeta("acme_email", email) }
@@ -1193,6 +1200,25 @@ func (db *DB) BackupTo(path string) error {
 // ── Admin auth & sessions ─────────────────────────────────────────────────────
 
 const sessionTTL = 24 * time.Hour
+
+// SeedAdmin sets admin credentials from the CLI setup subcommand. Idempotent —
+// on upgrades (credentials already exist) it logs and returns nil without
+// overwriting the stored password, so re-running the installer is safe.
+func (db *DB) SeedAdmin(email, password string) error {
+	existing, _ := db.getMeta("admin_email")
+	if existing != "" {
+		log.Printf("admin credentials already exist for %s — skipping", existing)
+		return nil
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+	if err := db.setMeta("admin_email", email); err != nil {
+		return err
+	}
+	return db.setMeta("admin_password_hash", string(hash))
+}
 
 // SeedTestAdmin creates a default admin account (admin@localhost / admin123)
 // if no admin credentials exist in the DB yet. Called once on startup during

@@ -6,11 +6,24 @@
 package main
 
 import (
+	"bufio"
+	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"flag"
+	"fmt"
 	"log"
+	"math/big"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -35,33 +48,52 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 )
 
+// version is set at build time via -ldflags "-X main.version=vX.Y.Z".
+var version = "dev"
+
 func main() {
-	args := os.Args[1:]
-
-	// `coraza-waf-mod prune [config.yaml]` opens just the DB, deletes logs
-	// older than the configured retention window, and exits — meant to be
-	// invoked by an external scheduler (cron, or a systemd timer; see
-	// deploy/coraza-waf-mod-prune.{service,timer}) instead of running inside
-	// the long-lived server process, so a multi-second batched delete never
-	// has to share that process's DB connection pool with live traffic.
-	if len(args) > 0 && args[0] == "prune" {
-		cfgPath := "config.yaml"
-		if len(args) > 1 {
-			cfgPath = args[1]
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--version", "version":
+			fmt.Println("coraza-waf-mod", version)
+			return
+		case "prune":
+			runPruneOnly(os.Args[2:])
+			return
+		case "setup":
+			runSetup(os.Args[2:])
+			return
+		case "gencert":
+			runGencert(os.Args[2:])
+			return
 		}
-		runPruneOnly(cfgPath)
-		return
 	}
 
-	cfgPath := "config.yaml"
-	if len(args) > 0 {
-		cfgPath = args[0]
-	}
+	// CLI flags for bootstrap settings. All runtime knobs (WAF rules, bot
+	// protection, Redis, ACME email, per-service overrides) live in the SQLite
+	// meta table and are managed from the admin UI — no config file needed.
+	fs := flag.NewFlagSet("coraza-waf-mod", flag.ExitOnError)
+	listen    := fs.String("listen",     ":8080",   "HTTP listen address")
+	listenTLS := fs.String("listen-tls", "",        "HTTPS listen address (empty = HTTP only)")
+	dbPath    := fs.String("db",         "waf.db",  "SQLite database path")
+	certsDir  := fs.String("certs",      "./certs", "TLS certificate cache directory")
+	wafRules  := fs.String("waf-rules",  "",        "extra WAF rules directory (empty = OWASP CRS only)")
+	geoDBPath := fs.String("geo-db",     "",        "GeoIP2 database path (empty = bundled)")
+	retention := fs.Int("retention",     30,        "request log retention in days (0 = keep forever)")
+	tlsCert   := fs.String("tls-cert",   "",        "PEM certificate file for HTTPS fallback (self-signed)")
+	tlsKey    := fs.String("tls-key",    "",        "PEM private key file for HTTPS fallback (self-signed)")
+	fs.Parse(os.Args[1:])
 
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		log.Fatalf("config: %v", err)
-	}
+	cfg := config.Defaults()
+	cfg.ListenAddr            = *listen
+	cfg.ListenAddrTLS         = *listenTLS
+	cfg.DB.Path               = *dbPath
+	cfg.TLS.CacheDir          = *certsDir
+	cfg.TLS.FallbackCertFile  = *tlsCert
+	cfg.TLS.FallbackKeyFile   = *tlsKey
+	cfg.WAF.RulesDir          = *wafRules
+	cfg.Geo.DBPath            = *geoDBPath
+	cfg.DB.LogRetentionDays   = *retention
 
 	db, err := storage.Open(cfg.DB.Path)
 	if err != nil {
@@ -120,14 +152,9 @@ func main() {
 		defer asnLookup.Close()
 	}
 
-	// One-time migration: legacy config.yaml apps: entries become rows in
-	// the services table, so the admin Services page is the source of
-	// truth going forward.
-	legacyApps := make([]storage.ConfigApp, len(cfg.Apps))
-	for i, a := range cfg.Apps {
-		legacyApps[i] = storage.ConfigApp{Name: a.Name, Host: a.Host, Prefix: a.Prefix, Backend: a.Backend}
-	}
-	if err := db.MigrateConfigApps(legacyApps); err != nil {
+	// One-time migration marker: no config file to migrate from, but we still
+	// need to set the "already migrated" flag so the DB doesn't wait for it.
+	if err := db.MigrateConfigApps(nil); err != nil {
 		log.Fatalf("migrate config apps: %v", err)
 	}
 
@@ -150,16 +177,8 @@ func main() {
 	defer webhookPusher.Stop()
 	db.SetWebhookFn(webhookPusher.Push)
 
-	// Bot protection: DB is the source of truth (managed via Settings page).
-	// config.yaml BotProtection fields are only used as fallback defaults on
-	// first startup before the user has touched the Settings page.
+	// Bot protection settings come entirely from the DB (managed via Settings page).
 	botEnabled, botThreshold, botTTL, _ := db.GetBotSettings()
-	// If the DB has never been configured, seed from config.yaml defaults.
-	if !botEnabled && cfg.BotProtection.Enabled {
-		botEnabled = cfg.BotProtection.Enabled
-		botThreshold = cfg.BotProtection.AnomalyThreshold
-		botTTL = cfg.BotProtection.ChallengeTTLSeconds
-	}
 
 	secret, err := db.GetOrCreateChallengeSecret()
 	if err != nil {
@@ -258,8 +277,8 @@ func main() {
 
 	appCount := len(registry.List())
 
-	// TLS only starts when listen_addr_tls is explicitly set in config.yaml.
-	// Certificate config (ACME email, per-service certs) lives entirely in the DB.
+	// TLS only starts when --listen-tls is provided. Certificate config
+	// (ACME email, per-service certs) lives entirely in the DB.
 	if cfg.ListenAddrTLS != "" {
 		startTLS(e, cfg, registry, db, appCount)
 		return
@@ -272,24 +291,46 @@ func main() {
 }
 
 // startTLS is the single entry point for HTTPS. It reads the ACME contact
-// email from the DB (not config.yaml), builds an autocert manager if present,
-// then starts HTTP on cfg.ListenAddr (ACME challenge handler + HTTPS redirect)
-// and HTTPS on cfg.ListenAddrTLS. Per-service custom certs take priority over
-// autocert by SNI (see services.Registry.GetCertificateFunc).
+// email from the DB, builds an autocert manager if present, then starts HTTP
+// on cfg.ListenAddr (ACME challenge handler + HTTPS redirect) and HTTPS on
+// cfg.ListenAddrTLS. Per-service custom certs take priority over autocert by
+// SNI (see services.Registry.GetCertificateFunc).
 func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db *storage.DB, appCount int) {
-	email, _ := db.GetAcmeEmail()
+	email, _         := db.GetAcmeEmail()
+	primaryDomain, _ := db.GetPrimaryDomain()
 
 	var am *autocert.Manager
 	if email != "" {
 		if err := os.MkdirAll(cfg.TLS.CacheDir, 0700); err != nil {
 			log.Fatalf("cannot create cert cache dir %s: %v", cfg.TLS.CacheDir, err)
 		}
+		// HostPolicy allows services with tls_mode="auto" AND the primary domain
+		// (so the admin dashboard's domain gets a Let's Encrypt cert automatically).
+		basePolicy := registry.HostPolicy()
+		primary    := strings.ToLower(primaryDomain)
 		am = &autocert.Manager{
-			Prompt:     autocert.AcceptTOS,
-			HostPolicy: registry.HostPolicy(),
-			Cache:      autocert.DirCache(cfg.TLS.CacheDir),
-			Email:      email,
+			Prompt: autocert.AcceptTOS,
+			HostPolicy: func(ctx context.Context, host string) error {
+				if primary != "" && strings.ToLower(host) == primary {
+					return nil
+				}
+				return basePolicy(ctx, host)
+			},
+			Cache: autocert.DirCache(cfg.TLS.CacheDir),
+			Email: email,
 		}
+	}
+
+	// Load self-signed fallback cert (used when no per-service/ACME cert matches,
+	// e.g. when accessing by IP address or before ACME provisioning completes).
+	var fallbackCert *tls.Certificate
+	if cfg.TLS.FallbackCertFile != "" && cfg.TLS.FallbackKeyFile != "" {
+		cert, err := tls.LoadX509KeyPair(cfg.TLS.FallbackCertFile, cfg.TLS.FallbackKeyFile)
+		if err != nil {
+			log.Fatalf("load fallback TLS cert: %v", err)
+		}
+		fallbackCert = &cert
+		log.Printf("tls: loaded fallback cert from %s", cfg.TLS.FallbackCertFile)
 	}
 
 	// HTTP: ACME HTTP-01 challenge handler (if autocert active) + HTTPS redirect.
@@ -308,7 +349,28 @@ func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db 
 	s := e.TLSServer
 	s.Addr = cfg.ListenAddrTLS
 
-	getCert := registry.GetCertificateFunc(am)
+	// Certificate resolution order:
+	//   1. Per-service uploaded cert (by SNI)
+	//   2. Per-service / primary-domain ACME cert (by SNI)
+	//   3. Self-signed fallback (IP access or ACME not yet provisioned)
+	getCertBase := registry.GetCertificateFunc(am)
+	primaryLower := strings.ToLower(primaryDomain)
+	getCert := func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		cert, err := getCertBase(hello)
+		if err == nil {
+			return cert, nil
+		}
+		// Primary domain via ACME (not registered as a service).
+		if am != nil && primaryLower != "" && strings.ToLower(hello.ServerName) == primaryLower {
+			return am.GetCertificate(hello)
+		}
+		// Fallback: self-signed cert (covers IP-based access).
+		if fallbackCert != nil {
+			return fallbackCert, nil
+		}
+		return nil, err
+	}
+
 	s.TLSConfig = &tls.Config{
 		GetCertificate: getCert,
 		// Capture the ClientHello so we can compute a JA3 fingerprint for each
@@ -331,30 +393,148 @@ func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db 
 
 // runPruneOnly opens the DB, deletes request logs older than the configured
 // retention window, logs the result, and returns — it does not start the WAF,
-// proxy, or admin UI. retentionDays <= 0 disables pruning (logs kept forever).
-func runPruneOnly(cfgPath string) {
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		log.Fatalf("config: %v", err)
-	}
-	if cfg.DB.LogRetentionDays <= 0 {
-		log.Printf("log retention: disabled (log_retention_days <= 0), nothing to prune")
+// proxy, or admin UI. retention <= 0 disables pruning (logs kept forever).
+// Invoked as: coraza-waf-mod prune [--db path] [--retention days]
+func runPruneOnly(args []string) {
+	fs := flag.NewFlagSet("prune", flag.ExitOnError)
+	dbPath    := fs.String("db",        "waf.db", "SQLite database path")
+	retention := fs.Int("retention",    30,        "log retention in days (0 = keep forever)")
+	fs.Parse(args)
+
+	if *retention <= 0 {
+		log.Printf("log retention: disabled (retention <= 0), nothing to prune")
 		return
 	}
 
-	db, err := storage.Open(cfg.DB.Path)
+	db, err := storage.Open(*dbPath)
 	if err != nil {
 		log.Fatalf("db: %v", err)
 	}
 	defer db.Close()
 
 	start := time.Now()
-	n, err := db.PruneOldRequests(cfg.DB.LogRetentionDays)
+	n, err := db.PruneOldRequests(*retention)
 	dur := time.Since(start)
 	if err != nil {
 		log.Fatalf("log retention: prune failed after %s: %v", dur, err)
 	}
-	log.Printf("log retention: deleted %d requests older than %d days (took %s)", n, cfg.DB.LogRetentionDays, dur)
+	log.Printf("log retention: deleted %d requests older than %d days (took %s)", n, *retention, dur)
+}
+
+// runSetup seeds admin credentials and optional TLS config into the DB, then
+// exits. Idempotent for admin credentials — on upgrades (credentials already
+// exist) it skips that step, so re-running the installer never overwrites a
+// changed password. Domain and ACME email are always overwritten (safe to
+// update during upgrades).
+// Invoked as: coraza-waf-mod setup --db path --admin-email email [--domain d] [--acme-email e]
+// Password is read from stdin (one line).
+func runSetup(args []string) {
+	fs := flag.NewFlagSet("setup", flag.ExitOnError)
+	dbPath     := fs.String("db",          "waf.db", "SQLite database path")
+	adminEmail := fs.String("admin-email", "",       "admin email address")
+	domain     := fs.String("domain",      "",       "primary domain for ACME (Let's Encrypt)")
+	acmeEmail  := fs.String("acme-email",  "",       "ACME contact email (defaults to admin email)")
+	fs.Parse(args)
+
+	if *adminEmail == "" {
+		log.Fatal("setup: --admin-email is required")
+	}
+
+	fmt.Fprint(os.Stderr, "Admin password: ")
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Scan()
+	password := strings.TrimSpace(scanner.Text())
+	if password == "" {
+		log.Fatal("setup: password cannot be empty")
+	}
+
+	db, err := storage.Open(*dbPath)
+	if err != nil {
+		log.Fatalf("db: %v", err)
+	}
+	defer db.Close()
+
+	if err := db.SeedAdmin(*adminEmail, password); err != nil {
+		log.Fatalf("setup: %v", err)
+	}
+	log.Printf("setup: admin account configured (%s)", *adminEmail)
+
+	if *domain != "" {
+		if err := db.SetPrimaryDomain(*domain); err != nil {
+			log.Fatalf("setup: store domain: %v", err)
+		}
+		contactEmail := *acmeEmail
+		if contactEmail == "" {
+			contactEmail = *adminEmail
+		}
+		if err := db.SetAcmeEmail(contactEmail); err != nil {
+			log.Fatalf("setup: store acme email: %v", err)
+		}
+		log.Printf("setup: ACME configured for domain %s (contact: %s)", *domain, contactEmail)
+	}
+}
+
+// runGencert generates a self-signed ECDSA P-256 certificate and writes PEM
+// files. The certificate includes the provided hostnames/IPs as SANs so
+// browsers don't get a hostname-mismatch error on IP-based access.
+// Invoked as: coraza-waf-mod gencert --cert path --key path --hosts ip1,ip2,...
+func runGencert(args []string) {
+	fs := flag.NewFlagSet("gencert", flag.ExitOnError)
+	certFile := fs.String("cert",  "cert.pem",  "output PEM certificate file")
+	keyFile  := fs.String("key",   "key.pem",   "output PEM private key file")
+	hosts    := fs.String("hosts", "",           "comma-separated hostnames and/or IP addresses for SANs")
+	days     := fs.Int("days",     3650,         "certificate validity in days")
+	fs.Parse(args)
+
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		log.Fatalf("gencert: generate key: %v", err)
+	}
+
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "Coraza WAF Mod"},
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(time.Duration(*days) * 24 * time.Hour),
+		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	for _, h := range strings.Split(*hosts, ",") {
+		h = strings.TrimSpace(h)
+		if h == "" {
+			continue
+		}
+		if ip := net.ParseIP(h); ip != nil {
+			template.IPAddresses = append(template.IPAddresses, ip)
+		} else {
+			template.DNSNames = append(template.DNSNames, h)
+		}
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &priv.PublicKey, priv)
+	if err != nil {
+		log.Fatalf("gencert: create certificate: %v", err)
+	}
+	keyDER, err := x509.MarshalECPrivateKey(priv)
+	if err != nil {
+		log.Fatalf("gencert: marshal key: %v", err)
+	}
+
+	cf, err := os.OpenFile(*certFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		log.Fatalf("gencert: open cert file: %v", err)
+	}
+	defer cf.Close()
+	pem.Encode(cf, &pem.Block{Type: "CERTIFICATE", Bytes: certDER}) //nolint:errcheck
+
+	kf, err := os.OpenFile(*keyFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		log.Fatalf("gencert: open key file: %v", err)
+	}
+	defer kf.Close()
+	pem.Encode(kf, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}) //nolint:errcheck
+
+	log.Printf("gencert: wrote %s and %s (valid %d days, hosts: %s)", *certFile, *keyFile, *days, *hosts)
 }
 
 func httpsRedirect(w http.ResponseWriter, r *http.Request) {
