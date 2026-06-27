@@ -180,7 +180,7 @@ func (h *Handler) Handle(c echo.Context) error {
 			score := botAnalysis.Score
 			if svcMode == "always" || score >= ch.Threshold() {
 				metrics.BotChallengedTotal.WithLabelValues(appName).Inc()
-				h.logBlocked(r, appName, clientIP, "", http.StatusTemporaryRedirect, 0, "bot_challenge", time.Since(start), meta)
+				h.logChallenged(r, appName, clientIP, http.StatusTemporaryRedirect, time.Since(start), meta)
 				return c.Redirect(http.StatusTemporaryRedirect, ch.ChallengeURL(r.RequestURI))
 			}
 		}
@@ -382,6 +382,39 @@ func (h *Handler) logBlocked(r *http.Request, appName, clientIP, country string,
 	})
 }
 
+// logChallenged logs a bot challenge redirect (307) without marking it as
+// Blocked. A challenge is not a definitive deny — the browser solves the JS
+// PoW and proceeds normally — so it should not trigger blocked notifications
+// or inflate the blocked-request counters. BotStats.ChallengedToday still
+// counts these via action = 'bot_challenge'.
+func (h *Handler) logChallenged(r *http.Request, appName, clientIP string, status int, dur time.Duration, m reqMeta) {
+	h.writeLog(storage.RequestLog{
+		Timestamp:   time.Now().UTC(),
+		AppName:     appName,
+		RealIP:      clientIP,
+		ProxyIP:     proxyIP(r),
+		Method:      r.Method,
+		Host:        r.Host,
+		Path:        r.URL.Path,
+		Query:       m.Query,
+		Status:      status,
+		Blocked:     false,
+		Action:      "bot_challenge",
+		UserAgent:   r.UserAgent(),
+		Duration:    dur.Milliseconds(),
+		HeadersJSON: captureHeaders(r),
+		RequestID:   m.RequestID,
+		Proto:       m.Proto,
+		TLSVersion:  m.TLSVersion,
+		TLSCipher:   m.TLSCipher,
+		TLSSNI:      m.TLSSNI,
+		ASN:         m.ASN,
+		Org:         m.Org,
+		JA3Hash:     m.JA3Hash,
+		BotScore:    m.BotScore,
+	})
+}
+
 // writeLog must not block on the database — QueueRequest hands the entry to
 // a background worker (see storage.DB.runLogWorker) so a slow or contended
 // write never holds open the HTTP connection of the request that caused it.
@@ -537,18 +570,33 @@ func realIP(r *http.Request) string {
 
 	// Only trust CF-Connecting-IP when the connection actually came from Cloudflare.
 	if ip := r.Header.Get("CF-Connecting-IP"); ip != "" && isCloudflareIP(remoteIP) {
-		return strings.TrimSpace(ip)
+		return normalizeIP(strings.TrimSpace(ip))
 	}
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		if idx := strings.Index(xff, ","); idx != -1 {
-			return strings.TrimSpace(xff[:idx])
+			return normalizeIP(strings.TrimSpace(xff[:idx]))
 		}
-		return strings.TrimSpace(xff)
+		return normalizeIP(strings.TrimSpace(xff))
 	}
 	if ip := r.Header.Get("X-Real-IP"); ip != "" {
-		return strings.TrimSpace(ip)
+		return normalizeIP(strings.TrimSpace(ip))
 	}
-	return remoteIP
+	return normalizeIP(remoteIP)
+}
+
+// normalizeIP converts IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1) to
+// their plain IPv4 form so blocklist rules for "127.0.0.1" match regardless of
+// whether the OS presents the connection as IPv4 or IPv6. Pure IPv6 addresses
+// like ::1 are left as-is.
+func normalizeIP(s string) string {
+	ip := net.ParseIP(s)
+	if ip == nil {
+		return s
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return v4.String()
+	}
+	return ip.String()
 }
 
 // ── responseWriter ────────────────────────────────────────────────────────────

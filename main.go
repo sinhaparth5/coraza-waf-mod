@@ -61,16 +61,24 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 
-	engine, err := waf.New(cfg.WAF)
-	if err != nil {
-		log.Fatalf("waf init: %v", err)
-	}
-
 	db, err := storage.Open(cfg.DB.Path)
 	if err != nil {
 		log.Fatalf("db: %v", err)
 	}
 	defer db.Close()
+
+	// buildWAF constructs a fresh engine reading the current disabled-rule list
+	// from the DB each time, so SIGHUP and the WAF Rules UI page both pick up
+	// the latest toggles without a restart.
+	buildWAF := func() (*waf.Engine, error) {
+		disabledIDs, _ := db.GetDisabledWAFRuleIDs()
+		return waf.New(cfg.WAF, disabledIDs)
+	}
+
+	engine, err := buildWAF()
+	if err != nil {
+		log.Fatalf("waf init: %v", err)
+	}
 
 	if err := db.SeedTestAdmin(); err != nil {
 		log.Fatalf("seed admin: %v", err)
@@ -170,6 +178,17 @@ func main() {
 
 	h := proxy.NewHandler(registry, engine, db, ipbl, geoBl, rl, asnLookup, ch)
 
+	// reloadWAF rebuilds the WAF engine from the current DB disabled-rule list.
+	// Called from the WAF Rules page when a rule is toggled.
+	reloadWAF := func() {
+		newEngine, err := buildWAF()
+		if err != nil {
+			log.Printf("waf reload: %v", err)
+			return
+		}
+		h.ReloadWAF(newEngine)
+	}
+
 	// reloadBot is called from the Settings page when bot protection config changes.
 	reloadBot := func(newCh *challenge.Challenger) {
 		h.ReloadBotProtection(newCh)
@@ -184,7 +203,7 @@ func main() {
 		h.ReloadRateLimit(newBackend)
 	}
 
-	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs, reloadBot, buildChallenger, reloadRateLimit)
+	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs, reloadBot, buildChallenger, reloadRateLimit, reloadWAF)
 	if err != nil {
 		log.Fatalf("ui init: %v", err)
 	}
@@ -211,7 +230,7 @@ func main() {
 		signal.Notify(sigCh, syscall.SIGHUP)
 		for range sigCh {
 			log.Printf("SIGHUP: reloading WAF engine...")
-			newEngine, err := waf.New(cfg.WAF)
+			newEngine, err := buildWAF()
 			if err != nil {
 				log.Printf("SIGHUP: WAF reload failed, keeping existing engine: %v", err)
 				continue

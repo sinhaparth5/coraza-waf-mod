@@ -259,6 +259,13 @@ func (db *DB) migrate() error {
 		tokens      REAL NOT NULL,
 		last_refill TEXT NOT NULL
 	);
+
+	CREATE TABLE IF NOT EXISTS waf_disabled_rules (
+		id         INTEGER PRIMARY KEY AUTOINCREMENT,
+		rule_id    INTEGER NOT NULL UNIQUE,
+		reason     TEXT NOT NULL DEFAULT '',
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
 	`)
 	if err != nil {
 		return err
@@ -1218,4 +1225,142 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// ── WAF disabled rules ────────────────────────────────────────────────────────
+
+// DisabledWAFRule is one row from the waf_disabled_rules table.
+type DisabledWAFRule struct {
+	ID        int64
+	RuleID    int
+	Reason    string
+	CreatedAt time.Time
+}
+
+// RuleHit summarises how often a particular WAF rule has fired in request logs.
+type RuleHit struct {
+	RuleID   int
+	HitCount int
+	LastSeen time.Time
+	Disabled bool // true if the rule is currently in waf_disabled_rules
+}
+
+// DisableWAFRule adds (or updates the reason for) a disabled rule.
+func (db *DB) DisableWAFRule(ruleID int, reason string) error {
+	_, err := db.conn.Exec(
+		`INSERT INTO waf_disabled_rules (rule_id, reason)
+		 VALUES (?, ?)
+		 ON CONFLICT(rule_id) DO UPDATE SET reason = excluded.reason`,
+		ruleID, reason,
+	)
+	return err
+}
+
+// EnableWAFRule removes a disabled rule by its row ID.
+func (db *DB) EnableWAFRule(id int64) error {
+	_, err := db.conn.Exec(`DELETE FROM waf_disabled_rules WHERE id = ?`, id)
+	return err
+}
+
+// ListDisabledWAFRules returns all disabled rules, newest first.
+func (db *DB) ListDisabledWAFRules() ([]DisabledWAFRule, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, rule_id, reason, created_at FROM waf_disabled_rules ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var rules []DisabledWAFRule
+	for rows.Next() {
+		var r DisabledWAFRule
+		if err := rows.Scan(&r.ID, &r.RuleID, &r.Reason, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		rules = append(rules, r)
+	}
+	return rules, rows.Err()
+}
+
+// GetDisabledWAFRuleIDs returns just the rule IDs of all disabled rules.
+// Used by the WAF engine to inject SecRuleRemoveById directives at startup.
+func (db *DB) GetDisabledWAFRuleIDs() ([]int, error) {
+	rows, err := db.conn.Query(`SELECT rule_id FROM waf_disabled_rules`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// tsFormats lists the candidate layouts for parsing timestamps returned by
+// SQLite aggregate functions (e.g. MAX(ts)). The driver stores time.Time
+// values as strings internally; aggregate results come back as plain strings
+// that database/sql won't auto-convert — see the CLAUDE.md SQLite date gotcha.
+var tsFormats = []string{
+	"2006-01-02 15:04:05.999999999 -0700 MST", // Go time.String() with sub-seconds
+	"2006-01-02 15:04:05 -0700 MST",            // Go time.String() exact seconds
+	time.RFC3339Nano,
+	time.RFC3339,
+	"2006-01-02 15:04:05",
+}
+
+func parseTS(s string) time.Time {
+	for _, layout := range tsFormats {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
+// GetTopFiringRules returns the most-blocked WAF rule IDs from request history,
+// annotated with whether each rule is currently disabled.
+func (db *DB) GetTopFiringRules(limit int) ([]RuleHit, error) {
+	rows, err := db.conn.Query(
+		`SELECT rule_id, COUNT(*) AS hit_count, MAX(ts) AS last_seen
+		 FROM requests
+		 WHERE rule_id > 0 AND blocked = 1
+		 GROUP BY rule_id
+		 ORDER BY hit_count DESC
+		 LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var hits []RuleHit
+	for rows.Next() {
+		var h RuleHit
+		var lastSeenStr string
+		if err := rows.Scan(&h.RuleID, &h.HitCount, &lastSeenStr); err != nil {
+			return nil, err
+		}
+		h.LastSeen = parseTS(lastSeenStr)
+		hits = append(hits, h)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Mark which rules are currently disabled.
+	disabled, _ := db.GetDisabledWAFRuleIDs()
+	disabledSet := make(map[int]bool, len(disabled))
+	for _, id := range disabled {
+		disabledSet[id] = true
+	}
+	for i := range hits {
+		hits[i].Disabled = disabledSet[hits[i].RuleID]
+	}
+	return hits, nil
 }

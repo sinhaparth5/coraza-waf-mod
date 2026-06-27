@@ -15,7 +15,7 @@
 
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">IP Address</label>
-          <input name="ip" type="text" placeholder="1.2.3.4" required
+          <input name="ip" type="text" placeholder="1.2.3.4 or 10.0.0.0/8" required
             class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] font-mono outline-none transition-[border] duration-150 text-slate-800 bg-white"
             />
         </div>
@@ -60,7 +60,7 @@
             <span class="bg-green-100 text-green-600 px-2 py-[2px] rounded-full font-semibold text-[11px]">Allow</span>
             whitelist, bypasses other blocks
           </div>
-          <p class="text-[12px] text-slate-500 mt-[2px]">Per-app rules take priority over global.</p>
+          <p class="text-[12px] text-slate-500 mt-[2px]">Per-app rules take priority over global. CIDR ranges (e.g. 10.0.0.0/8) are supported.</p>
         </div>
       </div>
     </div>

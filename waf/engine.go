@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"coraza-waf-mod/config"
 
@@ -24,7 +26,10 @@ type Result struct {
 	Action  string
 }
 
-func New(cfg config.WAFConfig) (*Engine, error) {
+// New builds a WAF engine with the OWASP CRS loaded.
+// disabledRuleIDs lists CRS rule IDs to suppress via SecRuleRemoveById — used
+// to handle false positives without editing config files or restarting.
+func New(cfg config.WAFConfig, disabledRuleIDs []int) (*Engine, error) {
 	if !cfg.Enabled {
 		return &Engine{enabled: false}, nil
 	}
@@ -48,6 +53,13 @@ SecRequestBodyLimit 13107200
 SecRequestBodyNoFilesLimit 131072
 SecDebugLogLevel 0
 `
+	if len(disabledRuleIDs) > 0 {
+		ids := make([]string, len(disabledRuleIDs))
+		for i, id := range disabledRuleIDs {
+			ids[i] = strconv.Itoa(id)
+		}
+		directives += "SecRuleRemoveById " + strings.Join(ids, " ") + "\n"
+	}
 
 	wafCfg := coraza.NewWAFConfig().
 		WithRootFS(coreruleset.FS).

@@ -80,6 +80,10 @@
       <i class="hgi hgi-stroke hgi-rounded hgi-settings-01 text-base"></i>
       Services
     </a>
+    <a href="/admin/waf-rules" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "waf_rules"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+      <i class="hgi hgi-stroke hgi-rounded hgi-shield-slash text-base"></i>
+      WAF Rules
+    </a>
     <a href="/admin/settings" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "settings"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-user-account text-base"></i>
       Settings

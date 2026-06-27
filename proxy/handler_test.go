@@ -40,7 +40,7 @@ func newTestHandler(t *testing.T, backend *httptest.Server) *proxy.Handler {
 		t.Fatalf("registry: %v", err)
 	}
 
-	engine, err := waf.New(config.WAFConfig{Enabled: true})
+	engine, err := waf.New(config.WAFConfig{Enabled: true}, nil)
 	if err != nil {
 		t.Fatalf("waf init: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestIPBlocklistBlocks(t *testing.T) {
 	geoBl, _ := geo.New("", db)
 	defer geoBl.Close()
 	reg, _ := services.New(db)
-	engine, _ := waf.New(config.WAFConfig{Enabled: false})
+	engine, _ := waf.New(config.WAFConfig{Enabled: false}, nil)
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 
@@ -183,7 +183,7 @@ func TestRateLimitReturns429(t *testing.T) {
 	geoBl, _ := geo.New("", db)
 	defer geoBl.Close()
 	reg, _ := services.New(db)
-	engine, _ := waf.New(config.WAFConfig{Enabled: false})
+	engine, _ := waf.New(config.WAFConfig{Enabled: false}, nil)
 
 	// 1 req/s, burst 1 — second request from same IP must be throttled.
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: true, RequestsPerSecond: 1, Burst: 1})
@@ -225,7 +225,7 @@ func TestCFConnectingIPUsedAsRealIP(t *testing.T) {
 	geoBl, _ := geo.New("", db)
 	defer geoBl.Close()
 	reg, _ := services.New(db)
-	engine, _ := waf.New(config.WAFConfig{Enabled: false})
+	engine, _ := waf.New(config.WAFConfig{Enabled: false}, nil)
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 
@@ -264,7 +264,7 @@ func TestCFConnectingIPSpoofIgnored(t *testing.T) {
 	geoBl, _ := geo.New("", db)
 	defer geoBl.Close()
 	reg, _ := services.New(db)
-	engine, _ := waf.New(config.WAFConfig{Enabled: false})
+	engine, _ := waf.New(config.WAFConfig{Enabled: false}, nil)
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 
@@ -307,7 +307,7 @@ func TestRateLimitHeadersPresent(t *testing.T) {
 	geoBl, _ := geo.New("", db)
 	defer geoBl.Close()
 	reg, _ := services.New(db)
-	engine, _ := waf.New(config.WAFConfig{Enabled: false})
+	engine, _ := waf.New(config.WAFConfig{Enabled: false}, nil)
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 

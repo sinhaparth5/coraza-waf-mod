@@ -16,6 +16,8 @@ A single-binary Go WAF + reverse proxy: embedded Coraza v3 (OWASP CRS) for reque
 
 ## Commands
 
+Requires **Go 1.25+**.
+
 ```bash
 make build       # go generate (minifies JS) + go build -> ./coraza-waf-mod
 make run         # build + run
@@ -61,7 +63,13 @@ Request logs are not kept forever, but pruning is **not** automatic inside the r
 
 **GeoIP database is bundled, not fetched.** `geo/GeoLite2-Country.mmdb` is `//go:embed`-ed via `geo/embedded.go` and used by `geo.New()` whenever `config.yaml`'s `geo.db_path` is empty, so the binary blocks by country out of the box with no MaxMind account or download step. Setting `geo.db_path` to a real file path overrides the bundled copy.
 
+**ASN lookup is also bundled.** `asn/dbip-asn-lite.mmdb` (DB-IP Lite, CC BY 4.0) is `//go:embed`-ed via `asn/embedded.go`. `asn.New()` opens it in-process — no external DB, no MaxMind account required. License attribution is in `THIRD_PARTY_NOTICES.md`.
+
 **Hot-reload pattern**: three subsystems support live config changes without a server restart, all using the same `sync.RWMutex` swap pattern in `proxy.Handler`: `ReloadWAF(*waf.Engine)`, `ReloadBotProtection(*challenge.Challenger)`, `ReloadRateLimit(ratelimit.Backend)`. The Settings page save handlers call the corresponding `reloadX` callback passed into `ui.NewHandler` from `main.go`. The old value is stopped/discarded after the swap.
+
+**SQLite date/time gotcha**: never use SQLite's `date()`/`strftime()` functions on the `requests.ts` column — `modernc.org/sqlite` stores `time.Time` using Go's `.String()` format (`"... +0000 UTC"`), which SQLite's date functions cannot parse and silently return NULL for. All date bucketing (hourly traffic, retention cutoffs) is done in Go using plain `>=`/`<=` comparisons against `ts`. See `storage/db.go`'s `GetHourlyTraffic` for the canonical pattern.
+
+**`proxy.responseWriter` must proxy Hijack and Flush**: the status-capturing wrapper in `proxy/handler.go` wraps `http.ResponseWriter` to intercept the status code for logging. Go does not automatically promote interface methods from the embedded concrete value, so `http.Hijacker` and `http.Flusher` must be explicitly implemented and delegated — without them, WebSocket upgrades (e.g. Vite HMR) fail with "can't switch protocols using non-Hijacker ResponseWriter".
 
 **Config migration direction**: `config.yaml` is for deployment-level settings only (listen addresses, TLS binding, WAF rules dir, DB path). All runtime knobs — bot protection settings, Redis config, ACME email, per-service bot/TLS/rate-limit overrides — are stored in the SQLite `meta` table or per-service columns and managed from the admin UI. `config.yaml` values for these are only read as first-boot defaults if the DB entry is absent.
 
@@ -69,4 +77,4 @@ Request logs are not kept forever, but pruning is **not** automatic inside the r
 
 ## Distribution
 
-No Docker — this ships as a native binary. `make dist` cross-compiles `linux/amd64`/`linux/arm64`/`windows/amd64` with `CGO_ENABLED=0` (works because every dependency, including the SQLite driver, is pure Go). `deploy/install.sh` is a one-line `curl | sudo bash` installer (Linux only): downloads + SHA256-verifies the binary, creates a dedicated non-root system user with only `CAP_NET_BIND_SERVICE` (not root) for binding privileged ports, and installs the systemd unit from `deploy/coraza-waf-mod.service` plus the prune timer units from `deploy/coraza-waf-mod-prune.{service,timer}`. Check status with `sudo systemctl status coraza-waf-mod`. `install.sh`'s `BASE_URL` is a placeholder — it needs to point wherever release binaries actually get published (the repo's remote is GitLab, not GitHub).
+Native binary is the primary distribution target. A `Dockerfile` (multi-stage: `golang:1.25-alpine` builder → `scratch` final, `CGO_ENABLED=0`) and `docker-compose.yml` exist for container-based local development but are not used in production. `make dist` cross-compiles `linux/amd64`/`linux/arm64`/`windows/amd64` with `CGO_ENABLED=0` (works because every dependency, including the SQLite driver, is pure Go). `deploy/install.sh` is a one-line `curl | sudo bash` installer (Linux only): downloads + SHA256-verifies the binary, creates a dedicated non-root system user with only `CAP_NET_BIND_SERVICE` (not root) for binding privileged ports, and installs the systemd unit from `deploy/coraza-waf-mod.service` plus the prune timer units from `deploy/coraza-waf-mod-prune.{service,timer}`. Check status with `sudo systemctl status coraza-waf-mod`. `install.sh`'s `BASE_URL` is a placeholder — it needs to point wherever release binaries actually get published (the repo's remote is GitLab, not GitHub).

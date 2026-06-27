@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -69,25 +70,26 @@ var funcs = template.FuncMap{
 
 // Handler holds all UI dependencies.
 type Handler struct {
-	cfg              *config.Config
-	db               *storage.DB
-	ipbl             *blocklist.IPBlocklist
-	geoBl            *geo.Blocker
-	registry         *services.Registry
-	broadcaster      *LogBroadcaster
-	tmpls            map[string]*template.Template
-	staticJS         fs.FS
-	staticImgs       fs.FS
-	reloadBot        func(*challenge.Challenger)
-	buildChallenger  func(enabled bool, threshold, ttl int) *challenge.Challenger
-	reloadRateLimit  func() // reads DB config, rebuilds backend in the proxy handler
+	cfg             *config.Config
+	db              *storage.DB
+	ipbl            *blocklist.IPBlocklist
+	geoBl           *geo.Blocker
+	registry        *services.Registry
+	broadcaster     *LogBroadcaster
+	tmpls           map[string]*template.Template
+	staticJS        fs.FS
+	staticImgs      fs.FS
+	reloadBot       func(*challenge.Challenger)
+	buildChallenger func(enabled bool, threshold, ttl int) *challenge.Challenger
+	reloadRateLimit func()
+	reloadWAF       func()
 }
 
 // NewHandler builds the UI handler. jsFS must contain the minified JS
 // assets at "static/js/dist/*" (see assets.go in the repo root); it's
 // served under /<admin_path>/static/js/. imgsFS must contain
 // "static/imgs/*"; it's served under /<admin_path>/static/imgs/.
-func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func()) (*Handler, error) {
+func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func()) (*Handler, error) {
 	sub, err := fs.Sub(jsFS, "static/js/dist")
 	if err != nil {
 		return nil, fmt.Errorf("sub static/js/dist: %w", err)
@@ -96,7 +98,7 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 	if err != nil {
 		return nil, fmt.Errorf("sub static/imgs: %w", err)
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -110,7 +112,7 @@ func (h *Handler) parseTemplates() error {
 		return fmt.Errorf("parse template login: %w", err)
 	}
 
-	pages := []string{"dashboard", "logs", "ip_rules", "geo_rules", "services", "settings"}
+	pages := []string{"dashboard", "logs", "ip_rules", "geo_rules", "services", "waf_rules", "settings"}
 	h.tmpls = make(map[string]*template.Template, len(pages)+1)
 	h.tmpls["login"] = login
 	for _, page := range pages {
@@ -205,6 +207,9 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/settings/bot", h.SaveBotSettings)
 	g.POST("/settings/ratelimit", h.SaveRateLimitConfig)
 	g.POST("/settings/ratelimit/test", h.TestRedisConnection)
+	g.GET("/waf-rules", h.WAFRulesPage)
+	g.POST("/waf-rules/disable", h.DisableWAFRule)
+	g.DELETE("/waf-rules/:id", h.EnableWAFRule)
 	g.GET("/settings", h.SettingsPage)
 	g.POST("/settings/credentials", h.ChangeCredentials)
 	g.GET("/settings/backup", h.BackupDB)
@@ -637,6 +642,22 @@ func (h *Handler) AddIPRule(c echo.Context) error {
 	if ip == "" || (ruleType != "block" && ruleType != "allow") {
 		return c.String(http.StatusBadRequest, "invalid input")
 	}
+
+	// Accept plain IPs and CIDR ranges. Try CIDR first so "10.0.0.0/8" is
+	// handled correctly (net.ParseIP rejects the slash). net.ParseCIDR
+	// canonicalises host bits (e.g. "10.0.1.5/24" → "10.0.1.0/24").
+	if _, network, err := net.ParseCIDR(ip); err == nil {
+		ip = network.String()
+	} else if parsed := net.ParseIP(ip); parsed != nil {
+		if v4 := parsed.To4(); v4 != nil {
+			ip = v4.String()
+		} else {
+			ip = parsed.String()
+		}
+	} else {
+		return c.String(http.StatusBadRequest, "invalid IP or CIDR — enter 1.2.3.4, ::1, or 10.0.0.0/8")
+	}
+
 	if err := h.db.AddIPRule(appName, ip, ruleType); err != nil {
 		return err
 	}
@@ -723,6 +744,60 @@ func (h *Handler) DeleteGeoRule(c echo.Context) error {
 	}
 	rules, _ := h.db.ListGeoRules()
 	return h.renderPartial(c, "geo_rules", "geo-rules-rows", rules)
+}
+
+// ── WAF Rules ─────────────────────────────────────────────────────────────────
+
+func (h *Handler) WAFRulesPage(c echo.Context) error {
+	disabled, err := h.db.ListDisabledWAFRules()
+	if err != nil {
+		return err
+	}
+	topRules, err := h.db.GetTopFiringRules(20)
+	if err != nil {
+		return err
+	}
+	return h.render(c, "waf_rules", map[string]any{
+		"Disabled": disabled,
+		"TopRules": topRules,
+	})
+}
+
+func (h *Handler) DisableWAFRule(c echo.Context) error {
+	ruleIDStr := strings.TrimSpace(c.FormValue("rule_id"))
+	reason := strings.TrimSpace(c.FormValue("reason"))
+
+	ruleID, err := strconv.Atoi(ruleIDStr)
+	if err != nil || ruleID <= 0 {
+		return c.String(http.StatusBadRequest, "invalid rule ID")
+	}
+	if err := h.db.DisableWAFRule(ruleID, reason); err != nil {
+		return err
+	}
+	h.reloadWAF()
+	disabled, _ := h.db.ListDisabledWAFRules()
+	topRules, _ := h.db.GetTopFiringRules(20)
+	return h.renderPartial(c, "waf_rules", "waf-content", map[string]any{
+		"Disabled": disabled,
+		"TopRules": topRules,
+	})
+}
+
+func (h *Handler) EnableWAFRule(c echo.Context) error {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		return c.String(http.StatusBadRequest, "invalid id")
+	}
+	if err := h.db.EnableWAFRule(id); err != nil {
+		return err
+	}
+	h.reloadWAF()
+	disabled, _ := h.db.ListDisabledWAFRules()
+	topRules, _ := h.db.GetTopFiringRules(20)
+	return h.renderPartial(c, "waf_rules", "waf-content", map[string]any{
+		"Disabled": disabled,
+		"TopRules": topRules,
+	})
 }
 
 // ── Services ──────────────────────────────────────────────────────────────────
@@ -1191,6 +1266,7 @@ func (h *Handler) render(c echo.Context, page string, data map[string]any) error
 		"ip_rules":  "IP Rules",
 		"geo_rules": "Geo Rules",
 		"services":  "Services",
+		"waf_rules": "WAF Rules",
 		"settings":  "Settings",
 	}
 	if _, ok := data["Heading"]; !ok {

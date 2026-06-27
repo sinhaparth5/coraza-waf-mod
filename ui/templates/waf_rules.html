@@ -1,0 +1,130 @@
+{{define "content"}}
+<div class="grid grid-cols-[300px_1fr] gap-6">
+
+  <!-- ── Left sidebar: disable form ── -->
+  <div class="flex flex-col gap-4">
+    <div class="card p-6">
+      <div class="flex items-center gap-[10px] mb-6">
+        <div class="w-8 h-8 rounded-full bg-brand-tint flex items-center justify-center">
+          <i class="hgi hgi-stroke hgi-rounded hgi-shield-slash text-[14px] text-brand-dark"></i>
+        </div>
+        <h2 class="text-[17px] font-bold text-slate-900">Disable Rule</h2>
+      </div>
+
+      <form hx-post="/admin/waf-rules/disable" hx-target="#waf-content" hx-swap="innerHTML" class="flex flex-col gap-4">
+
+        <div>
+          <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">CRS Rule ID</label>
+          <input name="rule_id" type="number" placeholder="e.g. 942100" required
+            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] font-mono outline-none transition-[border] duration-150 text-slate-800 bg-white"
+          />
+        </div>
+
+        <div>
+          <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Reason <span class="text-slate-400">(optional)</span></label>
+          <input name="reason" type="text" placeholder="e.g. false positive on login form"
+            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"
+          />
+        </div>
+
+        <button type="submit" class="btn-primary w-full flex items-center justify-center gap-2">
+          <i class="hgi hgi-stroke hgi-rounded hgi-shield-slash text-sm"></i>
+          Disable Rule
+        </button>
+      </form>
+
+      <div class="mt-5 pt-4 border-t border-canvas flex flex-col gap-2 text-[12px] text-slate-500">
+        <p>Disabling a rule suppresses it via <code class="font-mono bg-surface px-1 py-[1px] rounded text-[11px]">SecRuleRemoveById</code> and reloads the WAF engine immediately — no restart needed.</p>
+        <p class="mt-1">Re-enable any time from the disabled rules list.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Right: live content (both cards, swapped together by HTMX) ── -->
+  <div id="waf-content">
+    {{template "waf-content" .}}
+  </div>
+
+</div>
+{{end}}
+
+{{define "waf-content"}}
+<div class="flex flex-col gap-6">
+
+  <!-- Top firing rules -->
+  <div class="card overflow-hidden">
+    {{template "card-header" (map "Cat" "Analytics" "Title" "Top Firing Rules" "Badge" "last 30 days")}}
+    <div class="px-2 pb-2">
+      {{if .TopRules}}
+      <table class="w-full text-[13px]">
+        <thead>
+          <tr class="text-slate-400 text-[11px] font-semibold uppercase tracking-wide">
+            <th class="px-4 py-2 text-left">Rule ID</th>
+            <th class="px-4 py-2 text-right">Hits</th>
+            <th class="px-4 py-2 text-left">Last seen</th>
+            <th class="px-4 py-2 text-left">Status</th>
+            <th class="px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .TopRules}}
+          <tr class="border-t border-canvas hover:bg-surface transition-colors duration-100">
+            <td class="px-4 py-3 font-mono font-semibold text-slate-900">{{.RuleID}}</td>
+            <td class="px-4 py-3 text-right font-semibold text-slate-700">{{.HitCount}}</td>
+            <td class="px-4 py-3 text-slate-500">{{fmtTime .LastSeen}}</td>
+            <td class="px-4 py-3">
+              {{if .Disabled}}
+              <span class="text-[11px] font-semibold px-[10px] py-1 rounded-full bg-amber-100 text-amber-700">Disabled</span>
+              {{else}}
+              <span class="text-[11px] font-semibold px-[10px] py-1 rounded-full bg-green-100 text-green-700">Active</span>
+              {{end}}
+            </td>
+            <td class="px-4 py-3 text-right">
+              {{if not .Disabled}}
+              <form hx-post="/admin/waf-rules/disable" hx-target="#waf-content" hx-swap="innerHTML" class="inline">
+                <input type="hidden" name="rule_id" value="{{.RuleID}}"/>
+                <button type="submit"
+                  class="text-[12px] font-medium text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 rounded-lg px-3 py-1 transition-colors cursor-pointer bg-white"
+                  hx-confirm="Disable WAF rule {{.RuleID}}? The engine will reload immediately.">
+                  Disable
+                </button>
+              </form>
+              {{end}}
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      {{else}}
+      {{template "empty-state" (map "Icon" "hgi-shield-01" "Message" "No WAF blocks recorded yet")}}
+      {{end}}
+    </div>
+  </div>
+
+  <!-- Disabled rules -->
+  <div class="card overflow-hidden">
+    {{template "card-header" (map "Cat" "Firewall" "Title" "Disabled Rules" "Badge" (printf "%d rules" (len .Disabled)))}}
+    <div class="flex flex-col gap-1 px-2 pb-2">
+      {{if .Disabled}}
+      {{range .Disabled}}
+      <div class="flex items-center gap-3 p-3 rounded-2xl hover:bg-surface transition-colors duration-150">
+        <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-amber-50">
+          <i class="hgi hgi-stroke hgi-rounded hgi-shield-slash text-base text-amber-500"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="font-mono text-[14px] font-semibold text-slate-900">Rule {{.RuleID}}</div>
+          <div class="text-[12px] text-slate-500 truncate">
+            {{if .Reason}}{{.Reason}}{{else}}No reason given{{end}} · {{fmtTime .CreatedAt}}
+          </div>
+        </div>
+        {{template "remove-btn" (map "URL" (printf "/admin/waf-rules/%d" .ID) "Target" "#waf-content" "Confirm" (printf "Re-enable WAF rule %d?" .RuleID))}}
+      </div>
+      {{end}}
+      {{else}}
+      {{template "empty-state" (map "Icon" "hgi-shield-01" "Message" "All WAF rules are active")}}
+      {{end}}
+    </div>
+  </div>
+
+</div>
+{{end}}
