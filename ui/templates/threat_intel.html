@@ -1,0 +1,160 @@
+{{define "content"}}
+<div class="grid grid-cols-[300px_1fr] gap-6">
+
+  <!-- ── Left sidebar: add source ── -->
+  <div class="flex flex-col gap-4">
+    <div class="card p-6">
+      <div class="flex items-center gap-[10px] mb-6">
+        <div class="w-8 h-8 rounded-full bg-brand-tint flex items-center justify-center">
+          <i class="hgi hgi-stroke hgi-rounded hgi-database-01 text-[14px] text-brand-dark"></i>
+        </div>
+        <h2 class="text-[17px] font-bold text-slate-900">Add Feed</h2>
+      </div>
+
+      <form hx-post="{{$.AdminPath}}/threat-intel"
+            hx-target="#intel-rows" hx-swap="innerHTML"
+            class="flex flex-col gap-4">
+
+        <div>
+          <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Label</label>
+          <input name="label" type="text" placeholder="e.g. Tor Exit Nodes" required
+            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none bg-white text-slate-800"
+          />
+        </div>
+
+        <div>
+          <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">URL</label>
+          <input name="url" type="url" placeholder="https://…/iplist.txt" required
+            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] font-mono outline-none bg-white text-slate-800"
+          />
+        </div>
+
+        <div>
+          <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Sync interval (hours)</label>
+          <input name="interval_hours" type="number" value="24" min="1"
+            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none bg-white text-slate-800"
+          />
+        </div>
+
+        <button type="submit" class="btn-primary w-full flex items-center justify-center gap-2">
+          <i class="hgi hgi-stroke hgi-rounded hgi-add-01 text-sm"></i>
+          Add Feed
+        </button>
+      </form>
+
+      <!-- Presets -->
+      <div class="mt-5 pt-4 border-t border-canvas">
+        <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Quick-add presets</p>
+        <div class="flex flex-col gap-2">
+          {{range .Presets}}
+          <form hx-post="{{$.AdminPath}}/threat-intel"
+                hx-target="#intel-rows" hx-swap="innerHTML">
+            <input type="hidden" name="label" value="{{.Label}}"/>
+            <input type="hidden" name="url" value="{{.URL}}"/>
+            <input type="hidden" name="interval_hours" value="{{.IntervalHours}}"/>
+            <button type="submit"
+              class="w-full text-left text-[12px] text-slate-700 font-medium border border-line hover:border-brand hover:bg-brand-tint rounded-[10px] px-3 py-2 transition-colors cursor-pointer bg-white flex items-center justify-between gap-2">
+              <span>{{.Label}}</span>
+              <span class="text-slate-400 text-[11px] shrink-0">every {{.IntervalHours}}h</span>
+            </button>
+          </form>
+          {{end}}
+        </div>
+      </div>
+
+      <div class="mt-4 pt-4 border-t border-canvas text-[12px] text-slate-500 flex flex-col gap-1">
+        <p>Feeds are plain-text lists of IPs/CIDRs, one per line. Lines starting with <code class="font-mono bg-surface px-1 rounded text-[11px]">#</code> or <code class="font-mono bg-surface px-1 rounded text-[11px]">;</code> are treated as comments.</p>
+        <p class="mt-1">Intel blocks are lower priority than your IP Rules — user allow rules always win.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Right: sources table ── -->
+  <div class="card overflow-hidden">
+    {{template "card-header" (map "Cat" "Security" "Title" "Threat Intel Feeds" "Badge" (printf "%d feeds" (len .Sources)))}}
+    <div id="intel-rows">
+      {{template "intel-rows" .}}
+    </div>
+  </div>
+
+</div>
+{{end}}
+
+{{define "intel-rows"}}
+{{if .Sources}}
+<table class="w-full text-[13px]">
+  <thead>
+    <tr class="text-slate-400 text-[11px] font-semibold uppercase tracking-wide">
+      <th class="px-5 py-3 text-left">Feed</th>
+      <th class="px-5 py-3 text-right">IPs</th>
+      <th class="px-5 py-3 text-left">Last synced</th>
+      <th class="px-5 py-3 text-left">Status</th>
+      <th class="px-5 py-3"></th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Sources}}
+    <tr class="border-t border-canvas hover:bg-surface transition-colors duration-100">
+      <td class="px-5 py-3">
+        <div class="font-semibold text-slate-900">{{.Label}}</div>
+        <div class="text-[11px] text-slate-400 font-mono truncate max-w-[260px]">{{.URL}}</div>
+      </td>
+      <td class="px-5 py-3 text-right font-semibold text-slate-700">
+        {{if gt .IPCount 0}}{{.IPCount}}{{else}}<span class="text-slate-400">—</span>{{end}}
+      </td>
+      <td class="px-5 py-3 text-slate-500">
+        {{if .LastSyncedAt.IsZero}}
+          <span class="text-slate-400">Never</span>
+        {{else}}
+          {{fmtTime .LastSyncedAt}}
+        {{end}}
+        {{if .LastError}}
+          <div class="text-[11px] text-red-500 truncate max-w-[160px]" title="{{.LastError}}">{{truncate .LastError 40}}</div>
+        {{end}}
+      </td>
+      <td class="px-5 py-3">
+        {{if .Enabled}}
+        <span class="text-[11px] font-semibold px-[10px] py-1 rounded-full bg-green-100 text-green-700">Active</span>
+        {{else}}
+        <span class="text-[11px] font-semibold px-[10px] py-1 rounded-full bg-slate-100 text-slate-500">Paused</span>
+        {{end}}
+      </td>
+      <td class="px-5 py-3">
+        <div class="flex items-center justify-end gap-2">
+          <!-- Sync now -->
+          <form hx-post="{{$.AdminPath}}/threat-intel/{{.ID}}/sync"
+                hx-target="#intel-rows" hx-swap="innerHTML">
+            <button type="submit" title="Sync now"
+              class="w-8 h-8 flex items-center justify-center rounded-full bg-surface border border-line hover:bg-brand-tint hover:border-brand transition-colors cursor-pointer text-slate-500 hover:text-brand-dark">
+              <i class="hgi hgi-stroke hgi-rounded hgi-refresh text-[13px]"></i>
+            </button>
+          </form>
+          <!-- Toggle enable/disable -->
+          <form hx-post="{{$.AdminPath}}/threat-intel/{{.ID}}/toggle"
+                hx-target="#intel-rows" hx-swap="innerHTML">
+            {{if .Enabled}}
+            <input type="hidden" name="enabled" value="0"/>
+            <button type="submit" title="Pause feed"
+              class="w-8 h-8 flex items-center justify-center rounded-full bg-surface border border-line hover:bg-amber-50 hover:border-amber-300 transition-colors cursor-pointer text-slate-500 hover:text-amber-600">
+              <i class="hgi hgi-stroke hgi-rounded hgi-pause text-[13px]"></i>
+            </button>
+            {{else}}
+            <input type="hidden" name="enabled" value="1"/>
+            <button type="submit" title="Resume feed"
+              class="w-8 h-8 flex items-center justify-center rounded-full bg-surface border border-line hover:bg-green-50 hover:border-green-300 transition-colors cursor-pointer text-slate-500 hover:text-green-600">
+              <i class="hgi hgi-stroke hgi-rounded hgi-play text-[13px]"></i>
+            </button>
+            {{end}}
+          </form>
+          <!-- Delete -->
+          {{template "remove-btn" (map "URL" (printf "%s/threat-intel/%d" $.AdminPath .ID) "Target" "#intel-rows" "Confirm" (printf "Delete feed \"%s\"?" .Label))}}
+        </div>
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+{{template "empty-state" (map "Icon" "hgi-database-01" "Message" "No threat intel feeds configured — add one or pick a preset")}}
+{{end}}
+{{end}}

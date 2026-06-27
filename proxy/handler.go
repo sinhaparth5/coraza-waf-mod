@@ -131,6 +131,7 @@ func (h *Handler) Handle(c echo.Context) error {
 
 	reqID := generateRequestID()
 	w.Header().Set("X-Request-ID", reqID)
+	w.Header().Set("X-WAF-Request-ID", reqID)
 
 	clientIP := realIP(r)
 	app := h.registry.Match(r.Host, r.URL.Path)
@@ -194,6 +195,7 @@ func (h *Handler) Handle(c echo.Context) error {
 	if blockedByIP {
 		metrics.IPBlockedTotal.WithLabelValues(appName).Inc()
 		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, ipReason, time.Since(start), meta)
+		w.Header().Set("X-WAF-Block-Reason", "ip_blocked")
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied"})
 	}
 
@@ -216,6 +218,7 @@ func (h *Handler) Handle(c echo.Context) error {
 			secs = 1
 		}
 		c.Response().Header().Set("Retry-After", strconv.Itoa(secs))
+		w.Header().Set("X-WAF-Block-Reason", "rate_limited")
 		return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 	}
 
@@ -231,6 +234,7 @@ func (h *Handler) Handle(c echo.Context) error {
 				secs = 1
 			}
 			c.Response().Header().Set("Retry-After", strconv.Itoa(secs))
+			w.Header().Set("X-WAF-Block-Reason", "rate_limited")
 			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 		}
 	}
@@ -240,6 +244,7 @@ func (h *Handler) Handle(c echo.Context) error {
 	if blockedByGeo {
 		metrics.GeoBlockedTotal.WithLabelValues(appName, country).Inc()
 		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, geoReason, time.Since(start), meta)
+		w.Header().Set("X-WAF-Block-Reason", "geo_blocked")
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied", "country": country})
 	}
 
@@ -260,6 +265,7 @@ func (h *Handler) Handle(c echo.Context) error {
 		}
 		metrics.WAFBlockedTotal.WithLabelValues(appName, result.Action).Inc()
 		h.logBlocked(r, appName, clientIP, country, status, result.RuleID, result.Action, time.Since(start), meta)
+		w.Header().Set("X-WAF-Block-Reason", "waf_rule")
 		return c.JSON(status, map[string]any{"error": "request blocked", "rule_id": result.RuleID})
 	}
 
@@ -298,6 +304,7 @@ func (h *Handler) Handle(c echo.Context) error {
 		r.URL.RawPath = ""
 	}
 
+	w.Header().Set("X-WAF-Status", "inspected")
 	rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 	rp.ServeHTTP(rw, r)
 	r.URL.Path = originalPath

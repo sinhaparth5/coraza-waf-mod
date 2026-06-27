@@ -116,6 +116,7 @@
 
   var nameLabel = document.getElementById('tls-modal-service-name');
   var closeBtn = document.getElementById('tls-modal-close');
+  var poolForm = document.getElementById('tls-pool-form');
   var uploadForm = document.getElementById('tls-upload-form');
   var autoForm = document.getElementById('tls-auto-form');
   var clearForm = document.getElementById('tls-clear-form');
@@ -145,13 +146,17 @@
     if (e.target === overlay) closeModal();
   });
 
+  function syncTLSForms() {
+    var val = (overlay.querySelector('input[name="tls_action"]:checked') || {}).value;
+    if (poolForm) poolForm.classList.toggle('hidden', val !== 'pool');
+    uploadForm.classList.toggle('hidden', val !== 'upload');
+    autoForm.classList.toggle('hidden', val !== 'auto');
+  }
+
   actionRadios.forEach(function (radio) {
-    radio.addEventListener('change', function () {
-      var isUpload = overlay.querySelector('input[name="tls_action"]:checked').value === 'upload';
-      uploadForm.classList.toggle('hidden', !isUpload);
-      autoForm.classList.toggle('hidden', isUpload);
-    });
+    radio.addEventListener('change', syncTLSForms);
   });
+  syncTLSForms();
 
   // Server fires this (via HX-Trigger) after a successful save/clear.
   document.body.addEventListener('tls-saved', closeModal);

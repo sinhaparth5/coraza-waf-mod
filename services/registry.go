@@ -125,8 +125,22 @@ func (r *Registry) Reload(db *storage.DB) error {
 		}
 		// Override whatever Server header the backend sends — the WAF/proxy
 		// is what the client actually talks to, so it should identify itself.
+		// Also strip security headers from the backend response so the WAF's
+		// globally-set versions (from SecurityMiddleware) are the only ones
+		// the client sees, avoiding duplicate headers.
 		rp.ModifyResponse = func(resp *http.Response) error {
 			resp.Header.Set("Server", serverHeader)
+			for _, h := range []string{
+				"X-Content-Type-Options",
+				"X-Frame-Options",
+				"X-XSS-Protection",
+				"Referrer-Policy",
+				"Permissions-Policy",
+				"Cross-Origin-Opener-Policy",
+				"Strict-Transport-Security",
+			} {
+				resp.Header.Del(h)
+			}
 			reg.markHealth(name, true)
 			return nil
 		}
@@ -139,13 +153,29 @@ func (r *Registry) Reload(db *storage.DB) error {
 		if s.Host == "" {
 			continue // TLS only applies to Host-matched services (SNI needs a domain)
 		}
-		host := strings.ToLower(s.Host)
+		// Strip any accidental scheme prefix (http://, https://) that may have
+		// been stored before the sanitizeHost fix was in place.
+		rawHost := s.Host
+		if i := strings.Index(rawHost, "://"); i >= 0 {
+			rawHost = rawHost[i+3:]
+		}
+		host := strings.ToLower(strings.TrimRight(rawHost, "/"))
 		switch s.TLSMode {
 		case "custom":
-			if s.TLSCertPath == "" || s.TLSKeyPath == "" {
+			certPath, keyPath := s.TLSCertPath, s.TLSKeyPath
+			if s.CertID > 0 {
+				// Pool cert: look up paths from the certificates table.
+				poolCert, err := db.GetCertificate(s.CertID)
+				if err != nil {
+					log.Printf("pool cert for service %q (cert_id=%d): %v", s.Name, s.CertID, err)
+					continue
+				}
+				certPath, keyPath = poolCert.CertPath, poolCert.KeyPath
+			}
+			if certPath == "" || keyPath == "" {
 				continue
 			}
-			cert, err := LoadCertificate(s.TLSCertPath, s.TLSKeyPath)
+			cert, err := LoadCertificate(certPath, keyPath)
 			if err != nil {
 				log.Printf("load custom TLS cert for service %q: %v", s.Name, err)
 				continue

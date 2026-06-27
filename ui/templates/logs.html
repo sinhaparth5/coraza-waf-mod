@@ -6,46 +6,87 @@
   <span id="pause-label">Pause</span>
 </button>
 {{else}}
-<a href="/admin/logs"
+<a href="{{$.AdminPath}}/logs"
   class="flex items-center gap-[6px] border border-line bg-white rounded-full px-4 py-2 text-[14px] font-medium text-slate-500 cursor-pointer no-underline">
   <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02 text-[13px] text-brand"></i>
   Back to live
 </a>
 {{end}}
+<a id="export-link"
+   href="{{$.AdminPath}}/logs/export{{if or .FilterApp .FilterStatus .FilterFrom .FilterTo}}?app={{.FilterApp}}&status={{.FilterStatus}}&from={{.FilterFrom}}&to={{.FilterTo}}{{end}}"
+   class="flex items-center gap-[6px] border border-line bg-white rounded-full px-4 py-2 text-[14px] font-medium text-slate-500 hover:text-slate-700 no-underline transition-colors">
+  <i class="hgi hgi-stroke hgi-rounded hgi-download-02 text-[13px]"></i>
+  Export NDJSON
+</a>
 {{end}}
 
 {{define "content"}}
 
 <!-- Filter bar -->
 <form method="get" action="/admin/logs" id="logs-filter-form" class="flex items-end gap-3 flex-wrap mb-4">
+
+  <!-- From date picker -->
   <div>
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">From</label>
-    <input type="datetime-local" name="from" id="filter-from" data-utc="{{.FilterFrom}}"
-      class="border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] outline-none text-slate-800 bg-white"/>
+    <input type="hidden" name="from" id="filter-from" value="{{.FilterFrom}}">
+    <button type="button" id="filter-from-btn"
+      class="flex items-center gap-2 border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[210px] hover:border-slate-300 focus:outline-none transition-colors">
+      <i class="hgi hgi-stroke hgi-rounded hgi-calendar-02 text-[14px] text-slate-400 shrink-0"></i>
+      <span id="filter-from-display" class="flex-1 text-left text-slate-400">Any date</span>
+    </button>
   </div>
+
+  <!-- To date picker -->
   <div>
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">To</label>
-    <input type="datetime-local" name="to" id="filter-to" data-utc="{{.FilterTo}}"
-      class="border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] outline-none text-slate-800 bg-white"/>
+    <input type="hidden" name="to" id="filter-to" value="{{.FilterTo}}">
+    <button type="button" id="filter-to-btn"
+      class="flex items-center gap-2 border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[210px] hover:border-slate-300 focus:outline-none transition-colors">
+      <i class="hgi hgi-stroke hgi-rounded hgi-calendar-02 text-[14px] text-slate-400 shrink-0"></i>
+      <span id="filter-to-display" class="flex-1 text-left text-slate-400">Any date</span>
+    </button>
   </div>
-  <div>
+
+  <!-- App dropdown -->
+  <div class="relative">
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">App</label>
-    <select name="app" class="border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] outline-none text-slate-800 bg-white min-w-[130px]">
-      <option value="" {{if eq .FilterApp ""}}selected{{end}}>All apps</option>
-      {{range .Apps}}<option value="{{.Name}}" {{if eq $.FilterApp .Name}}selected{{end}}>{{.Name}}</option>{{end}}
-    </select>
+    <input type="hidden" name="app" id="filter-app" value="{{.FilterApp}}">
+    <button type="button" id="filter-app-btn"
+      class="flex items-center gap-2 border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[145px] hover:border-slate-300 focus:outline-none transition-colors">
+      <span id="filter-app-display" class="flex-1 text-left text-slate-700">All apps</span>
+      <i class="hgi hgi-stroke hgi-rounded hgi-arrow-down-01 text-[11px] text-slate-400 shrink-0"></i>
+    </button>
+    <div id="filter-app-dropdown"
+      class="hidden absolute top-full left-0 mt-1 z-50 bg-white border border-line rounded-[12px] py-1 min-w-full"
+      style="box-shadow:0 8px 28px rgba(0,0,0,.10);">
+      <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="" data-label="All apps">All apps</button>
+      {{range .Apps}}
+      <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="{{.Name}}" data-label="{{.Name}}">{{.Name}}</button>
+      {{end}}
+    </div>
   </div>
-  <div>
+
+  <!-- Status dropdown -->
+  <div class="relative">
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">Status</label>
-    <select name="status" class="border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] outline-none text-slate-800 bg-white min-w-[130px]">
-      <option value="" {{if eq .FilterStatus ""}}selected{{end}}>All statuses</option>
-      <option value="blocked" {{if eq .FilterStatus "blocked"}}selected{{end}}>Blocked only</option>
-      <option value="2xx" {{if eq .FilterStatus "2xx"}}selected{{end}}>2xx success</option>
-      <option value="3xx" {{if eq .FilterStatus "3xx"}}selected{{end}}>3xx redirect</option>
-      <option value="4xx" {{if eq .FilterStatus "4xx"}}selected{{end}}>4xx client error</option>
-      <option value="5xx" {{if eq .FilterStatus "5xx"}}selected{{end}}>5xx server error</option>
-    </select>
+    <input type="hidden" name="status" id="filter-status" value="{{.FilterStatus}}">
+    <button type="button" id="filter-status-btn"
+      class="flex items-center gap-2 border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[155px] hover:border-slate-300 focus:outline-none transition-colors">
+      <span id="filter-status-display" class="flex-1 text-left text-slate-700">All statuses</span>
+      <i class="hgi hgi-stroke hgi-rounded hgi-arrow-down-01 text-[11px] text-slate-400 shrink-0"></i>
+    </button>
+    <div id="filter-status-dropdown"
+      class="hidden absolute top-full left-0 mt-1 z-50 bg-white border border-line rounded-[12px] py-1 min-w-[170px]"
+      style="box-shadow:0 8px 28px rgba(0,0,0,.10);">
+      <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="" data-label="All statuses">All statuses</button>
+      <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="blocked" data-label="Blocked only">Blocked only</button>
+      <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="2xx" data-label="2xx success">2xx success</button>
+      <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="3xx" data-label="3xx redirect">3xx redirect</button>
+      <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="4xx" data-label="4xx client error">4xx client error</button>
+      <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="5xx" data-label="5xx server error">5xx server error</button>
+    </div>
   </div>
+
   <button type="submit" class="btn-primary flex items-center gap-[6px]">
     <i class="hgi hgi-stroke hgi-rounded hgi-filter text-[13px]"></i>
     Filter

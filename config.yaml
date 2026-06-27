@@ -1,7 +1,7 @@
 # ─── Network ─────────────────────────────────────────────────────────────────
 listen_addr: ":8080"
 # Uncomment to enable HTTPS (TLS cert config is managed from the admin UI):
-# listen_addr_tls: ":443"
+listen_addr_tls: ":8443"
 
 # ─── TLS ─────────────────────────────────────────────────────────────────────
 # Certificate config (ACME email, per-service certs) lives in the admin UI.

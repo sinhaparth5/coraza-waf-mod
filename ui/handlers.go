@@ -49,9 +49,20 @@ var funcs = template.FuncMap{
 		}
 		return s[:10]
 	},
-	"add":   func(a, b int) int { return a + b },
-	"sub":   func(a, b int) int { return a - b },
-	"isOdd": func(i int) bool { return i%2 == 1 },
+	"add":      func(a, b int) int { return a + b },
+	"sub":      func(a, b int) int { return a - b },
+	"isOdd":    func(i int) bool { return i%2 == 1 },
+	"contains":   strings.Contains,
+	"splitComma": func(s string) []string {
+		var out []string
+		for _, p := range strings.Split(s, ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				out = append(out, p)
+			}
+		}
+		return out
+	},
 	"map": func(pairs ...any) (map[string]any, error) {
 		if len(pairs)%2 != 0 {
 			return nil, fmt.Errorf("map: odd number of args")
@@ -83,13 +94,14 @@ type Handler struct {
 	buildChallenger func(enabled bool, threshold, ttl int) *challenge.Challenger
 	reloadRateLimit func()
 	reloadWAF       func()
+	syncThreatIntel func(id int64)
 }
 
 // NewHandler builds the UI handler. jsFS must contain the minified JS
 // assets at "static/js/dist/*" (see assets.go in the repo root); it's
 // served under /<admin_path>/static/js/. imgsFS must contain
 // "static/imgs/*"; it's served under /<admin_path>/static/imgs/.
-func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func()) (*Handler, error) {
+func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64)) (*Handler, error) {
 	sub, err := fs.Sub(jsFS, "static/js/dist")
 	if err != nil {
 		return nil, fmt.Errorf("sub static/js/dist: %w", err)
@@ -98,7 +110,7 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 	if err != nil {
 		return nil, fmt.Errorf("sub static/imgs: %w", err)
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -112,7 +124,7 @@ func (h *Handler) parseTemplates() error {
 		return fmt.Errorf("parse template login: %w", err)
 	}
 
-	pages := []string{"dashboard", "logs", "ip_rules", "geo_rules", "services", "waf_rules", "settings"}
+	pages := []string{"dashboard", "logs", "ip_rules", "geo_rules", "services", "certificates", "waf_rules", "threat_intel", "settings"}
 	h.tmpls = make(map[string]*template.Template, len(pages)+1)
 	h.tmpls["login"] = login
 	for _, page := range pages {
@@ -186,6 +198,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.GET("/api/traffic", h.TrafficSeries)
 	g.GET("/api/threats", h.ThreatsSeries)
 	g.GET("/logs", h.Logs)
+	g.GET("/logs/export", h.ExportLogs)
 	g.GET("/logs/stream", h.LogsStream)
 	g.GET("/logs/:id", h.LogDetail)
 	g.GET("/ip-rules", h.IPRulesPage)
@@ -200,16 +213,26 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.DELETE("/services/:id", h.DeleteService)
 	g.POST("/services/tls/upload", h.UploadServiceTLS)
 	g.POST("/services/tls/auto", h.EnableServiceAutoTLS)
+	g.POST("/services/tls/pool", h.AssignPoolCert)
 	g.POST("/services/tls/clear", h.ClearServiceTLS)
+	g.GET("/certificates", h.CertificatesPage)
+	g.POST("/certificates", h.AddCertificate)
+	g.DELETE("/certificates/:id", h.DeleteCertificate)
 	g.POST("/services/ratelimit", h.SetServiceRateLimit)
 	g.POST("/services/bot/:id", h.SetServiceBotMode)
 	g.POST("/settings/acme-email", h.SaveAcmeEmail)
 	g.POST("/settings/bot", h.SaveBotSettings)
 	g.POST("/settings/ratelimit", h.SaveRateLimitConfig)
 	g.POST("/settings/ratelimit/test", h.TestRedisConnection)
+	g.POST("/settings/webhook", h.SaveWebhookConfig)
 	g.GET("/waf-rules", h.WAFRulesPage)
 	g.POST("/waf-rules/disable", h.DisableWAFRule)
 	g.DELETE("/waf-rules/:id", h.EnableWAFRule)
+	g.GET("/threat-intel", h.ThreatIntelPage)
+	g.POST("/threat-intel", h.AddThreatIntelSource)
+	g.DELETE("/threat-intel/:id", h.DeleteThreatIntelSource)
+	g.POST("/threat-intel/:id/toggle", h.ToggleThreatIntelSource)
+	g.POST("/threat-intel/:id/sync", h.SyncThreatIntelSource)
 	g.GET("/settings", h.SettingsPage)
 	g.POST("/settings/credentials", h.ChangeCredentials)
 	g.GET("/settings/backup", h.BackupDB)
@@ -800,29 +823,117 @@ func (h *Handler) EnableWAFRule(c echo.Context) error {
 	})
 }
 
+// ── Threat Intel ─────────────────────────────────────────────────────────────
+
+// Presets are well-known free threat intel block lists shown as quick-add chips.
+var threatIntelPresets = []struct {
+	Label         string
+	URL           string
+	IntervalHours int
+}{
+	{"Tor Exit Nodes", "https://check.torproject.org/torbulkexitlist", 6},
+	{"Emerging Threats", "https://rules.emergingthreats.net/blockrules/compromised-ips.txt", 24},
+	{"Spamhaus DROP", "https://www.spamhaus.org/drop/drop.txt", 24},
+	{"Feodo Tracker", "https://feodotracker.abuse.ch/downloads/ipblocklist.txt", 12},
+	{"CINS Score", "http://cinsscore.com/list/ci-badguys.txt", 24},
+}
+
+func (h *Handler) threatIntelData() map[string]any {
+	sources, _ := h.db.ListThreatIntelSources()
+	return map[string]any{
+		"Sources": sources,
+		"Presets": threatIntelPresets,
+	}
+}
+
+func (h *Handler) ThreatIntelPage(c echo.Context) error {
+	return h.render(c, "threat_intel", h.threatIntelData())
+}
+
+func (h *Handler) AddThreatIntelSource(c echo.Context) error {
+	label := strings.TrimSpace(c.FormValue("label"))
+	url := strings.TrimSpace(c.FormValue("url"))
+	hours, err := strconv.Atoi(c.FormValue("interval_hours"))
+	if err != nil || hours < 1 {
+		hours = 24
+	}
+	if label == "" || url == "" {
+		return c.String(http.StatusBadRequest, "label and url required")
+	}
+	if err := h.db.AddThreatIntelSource(label, url, hours); err != nil {
+		return c.String(http.StatusConflict, "source already exists")
+	}
+	return h.renderPartial(c, "threat_intel", "intel-rows", h.threatIntelData())
+}
+
+func (h *Handler) DeleteThreatIntelSource(c echo.Context) error {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		return c.String(http.StatusBadRequest, "invalid id")
+	}
+	_ = h.db.DeleteThreatIntelSource(id)
+	if err := h.ipbl.ReloadIntel(h.db); err != nil {
+		return err
+	}
+	return h.renderPartial(c, "threat_intel", "intel-rows", h.threatIntelData())
+}
+
+func (h *Handler) ToggleThreatIntelSource(c echo.Context) error {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		return c.String(http.StatusBadRequest, "invalid id")
+	}
+	enabled := c.FormValue("enabled") == "1"
+	_ = h.db.SetThreatIntelSourceEnabled(id, enabled)
+	if err := h.ipbl.ReloadIntel(h.db); err != nil {
+		return err
+	}
+	return h.renderPartial(c, "threat_intel", "intel-rows", h.threatIntelData())
+}
+
+func (h *Handler) SyncThreatIntelSource(c echo.Context) error {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		return c.String(http.StatusBadRequest, "invalid id")
+	}
+	if h.syncThreatIntel != nil {
+		h.syncThreatIntel(id)
+	}
+	return h.renderPartial(c, "threat_intel", "intel-rows", h.threatIntelData())
+}
+
 // ── Services ──────────────────────────────────────────────────────────────────
 
 // ServiceView pairs a stored service with its last-known reachability, for
 // rendering the status dot in the services table.
 type ServiceView struct {
 	storage.Service
-	Healthy bool
-	Known   bool
+	Healthy  bool
+	Known    bool
+	CertName string // pool cert name when CertID > 0, otherwise ""
 }
 
 func (h *Handler) serviceViews() []ServiceView {
 	list := h.registry.List()
+	certMap := make(map[int64]string)
+	if certs, err := h.db.ListCertificates(); err == nil {
+		for _, c := range certs {
+			certMap[c.ID] = c.Name
+		}
+	}
 	out := make([]ServiceView, len(list))
 	for i, s := range list {
 		healthy, known := h.registry.IsHealthy(s.Name)
-		out[i] = ServiceView{Service: s, Healthy: healthy, Known: known}
+		out[i] = ServiceView{Service: s, Healthy: healthy, Known: known, CertName: certMap[s.CertID]}
 	}
 	return out
 }
 
 func (h *Handler) ServicesPage(c echo.Context) error {
+	poolCerts, _ := h.db.ListCertificates()
 	return h.render(c, "services", map[string]any{
-		"Services": h.serviceViews(),
+		"Services":  h.serviceViews(),
+		"PoolCerts": poolCerts,
 	})
 }
 
@@ -839,6 +950,21 @@ func (h *Handler) wizardError(c echo.Context, msg string) error {
 	c.Response().Header().Set("HX-Retarget", "#wizard-error")
 	c.Response().Header().Set("HX-Reswap", "innerHTML")
 	return c.String(http.StatusOK, msg)
+}
+
+// sanitizeHost strips any scheme (http://, https://) and trailing slashes
+// from a host value so "http://example.com/" is stored as "example.com".
+// This prevents a common paste mistake where the full URL is entered instead
+// of just the hostname.
+func sanitizeHost(h string) string {
+	h = strings.TrimSpace(h)
+	if i := strings.Index(h, "://"); i >= 0 {
+		h = h[i+3:]
+	}
+	h = strings.TrimRight(h, "/")
+	// Strip port only if it matches the default (80/443) — non-standard ports
+	// are kept because they're meaningful for matching.
+	return h
 }
 
 // AddService creates a new backend service from the add-service wizard.
@@ -863,7 +989,7 @@ func (h *Handler) AddService(c echo.Context) error {
 
 	var host, prefix string
 	if matchType == "host" {
-		host = matchValue
+		host = sanitizeHost(matchValue)
 	} else {
 		prefix = matchValue
 	}
@@ -901,6 +1027,111 @@ func (h *Handler) DeleteService(c echo.Context) error {
 		return err
 	}
 	return h.renderPartial(c, "services", "services-rows", h.serviceViews())
+}
+
+// ── Certificate Pool ──────────────────────────────────────────────────────────
+
+func (h *Handler) certError(c echo.Context, msg string) error {
+	c.Response().Header().Set("HX-Retarget", "#cert-error")
+	c.Response().Header().Set("HX-Reswap", "innerHTML")
+	return c.String(http.StatusOK, msg)
+}
+
+func (h *Handler) renderCertRows(c echo.Context) error {
+	certs, _ := h.db.ListCertificates()
+	return h.renderPartial(c, "certificates", "cert-rows", map[string]any{
+		"Certs":     certs,
+		"AdminPath": h.cfg.Admin.Path,
+	})
+}
+
+func (h *Handler) CertificatesPage(c echo.Context) error {
+	certs, _ := h.db.ListCertificates()
+	return h.render(c, "certificates", map[string]any{
+		"Certs": certs,
+	})
+}
+
+// AddCertificate uploads a cert+key PEM pair to the shared pool. It parses
+// the certificate first to auto-detect covered domains and the expiry date,
+// then saves to disk and records the paths in the database.
+func (h *Handler) AddCertificate(c echo.Context) error {
+	name := strings.TrimSpace(c.FormValue("name"))
+	certPEM := []byte(c.FormValue("cert_pem"))
+	keyPEM := []byte(c.FormValue("key_pem"))
+
+	if name == "" {
+		return h.certError(c, "name is required")
+	}
+	if len(certPEM) == 0 || len(keyPEM) == 0 {
+		return h.certError(c, "paste both the certificate and private key")
+	}
+
+	domains, expiresAt, err := services.ParseCertInfo(certPEM)
+	if err != nil {
+		return h.certError(c, "invalid certificate: "+err.Error())
+	}
+
+	// Insert first to obtain the row ID used as the on-disk directory name.
+	id, err := h.db.AddCertificate(name, strings.Join(domains, ", "), expiresAt.UTC().Format(time.RFC3339), "", "")
+	if err != nil {
+		return h.certError(c, "save: "+err.Error())
+	}
+
+	certPath, keyPath, err := services.SavePoolCert(id, certPEM, keyPEM)
+	if err != nil {
+		h.db.DeleteCertificate(id) //nolint
+		return h.certError(c, err.Error())
+	}
+
+	if err := h.db.UpdateCertificatePaths(id, certPath, keyPath); err != nil {
+		return h.certError(c, "update paths: "+err.Error())
+	}
+
+	return h.renderCertRows(c)
+}
+
+// DeleteCertificate removes a cert from the pool. Services that referenced it
+// are reset to no-TLS by the DB layer, and the registry is reloaded so they
+// stop presenting the cert immediately.
+func (h *Handler) DeleteCertificate(c echo.Context) error {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		return c.String(http.StatusBadRequest, "invalid id")
+	}
+	if err := h.db.DeleteCertificate(id); err != nil {
+		return err
+	}
+	services.DeletePoolCert(id)
+	h.registry.Reload(h.db) //nolint
+	return h.renderCertRows(c)
+}
+
+// AssignPoolCert links an existing pool cert to a host-matched service. After
+// this call the registry serves that cert for the service's domain over TLS.
+func (h *Handler) AssignPoolCert(c echo.Context) error {
+	serviceID, err := strconv.Atoi(c.FormValue("service_id"))
+	if err != nil {
+		return h.tlsModalError(c, "invalid service")
+	}
+	certID, err := strconv.ParseInt(c.FormValue("cert_id"), 10, 64)
+	if err != nil || certID <= 0 {
+		return h.tlsModalError(c, "select a certificate")
+	}
+	svc, err := h.db.GetService(serviceID)
+	if err != nil {
+		return h.tlsModalError(c, "service not found")
+	}
+	if svc.Host == "" {
+		return h.tlsModalError(c, "TLS requires a host-matched service (this one matches by path prefix)")
+	}
+	if err := h.db.SetServiceCertID(serviceID, certID); err != nil {
+		return h.tlsModalError(c, err.Error())
+	}
+	if err := h.registry.Reload(h.db); err != nil {
+		return err
+	}
+	return h.tlsSaved(c)
 }
 
 // ── Service TLS ───────────────────────────────────────────────────────────────
@@ -1075,13 +1306,18 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 	if redisAddr != "" {
 		rlBackend = "redis"
 	}
+	wh, _ := h.db.GetWebhookConfig()
 	return h.render(c, "settings", map[string]any{
-		"AdminEmail":   email,
-		"BotEnabled":   botEnabled,
-		"BotThreshold": botThreshold,
-		"BotTTL":       botTTL,
-		"RLBackend":    rlBackend,
-		"RLRedisAddr":  redisAddr,
+		"AdminEmail":     email,
+		"BotEnabled":     botEnabled,
+		"BotThreshold":   botThreshold,
+		"BotTTL":         botTTL,
+		"RLBackend":      rlBackend,
+		"RLRedisAddr":    redisAddr,
+		"WebhookURL":     wh.URL,
+		"WebhookSecret":  wh.Secret,
+		"WebhookEnabled": wh.Enabled,
+		"WebhookEvents":  wh.Events,
 	})
 }
 
@@ -1106,13 +1342,12 @@ func (h *Handler) SaveBotSettings(c echo.Context) error {
 		h.reloadBot(h.buildChallenger(enabled, threshold, ttl))
 	}
 
-	email, _ := h.db.GetAdminEmail()
-	return h.render(c, "settings", map[string]any{
-		"AdminEmail":    email,
-		"BotEnabled":    enabled,
-		"BotThreshold":  threshold,
-		"BotTTL":        ttl,
-		"BotSaveOK":     true,
+	return h.renderPartial(c, "settings", "bot-card", map[string]any{
+		"AdminPath":    h.cfg.Admin.Path,
+		"BotEnabled":   enabled,
+		"BotThreshold": threshold,
+		"BotTTL":       ttl,
+		"BotSaveOK":    true,
 	})
 }
 
@@ -1163,8 +1398,6 @@ func (h *Handler) SaveRateLimitConfig(c echo.Context) error {
 		h.reloadRateLimit()
 	}
 
-	email, _ := h.db.GetAdminEmail()
-	botEnabled, botThreshold, botTTL, _ := h.db.GetBotSettings()
 	rlBackend := backend
 	rlAddr := addr
 	if rlErr != "" && backend != "redis" {
@@ -1176,16 +1409,81 @@ func (h *Handler) SaveRateLimitConfig(c echo.Context) error {
 			rlBackend = "memory"
 		}
 	}
-	return h.render(c, "settings", map[string]any{
-		"AdminEmail":   email,
-		"BotEnabled":   botEnabled,
-		"BotThreshold": botThreshold,
-		"BotTTL":       botTTL,
-		"RLBackend":    rlBackend,
-		"RLRedisAddr":  rlAddr,
-		"RLSaveOK":     rlErr == "",
-		"RLError":      rlErr,
+	return h.renderPartial(c, "settings", "ratelimit-card", map[string]any{
+		"AdminPath":   h.cfg.Admin.Path,
+		"RLBackend":   rlBackend,
+		"RLRedisAddr": rlAddr,
+		"RLSaveOK":    rlErr == "",
+		"RLError":     rlErr,
 	})
+}
+
+// SaveWebhookConfig persists the webhook delivery settings.
+func (h *Handler) SaveWebhookConfig(c echo.Context) error {
+	url := strings.TrimSpace(c.FormValue("webhook_url"))
+	secret := strings.TrimSpace(c.FormValue("webhook_secret"))
+	enabled := c.FormValue("webhook_enabled") == "1"
+	// webhook_events is a multi-value checkbox — collect all checked values.
+	eventVals, _ := c.Request().PostForm["webhook_events"]
+	events := strings.Join(eventVals, ",")
+	if events == "" {
+		events = "blocked"
+	}
+	cfg := storage.WebhookConfig{URL: url, Secret: secret, Enabled: enabled && url != "", Events: events}
+	saveErr := ""
+	if err := h.db.SetWebhookConfig(cfg); err != nil {
+		saveErr = err.Error()
+	}
+	return h.renderPartial(c, "settings", "webhook-card", map[string]any{
+		"AdminPath":       h.cfg.Admin.Path,
+		"WebhookURL":      url,
+		"WebhookSecret":   secret,
+		"WebhookEnabled":  cfg.Enabled,
+		"WebhookEvents":   events,
+		"WebhookSaveOK":   saveErr == "",
+		"WebhookSaveErr":  saveErr,
+	})
+}
+
+// ExportLogs streams the filtered request log as NDJSON (one JSON object per
+// line). Accepts the same from/to/app/status query parameters as the Logs page.
+func (h *Handler) ExportLogs(c echo.Context) error {
+	q := c.QueryParams()
+	filter := storage.LogFilter{
+		AppName:     q.Get("app"),
+		StatusClass: q.Get("status"),
+	}
+	if t, err := time.Parse("2006-01-02T15:04", q.Get("from")); err == nil {
+		filter.From = t
+	}
+	if t, err := time.Parse("2006-01-02T15:04", q.Get("to")); err == nil {
+		filter.To = t
+	}
+
+	filename := "waf-logs-" + time.Now().UTC().Format("2006-01-02") + ".ndjson"
+	w := c.Response().Writer
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+
+	enc := json.NewEncoder(w)
+	flusher, canFlush := w.(http.Flusher)
+	n := 0
+	if err := h.db.ExportRequests(filter, func(r storage.RequestLog) bool {
+		_ = enc.Encode(r) // each Encode call appends a newline
+		n++
+		if canFlush && n%500 == 0 {
+			flusher.Flush()
+		}
+		return true
+	}); err != nil {
+		return err
+	}
+	if canFlush {
+		flusher.Flush()
+	}
+	return nil
 }
 
 // TestRedisConnection tests reachability of a Redis server without saving anything.
@@ -1261,13 +1559,15 @@ func (h *Handler) render(c echo.Context, page string, data map[string]any) error
 	}
 	data["Page"] = page
 	headings := map[string]string{
-		"dashboard": "Dashboard",
-		"logs":      "Live Logs",
-		"ip_rules":  "IP Rules",
-		"geo_rules": "Geo Rules",
-		"services":  "Services",
-		"waf_rules": "WAF Rules",
-		"settings":  "Settings",
+		"dashboard":    "Dashboard",
+		"logs":         "Live Logs",
+		"ip_rules":     "IP Rules",
+		"geo_rules":    "Geo Rules",
+		"services":     "Services",
+		"waf_rules":    "WAF Rules",
+		"threat_intel": "Threat Intel",
+		"certificates": "Certificates",
+		"settings":     "Settings",
 	}
 	if _, ok := data["Heading"]; !ok {
 		data["Heading"] = headings[page]

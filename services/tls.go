@@ -3,14 +3,17 @@ package services
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"time"
 )
 
 const certsRootDir = "certs/services"
+const certPoolRootDir = "certs/pool"
 
 var unsafeNameChars = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 
@@ -54,4 +57,48 @@ func LoadCertificate(certPath, keyPath string) (*tls.Certificate, error) {
 		return nil, err
 	}
 	return &cert, nil
+}
+
+// ParseCertInfo decodes the first PEM certificate block and returns the list
+// of domain names it covers (SANs, falling back to the CN) plus its expiry.
+func ParseCertInfo(certPEM []byte) (domains []string, expiresAt time.Time, err error) {
+	block, _ := pem.Decode(certPEM)
+	if block == nil {
+		return nil, time.Time{}, fmt.Errorf("no PEM block found in certificate")
+	}
+	leaf, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, time.Time{}, fmt.Errorf("parse certificate: %w", err)
+	}
+	domains = leaf.DNSNames
+	if len(domains) == 0 && leaf.Subject.CommonName != "" {
+		domains = []string{leaf.Subject.CommonName}
+	}
+	return domains, leaf.NotAfter, nil
+}
+
+// SavePoolCert validates the cert+key pair and writes them into the shared
+// certificate pool at certs/pool/<id>/. The key file is written mode 0600.
+func SavePoolCert(id int64, certPEM, keyPEM []byte) (certPath, keyPath string, err error) {
+	if _, err2 := tls.X509KeyPair(certPEM, keyPEM); err2 != nil {
+		return "", "", fmt.Errorf("invalid cert/key pair: %w", err2)
+	}
+	dir := filepath.Join(certPoolRootDir, strconv.FormatInt(id, 10))
+	if err = os.MkdirAll(dir, 0o700); err != nil {
+		return "", "", fmt.Errorf("create cert dir: %w", err)
+	}
+	certPath = filepath.Join(dir, "cert.pem")
+	keyPath = filepath.Join(dir, "key.pem")
+	if err = os.WriteFile(certPath, certPEM, 0o644); err != nil {
+		return "", "", fmt.Errorf("write cert: %w", err)
+	}
+	if err = os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+		return "", "", fmt.Errorf("write key: %w", err)
+	}
+	return certPath, keyPath, nil
+}
+
+// DeletePoolCert removes the on-disk directory for the given pool cert ID.
+func DeletePoolCert(id int64) {
+	os.RemoveAll(filepath.Join(certPoolRootDir, strconv.FormatInt(id, 10)))
 }

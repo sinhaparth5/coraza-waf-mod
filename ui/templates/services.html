@@ -115,9 +115,13 @@
       <button type="button" id="tls-modal-close" class="bg-none border-none cursor-pointer text-slate-500 text-lg leading-none">&times;</button>
     </div>
 
-    <div class="flex gap-4 mb-4">
+    <div class="flex gap-4 mb-4 flex-wrap">
       <label class="flex items-center gap-2 cursor-pointer">
-        <input type="radio" name="tls_action" value="upload" checked class="accent-brand"/>
+        <input type="radio" name="tls_action" value="pool" checked class="accent-brand"/>
+        <span class="text-[14px] font-medium text-slate-800">Saved cert</span>
+      </label>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="radio" name="tls_action" value="upload" class="accent-brand"/>
         <span class="text-[14px] font-medium text-slate-800">Upload cert</span>
       </label>
       <label class="flex items-center gap-2 cursor-pointer">
@@ -126,7 +130,28 @@
       </label>
     </div>
 
-    <form id="tls-upload-form" hx-post="/admin/services/tls/upload" hx-target="#services-body" hx-swap="innerHTML">
+    <!-- Saved cert pool picker (shown by default) -->
+    <form id="tls-pool-form" hx-post="{{.AdminPath}}/services/tls/pool" hx-target="#services-body" hx-swap="innerHTML">
+      <input type="hidden" name="service_id" class="tls-service-id"/>
+      {{if .PoolCerts}}
+      <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Select certificate</label>
+      <select name="cert_id"
+        class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white mb-4">
+        {{range .PoolCerts}}
+        <option value="{{.ID}}">{{.Name}}{{if .Domains}} · {{.Domains}}{{end}}</option>
+        {{end}}
+      </select>
+      <button type="submit" class="btn-primary w-full">Use This Certificate</button>
+      {{else}}
+      <div class="rounded-[10px] bg-canvas border border-line p-4 text-center">
+        <p class="text-[13px] text-slate-500 mb-3">No certificates in the pool yet.</p>
+        <a href="{{.AdminPath}}/certificates" class="text-[13px] text-brand font-medium no-underline hover:underline">Add a certificate →</a>
+      </div>
+      {{end}}
+    </form>
+
+    <!-- Manual upload -->
+    <form id="tls-upload-form" class="hidden" hx-post="{{.AdminPath}}/services/tls/upload" hx-target="#services-body" hx-swap="innerHTML">
       <input type="hidden" name="service_id" class="tls-service-id"/>
       <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Certificate (PEM)</label>
       <textarea name="cert_pem" rows="4" placeholder="-----BEGIN CERTIFICATE-----"
@@ -137,9 +162,10 @@
       <button type="submit" class="btn-primary w-full mt-4">Save Certificate</button>
     </form>
 
-    <form id="tls-auto-form" class="hidden" hx-post="/admin/services/tls/auto" hx-target="#services-body" hx-swap="innerHTML">
+    <!-- Let's Encrypt auto-issue -->
+    <form id="tls-auto-form" class="hidden" hx-post="{{.AdminPath}}/services/tls/auto" hx-target="#services-body" hx-swap="innerHTML">
       <input type="hidden" name="service_id" class="tls-service-id"/>
-      <p class="text-[13px] text-slate-500 mb-4 leading-[1.5]">A certificate is requested automatically from Let's Encrypt the first time this domain receives a real HTTPS connection — nothing is issued right now. Requires <code class="mono">tls.auto.email</code> to be set in config.yaml.</p>
+      <p class="text-[13px] text-slate-500 mb-4 leading-[1.5]">A certificate is issued automatically from Let's Encrypt the first time this domain receives a real HTTPS connection. Requires an ACME email to be set in Settings.</p>
       <button type="submit" class="btn-primary w-full">Enable Auto-Issue</button>
     </form>
 
@@ -272,7 +298,9 @@
     {{if .Host}}
     <span class="inline-flex items-center gap-[6px]">
       {{if eq .TLSMode "custom"}}
-      <span class="text-[11px] font-semibold bg-green-100 text-green-600 px-2 py-[2px] rounded-full">Custom{{if .TLSExpiresAt}} · exp {{shortDate .TLSExpiresAt}}{{end}}</span>
+      <span class="text-[11px] font-semibold bg-green-100 text-green-600 px-2 py-[2px] rounded-full">
+        {{if .CertName}}{{.CertName}}{{else}}Custom{{if .TLSExpiresAt}} · exp {{shortDate .TLSExpiresAt}}{{end}}{{end}}
+      </span>
       {{else if eq .TLSMode "auto"}}
       <span class="text-[11px] font-semibold bg-blue-50 text-blue-500 px-2 py-[2px] rounded-full">Auto (Let's Encrypt)</span>
       {{else}}

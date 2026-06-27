@@ -25,8 +25,10 @@ import (
 	"coraza-waf-mod/ratelimit"
 	"coraza-waf-mod/services"
 	"coraza-waf-mod/storage"
+	"coraza-waf-mod/threatintel"
 	"coraza-waf-mod/ui"
 	"coraza-waf-mod/waf"
+	"coraza-waf-mod/webhook"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -90,6 +92,14 @@ func main() {
 		log.Fatalf("ip blocklist: %v", err)
 	}
 
+	reloadIntel := func() {
+		if err := ipbl.ReloadIntel(db); err != nil {
+			log.Printf("threat-intel: blocklist reload: %v", err)
+		}
+	}
+	intelWorker := threatintel.New(db, reloadIntel)
+	defer intelWorker.Stop()
+
 	geoBl, err := geo.New(cfg.Geo.DBPath, db)
 	if err != nil {
 		log.Fatalf("geo blocker: %v", err)
@@ -134,6 +144,12 @@ func main() {
 	// SSE stream with the real row ID, not a zero placeholder.
 	db.SetBroadcastFn(broadcaster.Broadcast)
 
+	// Webhook pusher: delivers security events to the configured endpoint
+	// asynchronously so a slow webhook never blocks the log worker.
+	webhookPusher := webhook.New(db.GetWebhookConfig)
+	defer webhookPusher.Stop()
+	db.SetWebhookFn(webhookPusher.Push)
+
 	// Bot protection: DB is the source of truth (managed via Settings page).
 	// config.yaml BotProtection fields are only used as fallback defaults on
 	// first startup before the user has touched the Settings page.
@@ -166,6 +182,7 @@ func main() {
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(middleware.Recover())
+	e.Use(proxy.SecurityMiddleware())
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogURI:    true,
 		LogStatus: true,
@@ -203,7 +220,7 @@ func main() {
 		h.ReloadRateLimit(newBackend)
 	}
 
-	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs, reloadBot, buildChallenger, reloadRateLimit, reloadWAF)
+	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs, reloadBot, buildChallenger, reloadRateLimit, reloadWAF, intelWorker.SyncSource)
 	if err != nil {
 		log.Fatalf("ui init: %v", err)
 	}

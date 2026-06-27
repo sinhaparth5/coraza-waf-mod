@@ -1,0 +1,189 @@
+{{define "content"}}
+<div class="grid grid-cols-2 gap-6">
+
+  <!-- ── Left: upload form ── -->
+  <div class="flex flex-col gap-4">
+    <div class="card p-6">
+      <div class="flex items-center gap-[10px] mb-6">
+        <div class="w-8 h-8 rounded-full bg-brand-tint flex items-center justify-center">
+          <i class="hgi hgi-stroke hgi-rounded hgi-certificate-01 text-[14px] text-brand-dark"></i>
+        </div>
+        <h2 class="text-[17px] font-bold text-slate-900">Add Certificate</h2>
+      </div>
+
+      <form id="cert-upload-form"
+            hx-post="{{.AdminPath}}/certificates"
+            hx-target="#cert-rows"
+            hx-swap="innerHTML"
+            hx-on::after-request="if(event.detail.successful) this.reset()"
+            class="flex flex-col gap-4">
+
+        <div>
+          <label for="cert-name" class="block text-[12px] text-slate-500 mb-[6px] font-medium">
+            Name <span class="text-red-400">*</span>
+          </label>
+          <input id="cert-name" name="name" type="text"
+            placeholder="e.g. cloudflare-example-com"
+            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-[6px]">
+            <label for="cert-pem" class="text-[12px] text-slate-500 font-medium">
+              Certificate (PEM) <span class="text-red-400">*</span>
+            </label>
+            <label for="cert-file-input"
+              class="inline-flex items-center gap-[5px] text-[11px] font-medium text-brand cursor-pointer hover:text-brand-dark transition-colors select-none">
+              <i class="hgi hgi-stroke hgi-rounded hgi-upload-02 text-xs"></i>
+              Upload .pem / .crt
+            </label>
+          </div>
+          <input id="cert-file-input" type="file" accept=".pem,.crt,.cer" class="hidden"
+            data-fills="cert-pem" data-names="cert-name"/>
+          <textarea id="cert-pem" name="cert_pem" rows="5"
+            placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[12px] font-mono outline-none text-slate-800 bg-white resize-y"></textarea>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-[6px]">
+            <label for="key-pem" class="text-[12px] text-slate-500 font-medium">
+              Private Key (PEM) <span class="text-red-400">*</span>
+            </label>
+            <label for="key-file-input"
+              class="inline-flex items-center gap-[5px] text-[11px] font-medium text-brand cursor-pointer hover:text-brand-dark transition-colors select-none">
+              <i class="hgi hgi-stroke hgi-rounded hgi-upload-02 text-xs"></i>
+              Upload .pem / .key
+            </label>
+          </div>
+          <input id="key-file-input" type="file" accept=".pem,.key" class="hidden"
+            data-fills="key-pem"/>
+          <textarea id="key-pem" name="key_pem" rows="5"
+            placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[12px] font-mono outline-none text-slate-800 bg-white resize-y"></textarea>
+        </div>
+
+        <div id="cert-error" class="text-[12px] text-red-500 -mt-1"></div>
+
+        <button type="submit" class="btn-primary w-full flex items-center justify-center gap-2">
+          <i class="hgi hgi-stroke hgi-rounded hgi-add-circle text-sm"></i>
+          Save Certificate
+        </button>
+      </form>
+
+      <div class="mt-5 pt-4 border-t border-canvas">
+        <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Cloudflare origin certs</p>
+        <p class="text-[12px] text-slate-500 leading-[1.6]">
+          Cloudflare → SSL/TLS → Origin Server → <strong>Create Certificate</strong>.
+          Covers your domain and <code class="font-mono bg-surface px-1 rounded text-[11px]">*.domain</code> in one cert.
+          Set SSL/TLS mode to <strong>Full (strict)</strong>, then assign it to each matching service.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Right: saved certs ── -->
+  <div class="card overflow-hidden">
+    {{template "card-header" (map "Cat" "TLS" "Title" "Saved Certificates" "Badge" (printf "%d certs" (len .Certs)))}}
+
+    <div class="px-6 pb-6">
+      <table class="w-full border-collapse text-[13px]">
+        <thead>
+          <tr class="border-b border-canvas">
+            <th class="text-left pb-3 pr-6 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Name</th>
+            <th class="text-left pb-3 pr-6 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Domains covered</th>
+            <th class="text-left pb-3 pr-6 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Expires</th>
+            <th class="pb-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wide"></th>
+          </tr>
+        </thead>
+        <tbody id="cert-rows">
+          {{template "cert-rows" .}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  // Strip directory prefix and known cert/key extensions from a filename.
+  function nameFromFile(filename) {
+    return filename
+      .replace(/^.*[/\\]/, '')           // strip path
+      .replace(/\.(pem|crt|cer|key)$/i, '') // strip extension
+      .replace(/[^a-zA-Z0-9._-]+/g, '-')   // safe chars only
+      .replace(/^-+|-+$/g, '');             // trim leading/trailing dashes
+  }
+
+  document.querySelectorAll('input[type="file"][data-fills]').forEach(function (input) {
+    input.addEventListener('change', function () {
+      var file = input.files[0];
+      if (!file) return;
+
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        // Populate the textarea
+        var ta = document.getElementById(input.dataset.fills);
+        if (ta) ta.value = e.target.result;
+
+        // Auto-fill the Name field from the filename if it is empty
+        var nameFieldId = input.dataset.names;
+        if (nameFieldId) {
+          var nameField = document.getElementById(nameFieldId);
+          if (nameField && nameField.value.trim() === '') {
+            nameField.value = nameFromFile(file.name);
+          }
+        }
+
+        // Reset the file input so the same file can be re-selected
+        input.value = '';
+      };
+      reader.readAsText(file);
+    });
+  });
+
+  // Clear the error box whenever the user starts editing the form again
+  var form = document.getElementById('cert-upload-form');
+  if (form) {
+    form.addEventListener('input', function () {
+      var err = document.getElementById('cert-error');
+      if (err) err.textContent = '';
+    });
+  }
+})();
+</script>
+{{end}}
+
+{{define "cert-rows"}}
+{{if not .Certs}}
+<tr>
+  <td colspan="4">
+    {{template "empty-state" (map "Icon" "hgi-certificate-01" "Message" "No certificates saved yet. Upload one to get started.")}}
+  </td>
+</tr>
+{{else}}
+{{range .Certs}}
+<tr class="border-b border-canvas last:border-0">
+  <td class="py-4 pr-6 font-medium text-slate-800 align-top">{{.Name}}</td>
+  <td class="py-4 pr-6 align-top">
+    {{if .Domains}}
+    <div class="flex flex-wrap gap-[6px]">
+      {{range (splitComma .Domains)}}
+      <span class="text-[11px] font-mono bg-canvas border border-line rounded-[6px] px-[8px] py-[3px] text-slate-600">{{.}}</span>
+      {{end}}
+    </div>
+    {{else}}
+    <span class="text-slate-400 text-[12px]">—</span>
+    {{end}}
+  </td>
+  <td class="py-4 pr-6 text-[12px] text-slate-500 whitespace-nowrap align-top">
+    {{if .ExpiresAt}}{{shortDate .ExpiresAt}}{{else}}—{{end}}
+  </td>
+  <td class="py-4 text-right align-top">
+    {{template "remove-btn" (map "URL" (printf "%s/certificates/%d" $.AdminPath .ID) "Target" "#cert-rows" "Confirm" (printf "Delete '%s'? Services using it will lose TLS." .Name))}}
+  </td>
+</tr>
+{{end}}
+{{end}}
+{{end}}

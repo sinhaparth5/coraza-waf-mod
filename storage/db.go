@@ -32,6 +32,14 @@ type DB struct {
 	logQueue    chan RequestLog
 	logDone     chan struct{}
 	broadcastFn func(RequestLog)
+	webhookFn   func(RequestLog)
+}
+
+// SetWebhookFn registers a callback invoked (from the log worker goroutine)
+// after each successful DB insert. Used to push security events to the webhook
+// pusher without coupling storage to the webhook package.
+func (db *DB) SetWebhookFn(fn func(RequestLog)) {
+	db.webhookFn = fn
 }
 
 // SetBroadcastFn registers a callback invoked after each successful DB insert,
@@ -119,9 +127,12 @@ func (db *DB) runLogWorker() {
 			if dur >= slowWriteThreshold {
 				log.Printf("storage: slow request log write, took %s (queue depth now %d)", dur, db.QueueDepth())
 			}
+			entry.ID = int(id)
 			if db.broadcastFn != nil {
-				entry.ID = int(id)
 				db.broadcastFn(entry)
+			}
+			if db.webhookFn != nil {
+				db.webhookFn(entry)
 			}
 		}
 	}
@@ -174,6 +185,7 @@ func (db *DB) migrate() error {
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_rps REAL NOT NULL DEFAULT 0`)         //nolint
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_burst INTEGER NOT NULL DEFAULT 0`)    //nolint
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN bot_mode TEXT NOT NULL DEFAULT 'inherit'`)       //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cert_id INTEGER NOT NULL DEFAULT 0`)             //nolint
 
 	_, err := db.conn.Exec(`
 	CREATE TABLE IF NOT EXISTS requests (
@@ -246,7 +258,18 @@ func (db *DB) migrate() error {
 		tls_expires_at   TEXT NOT NULL DEFAULT '',
 		rate_limit_rps   REAL NOT NULL DEFAULT 0,
 		rate_limit_burst INTEGER NOT NULL DEFAULT 0,
-		bot_mode         TEXT NOT NULL DEFAULT 'inherit'
+		bot_mode         TEXT NOT NULL DEFAULT 'inherit',
+		cert_id          INTEGER NOT NULL DEFAULT 0
+	);
+
+	CREATE TABLE IF NOT EXISTS certificates (
+		id          INTEGER  PRIMARY KEY AUTOINCREMENT,
+		name        TEXT     NOT NULL UNIQUE,
+		domains     TEXT     NOT NULL DEFAULT '',
+		expires_at  TEXT     NOT NULL DEFAULT '',
+		cert_path   TEXT     NOT NULL DEFAULT '',
+		key_path    TEXT     NOT NULL DEFAULT '',
+		created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
 
 	CREATE TABLE IF NOT EXISTS sessions (
@@ -266,6 +289,33 @@ func (db *DB) migrate() error {
 		reason     TEXT NOT NULL DEFAULT '',
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
+
+	CREATE TABLE IF NOT EXISTS threat_intel_sources (
+		id             INTEGER PRIMARY KEY AUTOINCREMENT,
+		label          TEXT NOT NULL,
+		url            TEXT NOT NULL UNIQUE,
+		interval_hours INTEGER NOT NULL DEFAULT 24,
+		enabled        INTEGER NOT NULL DEFAULT 1,
+		last_synced_at TEXT NOT NULL DEFAULT '',
+		last_error     TEXT NOT NULL DEFAULT '',
+		ip_count       INTEGER NOT NULL DEFAULT 0,
+		created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS threat_intel_ips (
+		source_id INTEGER NOT NULL,
+		ip        TEXT NOT NULL,
+		PRIMARY KEY (source_id, ip)
+	);
+
+	CREATE TABLE IF NOT EXISTS webhook_config (
+		id      INTEGER PRIMARY KEY CHECK (id = 1),
+		url     TEXT    NOT NULL DEFAULT '',
+		secret  TEXT    NOT NULL DEFAULT '',
+		enabled INTEGER NOT NULL DEFAULT 0,
+		events  TEXT    NOT NULL DEFAULT 'blocked,challenged'
+	);
+	INSERT OR IGNORE INTO webhook_config (id) VALUES (1);
 	`)
 	if err != nil {
 		return err
@@ -394,6 +444,7 @@ type Service struct {
 	RateLimitRPS   float64
 	RateLimitBurst int
 	BotMode        string // "inherit" | "always" | "off"
+	CertID         int64  // >0 when TLS cert comes from the shared cert pool
 }
 
 func (db *DB) AddService(name, host, prefix, backend string, rps float64, burst int) error {
@@ -428,9 +479,26 @@ func (db *DB) SetServiceTLS(id int, mode, certPath, keyPath, expiresAt string) e
 	return err
 }
 
-// ClearServiceTLS reverts a service to plain HTTP (no TLS).
+// ClearServiceTLS reverts a service to plain HTTP (no TLS), including clearing
+// any reference to a pool cert.
 func (db *DB) ClearServiceTLS(id int) error {
-	return db.SetServiceTLS(id, "none", "", "", "")
+	_, err := db.conn.Exec(
+		`UPDATE services SET tls_mode = 'none', tls_cert_path = '', tls_key_path = '', tls_expires_at = '', cert_id = 0 WHERE id = ?`,
+		id,
+	)
+	return err
+}
+
+// SetServiceCertID links a service to a cert-pool entry. Sets tls_mode to
+// "custom" and clears the old per-service cert paths since the cert now comes
+// from the pool. Set certID to 0 to remove the pool association (use
+// ClearServiceTLS to fully revert to plain HTTP).
+func (db *DB) SetServiceCertID(serviceID int, certID int64) error {
+	_, err := db.conn.Exec(
+		`UPDATE services SET cert_id = ?, tls_mode = 'custom', tls_cert_path = '', tls_key_path = '', tls_expires_at = '' WHERE id = ?`,
+		certID, serviceID,
+	)
+	return err
 }
 
 // SetServiceRateLimit configures a per-service per-IP rate limit.
@@ -448,6 +516,83 @@ func (db *DB) SetServiceRateLimit(id int, rps float64, burst int) error {
 // mode must be one of "inherit", "always", or "off".
 func (db *DB) SetServiceBotMode(id int, mode string) error {
 	_, err := db.conn.Exec(`UPDATE services SET bot_mode = ? WHERE id = ?`, mode, id)
+	return err
+}
+
+// ── Certificate Pool ──────────────────────────────────────────────────────────
+
+// CertRecord is a row in the certificates table. Cert+key files live on disk
+// under certs/pool/<id>/; only the paths are stored here.
+type CertRecord struct {
+	ID        int64
+	Name      string
+	Domains   string // comma-separated list of covered hostnames, e.g. "example.com, *.example.com"
+	ExpiresAt string // RFC3339, or "" if unknown
+	CertPath  string
+	KeyPath   string
+	CreatedAt string
+}
+
+// AddCertificate inserts a new certificate pool entry. Cert+key paths may be
+// empty initially and updated with UpdateCertificatePaths once files are saved.
+func (db *DB) AddCertificate(name, domains, expiresAt, certPath, keyPath string) (int64, error) {
+	res, err := db.conn.Exec(
+		`INSERT INTO certificates (name, domains, expires_at, cert_path, key_path) VALUES (?, ?, ?, ?, ?)`,
+		name, domains, expiresAt, certPath, keyPath,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// UpdateCertificatePaths stores the on-disk file paths after the files have
+// been written (called immediately after AddCertificate + SavePoolCert).
+func (db *DB) UpdateCertificatePaths(id int64, certPath, keyPath string) error {
+	_, err := db.conn.Exec(
+		`UPDATE certificates SET cert_path = ?, key_path = ? WHERE id = ?`,
+		certPath, keyPath, id,
+	)
+	return err
+}
+
+func (db *DB) ListCertificates() ([]CertRecord, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, name, domains, expires_at, cert_path, key_path, created_at FROM certificates ORDER BY created_at ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []CertRecord
+	for rows.Next() {
+		var c CertRecord
+		if err := rows.Scan(&c.ID, &c.Name, &c.Domains, &c.ExpiresAt, &c.CertPath, &c.KeyPath, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (db *DB) GetCertificate(id int64) (CertRecord, error) {
+	var c CertRecord
+	err := db.conn.QueryRow(
+		`SELECT id, name, domains, expires_at, cert_path, key_path, created_at FROM certificates WHERE id = ?`, id,
+	).Scan(&c.ID, &c.Name, &c.Domains, &c.ExpiresAt, &c.CertPath, &c.KeyPath, &c.CreatedAt)
+	return c, err
+}
+
+// DeleteCertificate removes a cert-pool entry. Services that referenced it
+// via cert_id are reset to tls_mode='none' so they don't silently lose TLS.
+func (db *DB) DeleteCertificate(id int64) error {
+	if _, err := db.conn.Exec(
+		`UPDATE services SET tls_mode = 'none', cert_id = 0, tls_cert_path = '', tls_key_path = '', tls_expires_at = '' WHERE cert_id = ?`,
+		id,
+	); err != nil {
+		return err
+	}
+	_, err := db.conn.Exec(`DELETE FROM certificates WHERE id = ?`, id)
 	return err
 }
 
@@ -488,7 +633,7 @@ func (db *DB) SetBotSettings(enabled bool, threshold, ttl int) error {
 
 func (db *DB) ListServices() ([]Service, error) {
 	rows, err := db.conn.Query(
-		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode FROM services ORDER BY created_at ASC`,
+		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id FROM services ORDER BY created_at ASC`,
 	)
 	if err != nil {
 		return nil, err
@@ -498,7 +643,7 @@ func (db *DB) ListServices() ([]Service, error) {
 	var out []Service
 	for rows.Next() {
 		var s Service
-		if err := rows.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -510,9 +655,9 @@ func (db *DB) ListServices() ([]Service, error) {
 func (db *DB) GetService(id int) (Service, error) {
 	var s Service
 	err := db.conn.QueryRow(
-		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode FROM services WHERE id = ?`,
+		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id FROM services WHERE id = ?`,
 		id,
-	).Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode)
+	).Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID)
 	return s, err
 }
 
@@ -1220,6 +1365,133 @@ func (db *DB) SetRedisConfig(addr, password string) error {
 	return db.setMeta("redis_password", password)
 }
 
+// ── Threat intelligence ───────────────────────────────────────────────────────
+
+// ThreatIntelSource is one row from threat_intel_sources.
+type ThreatIntelSource struct {
+	ID            int64
+	Label         string
+	URL           string
+	IntervalHours int
+	Enabled       bool
+	LastSyncedAt  time.Time // zero = never synced
+	LastError     string
+	IPCount       int
+	CreatedAt     time.Time
+}
+
+func (db *DB) AddThreatIntelSource(label, url string, intervalHours int) error {
+	_, err := db.conn.Exec(
+		`INSERT INTO threat_intel_sources (label, url, interval_hours) VALUES (?, ?, ?)`,
+		label, url, intervalHours,
+	)
+	return err
+}
+
+func (db *DB) DeleteThreatIntelSource(id int64) error {
+	_, err := db.conn.Exec(`DELETE FROM threat_intel_sources WHERE id = ?`, id)
+	return err
+}
+
+func (db *DB) SetThreatIntelSourceEnabled(id int64, enabled bool) error {
+	_, err := db.conn.Exec(
+		`UPDATE threat_intel_sources SET enabled = ? WHERE id = ?`, boolToInt(enabled), id,
+	)
+	return err
+}
+
+func (db *DB) ListThreatIntelSources() ([]ThreatIntelSource, error) {
+	rows, err := db.conn.Query(`
+		SELECT id, label, url, interval_hours, enabled,
+		       last_synced_at, last_error, ip_count, created_at
+		FROM threat_intel_sources ORDER BY created_at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var sources []ThreatIntelSource
+	for rows.Next() {
+		var s ThreatIntelSource
+		var enabled int
+		var lastSyncedStr string
+		if err := rows.Scan(&s.ID, &s.Label, &s.URL, &s.IntervalHours, &enabled,
+			&lastSyncedStr, &s.LastError, &s.IPCount, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		s.Enabled = enabled == 1
+		if lastSyncedStr != "" {
+			s.LastSyncedAt = parseTS(lastSyncedStr)
+		}
+		sources = append(sources, s)
+	}
+	return sources, rows.Err()
+}
+
+// UpdateThreatIntelSync records the outcome of a sync run. On error only the
+// timestamp and error message are updated; ip_count is left at its last good
+// value so the UI still shows how many IPs were loaded from the previous run.
+func (db *DB) UpdateThreatIntelSync(id int64, ipCount int, lastError string) error {
+	if lastError != "" {
+		_, err := db.conn.Exec(
+			`UPDATE threat_intel_sources SET last_synced_at = ?, last_error = ? WHERE id = ?`,
+			time.Now().UTC(), lastError, id,
+		)
+		return err
+	}
+	_, err := db.conn.Exec(
+		`UPDATE threat_intel_sources SET last_synced_at = ?, last_error = '', ip_count = ? WHERE id = ?`,
+		time.Now().UTC(), ipCount, id,
+	)
+	return err
+}
+
+// ReplaceThreatIntelIPs atomically replaces all IPs for a source in a single
+// transaction so the blocklist never sees a partial update.
+func (db *DB) ReplaceThreatIntelIPs(sourceID int64, ips []string) error {
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint
+	if _, err := tx.Exec(`DELETE FROM threat_intel_ips WHERE source_id = ?`, sourceID); err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(`INSERT OR IGNORE INTO threat_intel_ips (source_id, ip) VALUES (?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, ip := range ips {
+		if _, err := stmt.Exec(sourceID, ip); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ListThreatIntelIPs returns all distinct IPs/CIDRs from enabled sources.
+// Used by IPBlocklist.Reload to populate the in-memory intel block set.
+func (db *DB) ListThreatIntelIPs() ([]string, error) {
+	rows, err := db.conn.Query(`
+		SELECT DISTINCT ti.ip
+		FROM threat_intel_ips ti
+		JOIN threat_intel_sources ts ON ti.source_id = ts.id
+		WHERE ts.enabled = 1`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ips []string
+	for rows.Next() {
+		var ip string
+		if err := rows.Scan(&ip); err != nil {
+			return nil, err
+		}
+		ips = append(ips, ip)
+	}
+	return ips, rows.Err()
+}
+
 func boolToInt(b bool) int {
 	if b {
 		return 1
@@ -1363,4 +1635,70 @@ func (db *DB) GetTopFiringRules(limit int) ([]RuleHit, error) {
 		hits[i].Disabled = disabledSet[hits[i].RuleID]
 	}
 	return hits, nil
+}
+
+// ── Webhook ───────────────────────────────────────────────────────────────────
+
+// WebhookConfig is stored in the singleton webhook_config row (id=1).
+type WebhookConfig struct {
+	URL     string
+	Secret  string // sent as X-WAF-Secret header value
+	Enabled bool
+	Events  string // comma-separated event categories: "blocked", "challenged"
+}
+
+func (db *DB) GetWebhookConfig() (WebhookConfig, error) {
+	var cfg WebhookConfig
+	var enabled int
+	err := db.conn.QueryRow(
+		`SELECT url, secret, enabled, events FROM webhook_config WHERE id = 1`,
+	).Scan(&cfg.URL, &cfg.Secret, &enabled, &cfg.Events)
+	if err != nil {
+		return WebhookConfig{}, err
+	}
+	cfg.Enabled = enabled == 1
+	return cfg, nil
+}
+
+func (db *DB) SetWebhookConfig(cfg WebhookConfig) error {
+	_, err := db.conn.Exec(
+		`UPDATE webhook_config SET url=?, secret=?, enabled=?, events=? WHERE id=1`,
+		cfg.URL, cfg.Secret, boolToInt(cfg.Enabled), cfg.Events,
+	)
+	return err
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+
+// ExportRequests streams all matching request logs through fn. fn returns false
+// to stop early. Uses the same LogFilter WHERE clause as ListRequestsFiltered
+// but selects all columns and has no pagination cap.
+func (db *DB) ExportRequests(f LogFilter, fn func(RequestLog) bool) error {
+	where, args := f.where()
+	query := `SELECT id, ts, app_name, real_ip, proxy_ip, country, method, host, path, query,
+	                 status, blocked, rule_id, action, user_agent, duration_ms, headers_json,
+	                 request_id, proto, tls_version, tls_cipher, tls_sni, asn_num, org, ja3_hash, bot_score
+	          FROM requests ` + where + ` ORDER BY ts DESC`
+	rows, err := db.conn.Query(query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var r RequestLog
+		var blocked int
+		if err := rows.Scan(
+			&r.ID, &r.Timestamp, &r.AppName, &r.RealIP, &r.ProxyIP, &r.Country,
+			&r.Method, &r.Host, &r.Path, &r.Query,
+			&r.Status, &blocked, &r.RuleID, &r.Action, &r.UserAgent, &r.Duration, &r.HeadersJSON,
+			&r.RequestID, &r.Proto, &r.TLSVersion, &r.TLSCipher, &r.TLSSNI, &r.ASN, &r.Org, &r.JA3Hash, &r.BotScore,
+		); err != nil {
+			return err
+		}
+		r.Blocked = blocked == 1
+		if !fn(r) {
+			return nil
+		}
+	}
+	return rows.Err()
 }
