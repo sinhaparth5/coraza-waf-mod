@@ -26,6 +26,7 @@ test:
   before_script:
     - apk add --no-cache make git
   script:
+    - go generate ./...
     - go test ./...
   rules:
     - if: $CI_COMMIT_BRANCH
