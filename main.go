@@ -348,6 +348,15 @@ func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db 
 
 	s := e.TLSServer
 	s.Addr = cfg.ListenAddrTLS
+	prevConnState := s.ConnState
+	s.ConnState = func(conn net.Conn, state http.ConnState) {
+		if prevConnState != nil {
+			prevConnState(conn, state)
+		}
+		if state == http.StateClosed || state == http.StateHijacked {
+			ja3pkg.Delete(conn.RemoteAddr().String())
+		}
+	}
 
 	// Certificate resolution order:
 	//   1. Per-service uploaded cert (by SNI)
