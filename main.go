@@ -280,12 +280,15 @@ func main() {
 	// TLS only starts when --listen-tls is provided. Certificate config
 	// (ACME email, per-service certs) lives entirely in the DB.
 	if cfg.ListenAddrTLS != "" {
-		startTLS(e, cfg, registry, db, appCount)
+		if err := startTLS(e, cfg, registry, db, appCount); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("tls server: %v", err)
+		}
 		return
 	}
 	log.Printf("coraza-waf listening on %s (plain HTTP, waf=%v, apps=%d)",
 		cfg.ListenAddr, cfg.WAF.Enabled, appCount)
-	if err := e.Start(cfg.ListenAddr); err != nil {
+	shutdownOnSignal(e)
+	if err := e.Start(cfg.ListenAddr); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server: %v", err)
 	}
 }
@@ -295,14 +298,14 @@ func main() {
 // on cfg.ListenAddr (ACME challenge handler + HTTPS redirect) and HTTPS on
 // cfg.ListenAddrTLS. Per-service custom certs take priority over autocert by
 // SNI (see services.Registry.GetCertificateFunc).
-func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db *storage.DB, appCount int) {
+func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db *storage.DB, appCount int) error {
 	email, _         := db.GetAcmeEmail()
 	primaryDomain, _ := db.GetPrimaryDomain()
 
 	var am *autocert.Manager
 	if email != "" {
 		if err := os.MkdirAll(cfg.TLS.CacheDir, 0700); err != nil {
-			log.Fatalf("cannot create cert cache dir %s: %v", cfg.TLS.CacheDir, err)
+			return fmt.Errorf("cannot create cert cache dir %s: %w", cfg.TLS.CacheDir, err)
 		}
 		// HostPolicy allows services with tls_mode="auto" AND the primary domain
 		// (so the admin dashboard's domain gets a Let's Encrypt cert automatically).
@@ -327,7 +330,7 @@ func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db 
 	if cfg.TLS.FallbackCertFile != "" && cfg.TLS.FallbackKeyFile != "" {
 		cert, err := tls.LoadX509KeyPair(cfg.TLS.FallbackCertFile, cfg.TLS.FallbackKeyFile)
 		if err != nil {
-			log.Fatalf("load fallback TLS cert: %v", err)
+			return fmt.Errorf("load fallback TLS cert: %w", err)
 		}
 		fallbackCert = &cert
 		log.Printf("tls: loaded fallback cert from %s", cfg.TLS.FallbackCertFile)
@@ -338,10 +341,10 @@ func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db 
 	if am != nil {
 		httpHandler = am.HTTPHandler(httpHandler)
 	}
+	redirectServer := &http.Server{Addr: cfg.ListenAddr, Handler: httpHandler}
 	go func() {
 		log.Printf("coraza-waf HTTP (ACME/redirect) on %s", cfg.ListenAddr)
-		srv := &http.Server{Addr: cfg.ListenAddr, Handler: httpHandler}
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := redirectServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("http server: %v", err)
 		}
 	}()
@@ -395,9 +398,39 @@ func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db 
 	}
 
 	log.Printf("coraza-waf TLS on %s (waf=%v, apps=%d)", cfg.ListenAddrTLS, cfg.WAF.Enabled, appCount)
-	if err := e.StartServer(s); err != nil {
-		log.Fatalf("tls server: %v", err)
-	}
+	shutdownOnSignal(e, redirectServer)
+	return e.StartServer(s)
+}
+
+func shutdownOnSignal(e *echo.Echo, extraServers ...*http.Server) {
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		sig := <-sigCh
+		signal.Stop(sigCh)
+
+		log.Printf("%s: shutting down gracefully...", sig)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		for _, srv := range extraServers {
+			if srv == nil {
+				continue
+			}
+			if err := srv.Shutdown(ctx); err != nil {
+				log.Printf("http shutdown: %v", err)
+				if closeErr := srv.Close(); closeErr != nil {
+					log.Printf("http close: %v", closeErr)
+				}
+			}
+		}
+		if err := e.Shutdown(ctx); err != nil {
+			log.Printf("server shutdown: %v", err)
+			if closeErr := e.Close(); closeErr != nil {
+				log.Printf("server close: %v", closeErr)
+			}
+		}
+	}()
 }
 
 // runPruneOnly opens the DB, deletes request logs older than the configured
