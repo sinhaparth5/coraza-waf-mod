@@ -32,7 +32,7 @@ A single-binary Go WAF + reverse proxy with embedded Coraza, SQLite storage, and
 - [x] Coraza WAF engine initialised with **OWASP CRS loaded** (`waf/engine.go`, embedded via `coraza-coreruleset`)
 - [x] Every request runs through a Coraza transaction (`waf/engine.go`)
 - [x] Interrupted requests (blocked by WAF) return 403
-- [x] Real client IP extracted: `CF-Connecting-IP` → `X-Forwarded-For` → `X-Real-IP`
+- [x] Real client IP extracted safely: `CF-Connecting-IP` only from Cloudflare ranges; `X-Forwarded-For` / `X-Real-IP` only from configured trusted proxy CIDRs
 - [x] TLS support managed from the admin UI (see Phase 6 TLS redesign)
 - [x] Native CRS exploit coverage confirmed end-to-end (SQLi, XSS, RCE, path traversal, restricted file access, scanner UA detection) — see Decision Log 2026-06-24 for a directive-ordering bug that silently kept the engine in detection-only mode until fixed
 

@@ -73,27 +73,29 @@ func main() {
 	// protection, Redis, ACME email, per-service overrides) live in the SQLite
 	// meta table and are managed from the admin UI — no config file needed.
 	fs := flag.NewFlagSet("coraza-waf-mod", flag.ExitOnError)
-	listen    := fs.String("listen",     ":8080",   "HTTP listen address")
-	listenTLS := fs.String("listen-tls", "",        "HTTPS listen address (empty = HTTP only)")
-	dbPath    := fs.String("db",         "waf.db",  "SQLite database path")
-	certsDir  := fs.String("certs",      "./certs", "TLS certificate cache directory")
-	wafRules  := fs.String("waf-rules",  "",        "extra WAF rules directory (empty = OWASP CRS only)")
-	geoDBPath := fs.String("geo-db",     "",        "GeoIP2 database path (empty = bundled)")
-	retention := fs.Int("retention",     30,        "request log retention in days (0 = keep forever)")
-	tlsCert   := fs.String("tls-cert",   "",        "PEM certificate file for HTTPS fallback (self-signed)")
-	tlsKey    := fs.String("tls-key",    "",        "PEM private key file for HTTPS fallback (self-signed)")
+	listen := fs.String("listen", ":8080", "HTTP listen address")
+	listenTLS := fs.String("listen-tls", "", "HTTPS listen address (empty = HTTP only)")
+	trustedProxies := fs.String("trusted-proxies", "", "comma-separated trusted proxy CIDRs for X-Forwarded-For/X-Real-IP")
+	dbPath := fs.String("db", "waf.db", "SQLite database path")
+	certsDir := fs.String("certs", "./certs", "TLS certificate cache directory")
+	wafRules := fs.String("waf-rules", "", "extra WAF rules directory (empty = OWASP CRS only)")
+	geoDBPath := fs.String("geo-db", "", "GeoIP2 database path (empty = bundled)")
+	retention := fs.Int("retention", 30, "request log retention in days (0 = keep forever)")
+	tlsCert := fs.String("tls-cert", "", "PEM certificate file for HTTPS fallback (self-signed)")
+	tlsKey := fs.String("tls-key", "", "PEM private key file for HTTPS fallback (self-signed)")
 	fs.Parse(os.Args[1:])
 
 	cfg := config.Defaults()
-	cfg.ListenAddr            = *listen
-	cfg.ListenAddrTLS         = *listenTLS
-	cfg.DB.Path               = *dbPath
-	cfg.TLS.CacheDir          = *certsDir
-	cfg.TLS.FallbackCertFile  = *tlsCert
-	cfg.TLS.FallbackKeyFile   = *tlsKey
-	cfg.WAF.RulesDir          = *wafRules
-	cfg.Geo.DBPath            = *geoDBPath
-	cfg.DB.LogRetentionDays   = *retention
+	cfg.ListenAddr = *listen
+	cfg.ListenAddrTLS = *listenTLS
+	cfg.TrustedProxies = splitCSV(*trustedProxies)
+	cfg.DB.Path = *dbPath
+	cfg.TLS.CacheDir = *certsDir
+	cfg.TLS.FallbackCertFile = *tlsCert
+	cfg.TLS.FallbackKeyFile = *tlsKey
+	cfg.WAF.RulesDir = *wafRules
+	cfg.Geo.DBPath = *geoDBPath
+	cfg.DB.LogRetentionDays = *retention
 
 	db, err := storage.Open(cfg.DB.Path)
 	if err != nil {
@@ -212,7 +214,7 @@ func main() {
 		},
 	}))
 
-	h := proxy.NewHandler(registry, engine, db, ipbl, geoBl, rl, asnLookup, ch)
+	h := proxy.NewHandler(registry, engine, db, ipbl, geoBl, rl, asnLookup, ch, cfg.TrustedProxies...)
 
 	// reloadWAF rebuilds the WAF engine from the current DB disabled-rule list.
 	// Called from the WAF Rules page when a rule is toggled.
@@ -299,7 +301,7 @@ func main() {
 // cfg.ListenAddrTLS. Per-service custom certs take priority over autocert by
 // SNI (see services.Registry.GetCertificateFunc).
 func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db *storage.DB, appCount int) error {
-	email, _         := db.GetAcmeEmail()
+	email, _ := db.GetAcmeEmail()
 	primaryDomain, _ := db.GetPrimaryDomain()
 
 	var am *autocert.Manager
@@ -310,7 +312,7 @@ func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db 
 		// HostPolicy allows services with tls_mode="auto" AND the primary domain
 		// (so the admin dashboard's domain gets a Let's Encrypt cert automatically).
 		basePolicy := registry.HostPolicy()
-		primary    := strings.ToLower(primaryDomain)
+		primary := strings.ToLower(primaryDomain)
 		am = &autocert.Manager{
 			Prompt: autocert.AcceptTOS,
 			HostPolicy: func(ctx context.Context, host string) error {
@@ -433,14 +435,29 @@ func shutdownOnSignal(e *echo.Echo, extraServers ...*http.Server) {
 	}()
 }
 
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
 // runPruneOnly opens the DB, deletes request logs older than the configured
 // retention window, logs the result, and returns — it does not start the WAF,
 // proxy, or admin UI. retention <= 0 disables pruning (logs kept forever).
 // Invoked as: coraza-waf-mod prune [--db path] [--retention days]
 func runPruneOnly(args []string) {
 	fs := flag.NewFlagSet("prune", flag.ExitOnError)
-	dbPath    := fs.String("db",        "waf.db", "SQLite database path")
-	retention := fs.Int("retention",    30,        "log retention in days (0 = keep forever)")
+	dbPath := fs.String("db", "waf.db", "SQLite database path")
+	retention := fs.Int("retention", 30, "log retention in days (0 = keep forever)")
 	fs.Parse(args)
 
 	if *retention <= 0 {
@@ -472,10 +489,10 @@ func runPruneOnly(args []string) {
 // Password is read from stdin (one line).
 func runSetup(args []string) {
 	fs := flag.NewFlagSet("setup", flag.ExitOnError)
-	dbPath     := fs.String("db",          "waf.db", "SQLite database path")
-	adminEmail := fs.String("admin-email", "",       "admin email address")
-	domain     := fs.String("domain",      "",       "primary domain for ACME (Let's Encrypt)")
-	acmeEmail  := fs.String("acme-email",  "",       "ACME contact email (defaults to admin email)")
+	dbPath := fs.String("db", "waf.db", "SQLite database path")
+	adminEmail := fs.String("admin-email", "", "admin email address")
+	domain := fs.String("domain", "", "primary domain for ACME (Let's Encrypt)")
+	acmeEmail := fs.String("acme-email", "", "ACME contact email (defaults to admin email)")
 	fs.Parse(args)
 
 	if *adminEmail == "" {
@@ -522,10 +539,10 @@ func runSetup(args []string) {
 // Invoked as: coraza-waf-mod gencert --cert path --key path --hosts ip1,ip2,...
 func runGencert(args []string) {
 	fs := flag.NewFlagSet("gencert", flag.ExitOnError)
-	certFile := fs.String("cert",  "cert.pem",  "output PEM certificate file")
-	keyFile  := fs.String("key",   "key.pem",   "output PEM private key file")
-	hosts    := fs.String("hosts", "",           "comma-separated hostnames and/or IP addresses for SANs")
-	days     := fs.Int("days",     3650,         "certificate validity in days")
+	certFile := fs.String("cert", "cert.pem", "output PEM certificate file")
+	keyFile := fs.String("key", "key.pem", "output PEM private key file")
+	hosts := fs.String("hosts", "", "comma-separated hostnames and/or IP addresses for SANs")
+	days := fs.Int("days", 3650, "certificate validity in days")
 	fs.Parse(args)
 
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
