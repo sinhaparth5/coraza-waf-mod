@@ -33,17 +33,18 @@ import (
 const serverHeader = "Coraza WAF Mod"
 
 type Handler struct {
-	wafMu        sync.RWMutex
-	waf          *waf.Engine
-	challengerMu sync.RWMutex
-	challenger   *challenge.Challenger // nil = bot protection disabled
-	ratelimitMu  sync.RWMutex
-	ratelimit    ratelimit.Backend
-	db           *storage.DB
-	ipbl         *blocklist.IPBlocklist
-	geoBl        *geo.Blocker
-	asnLookup    *asn.Lookup
-	registry     *services.Registry
+	wafMu          sync.RWMutex
+	waf            *waf.Engine
+	challengerMu   sync.RWMutex
+	challenger     *challenge.Challenger // nil = bot protection disabled
+	ratelimitMu    sync.RWMutex
+	ratelimit      ratelimit.Backend
+	db             *storage.DB
+	ipbl           *blocklist.IPBlocklist
+	geoBl          *geo.Blocker
+	asnLookup      *asn.Lookup
+	registry       *services.Registry
+	trustedProxies []*net.IPNet
 }
 
 // ReloadWAF swaps in a freshly built WAF engine without dropping in-flight
@@ -110,16 +111,17 @@ func (h *Handler) ReloadRateLimit(backend ratelimit.Backend) {
 
 // NewHandler builds the proxy pipeline. Pass nil for ch to disable bot
 // protection / JS challenge (the default when bot_protection.enabled = false).
-func NewHandler(registry *services.Registry, engine *waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, rl ratelimit.Backend, asnLookup *asn.Lookup, ch *challenge.Challenger) *Handler {
+func NewHandler(registry *services.Registry, engine *waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, rl ratelimit.Backend, asnLookup *asn.Lookup, ch *challenge.Challenger, trustedProxyCIDRs ...string) *Handler {
 	return &Handler{
-		waf:        engine,
-		db:         db,
-		ipbl:       ipbl,
-		geoBl:      geoBl,
-		asnLookup:  asnLookup,
-		ratelimit:  rl,
-		registry:   registry,
-		challenger: ch,
+		waf:            engine,
+		db:             db,
+		ipbl:           ipbl,
+		geoBl:          geoBl,
+		asnLookup:      asnLookup,
+		ratelimit:      rl,
+		registry:       registry,
+		challenger:     ch,
+		trustedProxies: parseTrustedProxyCIDRs(trustedProxyCIDRs),
 	}
 }
 
@@ -133,7 +135,7 @@ func (h *Handler) Handle(c echo.Context) error {
 	w.Header().Set("X-Request-ID", reqID)
 	w.Header().Set("X-WAF-Request-ID", reqID)
 
-	clientIP := realIP(r)
+	clientIP := h.realIP(r)
 	app := h.registry.Match(r.Host, r.URL.Path)
 	appName := ""
 	if app != nil {
@@ -572,23 +574,61 @@ func isCloudflareIP(ip string) bool {
 	return false
 }
 
-func realIP(r *http.Request) string {
-	remoteIP, _, _ := net.SplitHostPort(r.RemoteAddr)
+func parseTrustedProxyCIDRs(cidrs []string) []*net.IPNet {
+	trusted := make([]*net.IPNet, 0, len(cidrs))
+	for _, cidr := range cidrs {
+		cidr = strings.TrimSpace(cidr)
+		if cidr == "" {
+			continue
+		}
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			log.Printf("trusted proxy: ignoring invalid CIDR %q: %v", cidr, err)
+			continue
+		}
+		trusted = append(trusted, network)
+	}
+	return trusted
+}
+
+func (h *Handler) realIP(r *http.Request) string {
+	remoteIP := socketPeerIP(r.RemoteAddr)
 
 	// Only trust CF-Connecting-IP when the connection actually came from Cloudflare.
 	if ip := r.Header.Get("CF-Connecting-IP"); ip != "" && isCloudflareIP(remoteIP) {
 		return normalizeIP(strings.TrimSpace(ip))
 	}
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" && h.isTrustedProxy(remoteIP) {
 		if idx := strings.Index(xff, ","); idx != -1 {
 			return normalizeIP(strings.TrimSpace(xff[:idx]))
 		}
 		return normalizeIP(strings.TrimSpace(xff))
 	}
-	if ip := r.Header.Get("X-Real-IP"); ip != "" {
+	if ip := r.Header.Get("X-Real-IP"); ip != "" && h.isTrustedProxy(remoteIP) {
 		return normalizeIP(strings.TrimSpace(ip))
 	}
 	return normalizeIP(remoteIP)
+}
+
+func (h *Handler) isTrustedProxy(remoteIP string) bool {
+	parsed := net.ParseIP(remoteIP)
+	if parsed == nil {
+		return false
+	}
+	for _, cidr := range h.trustedProxies {
+		if cidr.Contains(parsed) {
+			return true
+		}
+	}
+	return false
+}
+
+func socketPeerIP(remoteAddr string) string {
+	ip, _, err := net.SplitHostPort(remoteAddr)
+	if err == nil {
+		return ip
+	}
+	return remoteAddr
 }
 
 // normalizeIP converts IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1) to
