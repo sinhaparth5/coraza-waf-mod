@@ -347,7 +347,7 @@ func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db 
 	go func() {
 		log.Printf("coraza-waf HTTP (ACME/redirect) on %s", cfg.ListenAddr)
 		if err := redirectServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("http server: %v", err)
+			log.Printf("http server: %v", err)
 		}
 	}()
 
