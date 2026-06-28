@@ -157,7 +157,7 @@ func TestIPBlocklistBlocks(t *testing.T) {
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("X-Real-IP", "10.0.0.1")
+	req.RemoteAddr = "10.0.0.1:12345"
 	rec := httptest.NewRecorder()
 
 	c := e.NewContext(req, rec)
@@ -284,6 +284,77 @@ func TestCFConnectingIPSpoofIgnored(t *testing.T) {
 	// The spoofed header must be ignored; real IP 198.51.100.5 is not blocked → 200.
 	if rec.Code != http.StatusOK {
 		t.Errorf("spoofed CF-Connecting-IP should be ignored, expected 200 got %d", rec.Code)
+	}
+}
+
+func TestForwardedHeadersIgnoredFromUntrustedSource(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	dir := t.TempDir()
+	db, _ := storage.Open(filepath.Join(dir, "xff-spoof.db"))
+	defer db.Close()
+	db.AddService("svc", "", "/", backend.URL, 0, 0)
+	db.AddIPRule("", "203.0.113.10", "block")
+
+	ipbl, _ := blocklist.NewIPBlocklist(db)
+	geoBl, _ := geo.New("", db)
+	defer geoBl.Close()
+	reg, _ := services.New(db)
+	engine, _ := waf.New(config.WAFConfig{Enabled: false}, nil)
+	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
+	defer rl.Stop()
+
+	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil)
+	e := echo.New()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "198.51.100.5:12345"
+	req.Header.Set("X-Forwarded-For", "203.0.113.10")
+	req.Header.Set("X-Real-IP", "203.0.113.10")
+	rec := httptest.NewRecorder()
+
+	_ = h.Handle(e.NewContext(req, rec))
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("untrusted forwarded headers should be ignored, expected 200 got %d", rec.Code)
+	}
+}
+
+func TestForwardedHeadersUsedFromTrustedProxy(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	dir := t.TempDir()
+	db, _ := storage.Open(filepath.Join(dir, "xff-trusted.db"))
+	defer db.Close()
+	db.AddService("svc", "", "/", backend.URL, 0, 0)
+	db.AddIPRule("", "203.0.113.10", "block")
+
+	ipbl, _ := blocklist.NewIPBlocklist(db)
+	geoBl, _ := geo.New("", db)
+	defer geoBl.Close()
+	reg, _ := services.New(db)
+	engine, _ := waf.New(config.WAFConfig{Enabled: false}, nil)
+	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
+	defer rl.Stop()
+
+	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, "198.51.100.0/24")
+	e := echo.New()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "198.51.100.5:12345"
+	req.Header.Set("X-Forwarded-For", "203.0.113.10, 198.51.100.5")
+	rec := httptest.NewRecorder()
+
+	_ = h.Handle(e.NewContext(req, rec))
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("trusted X-Forwarded-For should be used for blocklist check, got %d", rec.Code)
 	}
 }
 

@@ -14,7 +14,7 @@ A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraz
 
 - **WAF protection** — Coraza v3 with the OWASP Core Rule Set embedded in the binary. Blocks SQLi, XSS, RCE, path traversal, restricted file access, and known scanner user agents out of the box. Custom `.conf` rules can be loaded on top of CRS.
 - **Reverse proxy / multi-app routing** — route by Host header (virtual hosting) or by path prefix (with automatic prefix stripping, like nginx `location`), to as many backend apps as you need.
-- **IP & country blocking** — manual IP allow/block rules plus GeoIP2-based country blocking (MaxMind GeoLite2), with Cloudflare-aware real-IP extraction (`CF-Connecting-IP` → `X-Forwarded-For` → `X-Real-IP`).
+- **IP & country blocking** — manual IP allow/block rules plus GeoIP2-based country blocking (MaxMind GeoLite2), with Cloudflare-aware real-IP extraction and opt-in trusted proxy CIDRs for `X-Forwarded-For` / `X-Real-IP`.
 - **TLS** — plain HTTP, automatic Let's Encrypt certificates, or your own cert/key — globally and/or per individual service (upload a cert or enable auto-issue per backend from the dashboard).
 - **Admin dashboard** — HTMX/Tailwind UI for live traffic & threat charts, filterable request logs with live tail, IP/geo rule management, and service (backend app) management — all changes apply immediately, no restart required.
 - **Prometheus metrics** — `/admin/metrics` exposes request volume, latency, and per-cause block counters (IP/geo/WAF) alongside Go runtime metrics, ready to scrape (uses the same admin credentials, since Prometheus scrape configs support basic auth natively).

@@ -10,16 +10,17 @@ package config
 // credentials) are kept for internal wiring; their values come from defaults
 // or the DB, never from a config file.
 type Config struct {
-	ListenAddr    string
-	ListenAddrTLS string
-	Apps          []App // kept for one-time migration compat; always empty after first boot
-	WAF           WAFConfig
-	TLS           TLSConfig
-	Geo           GeoConfig
-	DB            DBConfig
-	Admin         AdminConfig
-	RateLimit     RateLimitConfig
-	BotProtection BotProtectionConfig
+	ListenAddr     string
+	ListenAddrTLS  string
+	TrustedProxies []string // CIDRs allowed to supply X-Forwarded-For / X-Real-IP
+	Apps           []App    // kept for one-time migration compat; always empty after first boot
+	WAF            WAFConfig
+	TLS            TLSConfig
+	Geo            GeoConfig
+	DB             DBConfig
+	Admin          AdminConfig
+	RateLimit      RateLimitConfig
+	BotProtection  BotProtectionConfig
 }
 
 type App struct {
@@ -35,7 +36,7 @@ type WAFConfig struct {
 }
 
 type TLSConfig struct {
-	CacheDir        string // where Let's Encrypt certs are cached
+	CacheDir         string // where Let's Encrypt certs are cached
 	FallbackCertFile string // PEM cert used when no per-service/ACME cert matches (self-signed)
 	FallbackKeyFile  string // matching private key for FallbackCertFile
 }
@@ -69,13 +70,14 @@ type BotProtectionConfig struct {
 // in main.go overrides individual fields after calling this.
 func Defaults() *Config {
 	return &Config{
-		ListenAddr:    ":8080",
-		ListenAddrTLS: "",
-		WAF:           WAFConfig{Enabled: true},
-		TLS:           TLSConfig{CacheDir: "./certs"},
-		DB:            DBConfig{Path: "waf.db", LogRetentionDays: 30},
-		Admin:         AdminConfig{Path: "/admin"},
-		RateLimit:     RateLimitConfig{RequestsPerSecond: 10, Burst: 20},
-		BotProtection: BotProtectionConfig{AnomalyThreshold: 8, ChallengeTTLSeconds: 3600},
+		ListenAddr:     ":8080",
+		ListenAddrTLS:  "",
+		TrustedProxies: nil,
+		WAF:            WAFConfig{Enabled: true},
+		TLS:            TLSConfig{CacheDir: "./certs"},
+		DB:             DBConfig{Path: "waf.db", LogRetentionDays: 30},
+		Admin:          AdminConfig{Path: "/admin"},
+		RateLimit:      RateLimitConfig{RequestsPerSecond: 10, Burst: 20},
+		BotProtection:  BotProtectionConfig{AnomalyThreshold: 8, ChallengeTTLSeconds: 3600},
 	}
 }
