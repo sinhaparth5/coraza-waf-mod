@@ -34,17 +34,3 @@ func SecurityMiddleware() echo.MiddlewareFunc {
 		}
 	}
 }
-
-// BackendSecurityHeaders is the set of security response headers we own.
-// The services registry's ModifyResponse hook deletes these from backend
-// responses so the WAF-set versions are the only ones the client sees —
-// no duplicates when the backend also sets them.
-var BackendSecurityHeaders = []string{
-	"X-Content-Type-Options",
-	"X-Frame-Options",
-	"X-XSS-Protection",
-	"Referrer-Policy",
-	"Permissions-Policy",
-	"Cross-Origin-Opener-Policy",
-	"Strict-Transport-Security",
-}

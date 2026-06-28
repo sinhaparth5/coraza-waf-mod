@@ -25,6 +25,7 @@ make test        # go test ./...
 make clean       # remove binary, minified JS, dist/
 make dist        # cross-compile linux/amd64 + linux/arm64 + windows/amd64 release binaries (CGO_ENABLED=0)
 make checksums   # sha256sum dist/* -> dist/checksums.txt
+make tag VERSION=v1.0.0  # annotated git tag + push to origin, triggers the GitLab release pipeline
 ```
 
 Run a single test: `go test ./proxy/ -run TestName -v` (substitute the package).
@@ -67,13 +68,17 @@ Request logs are not kept forever, but pruning is **not** automatic inside the r
 
 **Hot-reload pattern**: three subsystems support live config changes without a server restart, all using the same `sync.RWMutex` swap pattern in `proxy.Handler`: `ReloadWAF(*waf.Engine)`, `ReloadBotProtection(*challenge.Challenger)`, `ReloadRateLimit(ratelimit.Backend)`. The Settings page save handlers call the corresponding `reloadX` callback passed into `ui.NewHandler` from `main.go`. The old value is stopped/discarded after the swap.
 
+**Threat-intel auto-sync** (`threatintel/worker.go`): `threatintel.New(db, reloadIPBL)` starts a background goroutine that periodically downloads external plain-text IP block lists, parses out IP/CIDR tokens (skipping `#`/`;` comments, capped at a 10 MiB read), and writes them to the DB. The `blocklist` package reads from that same store, so synced IPs take effect via the `reloadIPBL` callback with no restart. The UI's "sync now" button calls `Worker.SyncSource` (wired through `ui.NewHandler`) to fetch a single source on demand. `Worker.Stop()` is deferred in `main.go`.
+
+**Webhook delivery** (`webhook/pusher.go`): `webhook.New(db.GetWebhookConfig)` returns a `Pusher` whose `Push(RequestLog)` is registered as the log fan-out hook via `db.SetWebhookFn` in `main.go`. Delivery is fully asynchronous over an internal goroutine (`run`/`deliver`) so a slow or unreachable webhook endpoint never blocks the SQLite log worker. `shouldSend` filters by the comma-separated event list in the singleton `webhook_config` DB row (id=1), managed from the admin UI.
+
 **SQLite date/time gotcha**: never use SQLite's `date()`/`strftime()` functions on the `requests.ts` column — `modernc.org/sqlite` stores `time.Time` using Go's `.String()` format (`"... +0000 UTC"`), which SQLite's date functions cannot parse and silently return NULL for. All date bucketing (hourly traffic, retention cutoffs) is done in Go using plain `>=`/`<=` comparisons against `ts`. See `storage/db.go`'s `GetHourlyTraffic` for the canonical pattern.
 
 **`proxy.responseWriter` must proxy Hijack and Flush**: the status-capturing wrapper in `proxy/handler.go` wraps `http.ResponseWriter` to intercept the status code for logging. Go does not automatically promote interface methods from the embedded concrete value, so `http.Hijacker` and `http.Flusher` must be explicitly implemented and delegated — without them, WebSocket upgrades (e.g. Vite HMR) fail with "can't switch protocols using non-Hijacker ResponseWriter".
 
 **Config migration direction**: `config.yaml` is for deployment-level settings only (listen addresses, TLS binding, WAF rules dir, DB path). All runtime knobs — bot protection settings, Redis config, ACME email, per-service bot/TLS/rate-limit overrides — are stored in the SQLite `meta` table or per-service columns and managed from the admin UI. `config.yaml` values for these are only read as first-boot defaults if the DB entry is absent.
 
-**Module layout**: `config/` (YAML load + defaults), `waf/` (Coraza engine wrapper), `services/` (DB-backed routing registry + TLS), `proxy/` (the full request pipeline), `storage/` (SQLite access, schema migrations, async log queue, `StateStore` impl for rate-limit persistence), `blocklist/` (IP rules, exact-match), `geo/` (GeoIP2 country blocking, bundled MaxMind GeoLite2), `ratelimit/` (token-bucket `Backend` interface + in-process `Limiter` + `RedisBackend`), `bot/` (header-based signal scoring + trusted-crawler list), `challenge/` (JS PoW challenge page + HMAC token/cookie), `ja3/` (TLS fingerprint computation + per-connection sync.Map store), `asn/` (ASN/org lookup from bundled database), `metrics/` (Prometheus instrumentation), `ui/` (admin dashboard handlers + templates), `tools/minify/` (build-time JS minifier, not shipped in the binary).
+**Module layout**: `config/` (YAML load + defaults), `waf/` (Coraza engine wrapper), `services/` (DB-backed routing registry + TLS), `proxy/` (the full request pipeline), `storage/` (SQLite access, schema migrations, async log queue, `StateStore` impl for rate-limit persistence), `blocklist/` (IP rules, exact-match), `geo/` (GeoIP2 country blocking, bundled MaxMind GeoLite2), `ratelimit/` (token-bucket `Backend` interface + in-process `Limiter` + `RedisBackend`), `bot/` (header-based signal scoring + trusted-crawler list), `challenge/` (JS PoW challenge page + HMAC token/cookie), `ja3/` (TLS fingerprint computation + per-connection sync.Map store), `asn/` (ASN/org lookup from bundled database), `threatintel/` (background sync of external IP block lists into the DB), `webhook/` (async event delivery to a configured webhook endpoint), `metrics/` (Prometheus instrumentation), `ui/` (admin dashboard handlers + templates), `tools/minify/` (build-time JS minifier, not shipped in the binary).
 
 ## Distribution
 

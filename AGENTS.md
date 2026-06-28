@@ -2,22 +2,24 @@
 
 ## Project Structure & Module Organization
 
-This is a single-binary Go WAF and reverse proxy with an embedded admin UI. `main.go` wires startup, config, TLS, pruning, and server modes. Core packages are split by responsibility: `config/` for YAML loading, `waf/` for Coraza setup, `proxy/` for the request pipeline, `services/` for DB-backed routing and TLS, `storage/` for SQLite, `blocklist/` and `geo/` for blocking rules, and `metrics/` for Prometheus output. The admin dashboard lives in `ui/handlers.go` and `ui/templates/`. Frontend sources are in `static/js/src/`; generated minified files go to `static/js/dist/` and are embedded through `assets.go`. Deployment assets are under `deploy/`.
+This is a single-binary Go WAF and reverse proxy with an embedded admin UI. `main.go` wires startup, config, TLS, pruning, and server modes. Core packages include `config/`, `waf/`, `proxy/`, `services/`, `storage/`, and `metrics/`. Blocking and detection logic lives in `blocklist/`, `geo/`, `asn/`, `bot/`, `ja3/`, `ratelimit/`, and `threatintel/`. The dashboard lives in `ui/handlers.go` and `ui/templates/`. Frontend sources are in `static/js/src/`; generated files go to `static/js/dist/`.
 
 ## Build, Test, and Development Commands
 
 - `make build`: runs `go generate ./...` and builds `./coraza-waf-mod`.
-- `make run`: builds, then starts the binary.
+- `make generate`: regenerates embedded/minified assets without building.
+- `make run`: builds and starts the binary.
 - `make test`: runs `go test ./...`.
 - `make clean`: removes the binary, generated minified JS, and `dist/`.
-- `make dist`: creates stripped Linux `amd64` and `arm64` release binaries in `dist/`.
+- `make dist`: creates stripped release binaries in `dist/`.
 - `make checksums`: writes `dist/checksums.txt` after `make dist`.
+- `make tag VERSION=v1.0.0`: creates and pushes an annotated release tag.
 
-After editing `static/js/src/*.js`, use `make build` or run `go generate ./...` before any direct `go build`.
+After editing `static/js/src/*.js`, run `make generate` or `make build` before any direct `go build`.
 
 ## Coding Style & Naming Conventions
 
-Use standard Go formatting: run `gofmt` on changed Go files and keep package names short, lowercase, and role-based. Export names only for cross-package APIs. Templates use Tailwind utilities loaded from the CDN in `ui/templates/base.html`; avoid adding a Node build pipeline, inline `style` attributes, or separate CSS for utilities Tailwind can express.
+Use standard Go formatting: run `gofmt` on changed Go files and keep package names short, lowercase, and role-based. Export names only for cross-package APIs. Prefer table-driven tests for routing, blocking, and config behavior. Templates use Tailwind utilities from `ui/templates/base.html`; avoid adding a Node build pipeline, inline `style` attributes, or separate CSS for utilities Tailwind can express.
 
 ## Testing Guidelines
 
@@ -25,8 +27,12 @@ There are currently no checked-in `*_test.go` files. Add tests next to the packa
 
 ## Commit & Pull Request Guidelines
 
-Recent commits use short, imperative or descriptive lowercase summaries such as `added metrics api` and `migrated to tailwindcss`. Keep commits focused and mention the affected area when useful. Pull requests should include a brief description, test results, config or migration notes, and screenshots for dashboard UI changes. Link issues when available and call out behavior affecting routing, TLS, storage, or blocking decisions.
+Recent commits use short, imperative or descriptive summaries such as `ci: run go generate before go test to produce embedded JS assets`. Keep commits focused and mention the affected area when useful. Pull requests should include a brief description, test results, config or migration notes, and screenshots for dashboard UI changes. Call out behavior affecting routing, TLS, storage, or blocking decisions.
 
 ## Security & Configuration Tips
 
-Do not commit real admin credentials, TLS private keys, GeoIP databases, or production `waf.db` files. Use `deploy/config.yaml.example` for documented configuration defaults and keep local secrets in `config.yaml` out of shared changes.
+Do not commit real admin credentials, TLS private keys, GeoIP databases, or production `waf.db` files. Use `deploy/config.yaml.example` for documented defaults and keep local secrets in `config.yaml`.
+
+## Agent-Specific Instructions
+
+Before editing, check the worktree and preserve unrelated user changes. After changing Go or frontend source, run the narrowest relevant test or generation command.

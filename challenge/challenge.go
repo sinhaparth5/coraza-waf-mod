@@ -135,14 +135,6 @@ func (c *Challenger) ServeVerify(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// GenerateSecret returns a cryptographically random 64-char hex secret
-// suitable for use as the HMAC key.
-func GenerateSecret() string {
-	b := make([]byte, 32)
-	rand.Read(b)
-	return hex.EncodeToString(b)
-}
-
 // ── internal helpers ────────────────────────────────────────────────────────
 
 // verifyPoW checks that SHA-256(nonce + decimal(solution))[0] == 0x00.
