@@ -40,6 +40,12 @@ func Get(remoteAddr string) string {
 	return v.(string)
 }
 
+// Delete removes the stored JA3 hash for remoteAddr. Call this when the TLS
+// connection is closed so connStore stays bounded by active connections.
+func Delete(remoteAddr string) {
+	connStore.Delete(remoteAddr)
+}
+
 // Compute derives a JA3 fingerprint from a TLS ClientHello and returns the
 // MD5 hex digest. The format follows the original JA3 spec:
 // MD5(SSLVersion,Ciphers,Extensions,EllipticCurves,EllipticCurvePointFormats)
