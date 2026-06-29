@@ -1066,6 +1066,33 @@ func (db *DB) GetTopBlockedCountries(limit, hours int) ([]CountryCount, error) {
 	return out, rows.Err()
 }
 
+// GetTopCountries returns the countries with the most total requests (blocked
+// or allowed) in the last `hours` hours, descending, capped at `limit`.
+func (db *DB) GetTopCountries(limit, hours int) ([]CountryCount, error) {
+	since := time.Now().UTC().Add(-time.Duration(hours) * time.Hour)
+	rows, err := db.conn.Query(`
+		SELECT country, COUNT(*) AS c
+		FROM requests
+		WHERE ts >= ? AND country != ''
+		GROUP BY country
+		ORDER BY c DESC
+		LIMIT ?`, since, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []CountryCount
+	for rows.Next() {
+		var cc CountryCount
+		if err := rows.Scan(&cc.Country, &cc.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, cc)
+	}
+	return out, rows.Err()
+}
+
 // CountBlockedSince returns the number of blocked requests at or after t.
 // Used to drive the notification badge.
 func (db *DB) CountBlockedSince(t time.Time) (int, error) {
