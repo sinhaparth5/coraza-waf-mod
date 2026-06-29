@@ -106,6 +106,20 @@ type dashboardCountry struct {
 	WidthClass string
 }
 
+type atAGlanceCard struct {
+	Label      string
+	Icon       string
+	IconClass  string
+	CardClass  string
+	TrendClass string
+	Trend      string
+	Value      string
+	SparkID    string
+	SparkColor string
+	AreaPath   string
+	LinePath   string
+}
+
 // NewHandler builds the UI handler. jsFS must contain the minified JS
 // assets at "static/js/dist/*" (see assets.go in the repo root); it's
 // served under /<admin_path>/static/js/. imgsFS must contain
@@ -343,7 +357,12 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		blockedOffset = -(allowedArc + gap)
 	}
 	botStats := h.db.GetBotStats()
+	apps := h.registry.List()
 	topCountryCounts, err := h.db.GetTopCountries(5, 24)
+	if err != nil {
+		return err
+	}
+	atAGlance, err := h.db.GetAtAGlanceStats()
 	if err != nil {
 		return err
 	}
@@ -352,13 +371,14 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		"Recent":        recent,
 		"TopBlocked":    topBlocked,
 		"TopCountries":  dashboardCountries(topCountryCounts),
+		"AtAGlance":     dashboardAtAGlance(atAGlance, len(apps)),
 		"BlockRate":     blockRate,
 		"HasTraffic":    hasTraffic,
 		"TrackArc":      arc240,
 		"AllowedArc":    allowedArc,
 		"BlockedArc":    blockedArc,
 		"BlockedOffset": blockedOffset,
-		"Apps":          h.registry.List(),
+		"Apps":          apps,
 		"BotStats":      botStats,
 	})
 }
@@ -395,6 +415,90 @@ func countryName(code string) string {
 		return code
 	}
 	return name
+}
+
+func dashboardAtAGlance(s storage.AtAGlanceStats, serviceCount int) []atAGlanceCard {
+	return []atAGlanceCard{
+		{
+			Label:      "Requests/sec",
+			Icon:       "hgi-activity-01",
+			IconClass:  "text-brand-dark",
+			CardClass:  "bg-brand-tint",
+			TrendClass: "text-brand-dark",
+			Trend:      trendLabel(s.RequestsLastMinute, s.RequestsPrevMinute),
+			Value:      fmt.Sprintf("%.1f", float64(s.RequestsLastMinute)/60),
+			SparkID:    "spark-req",
+			SparkColor: "#76C893",
+			AreaPath:   "M0,26 18,23 36,25 54,16 72,19 90,9 108,13 126,5 144,8 170,3 170,36 0,36 Z",
+			LinePath:   "M0,26 18,23 36,25 54,16 72,19 90,9 108,13 126,5 144,8 170,3",
+		},
+		{
+			Label:      "Avg latency",
+			Icon:       "hgi-loading-03",
+			IconClass:  "text-blue-500",
+			CardClass:  "bg-blue-50",
+			TrendClass: "text-blue-500",
+			Trend:      trendLabel(s.AvgLatencyMS, s.PrevAvgLatencyMS),
+			Value:      fmt.Sprintf("%dms", s.AvgLatencyMS),
+			SparkID:    "spark-lat",
+			SparkColor: "#3B82F6",
+			AreaPath:   "M0,10 18,14 36,9 54,18 72,15 90,22 108,17 126,26 144,22 170,28 170,36 0,36 Z",
+			LinePath:   "M0,10 18,14 36,9 54,18 72,15 90,22 108,17 126,26 144,22 170,28",
+		},
+		{
+			Label:      "Blocked/min",
+			Icon:       "hgi-shield-ban",
+			IconClass:  "text-amber-600",
+			CardClass:  "bg-amber-50",
+			TrendClass: "text-amber-600",
+			Trend:      trendLabel(s.BlockedLastMinute, s.BlockedPrevMinute),
+			Value:      strconv.Itoa(s.BlockedLastMinute),
+			SparkID:    "spark-blk",
+			SparkColor: "#D97706",
+			AreaPath:   "M0,8 18,12 36,11 54,17 72,15 90,20 108,18 126,24 144,21 170,27 170,36 0,36 Z",
+			LinePath:   "M0,8 18,12 36,11 54,17 72,15 90,20 108,18 126,24 144,21 170,27",
+		},
+		{
+			Label:      "Active services",
+			Icon:       "hgi-server-stack-01",
+			IconClass:  "text-slate-500",
+			CardClass:  "bg-surface",
+			TrendClass: "text-slate-400",
+			Trend:      "live",
+			Value:      strconv.Itoa(serviceCount),
+			SparkID:    "spark-svc",
+			SparkColor: "#94A3B8",
+			AreaPath:   "M0,18 18,18 36,17 54,18 72,16 90,18 108,17 126,18 144,16 170,18 170,36 0,36 Z",
+			LinePath:   "M0,18 18,18 36,17 54,18 72,16 90,18 108,17 126,18 144,16 170,18",
+		},
+		{
+			Label:      "WAF rule hits",
+			Icon:       "hgi-cancel-circle",
+			IconClass:  "text-red-500",
+			CardClass:  "bg-red-50",
+			TrendClass: "text-red-500",
+			Trend:      trendLabel(s.WAFRuleHitsToday, s.WAFRuleHitsPreviousDay),
+			Value:      strconv.Itoa(s.WAFRuleHitsToday),
+			SparkID:    "spark-rul",
+			SparkColor: "#EF4444",
+			AreaPath:   "M0,28 18,25 36,26 54,20 72,22 90,14 108,17 126,9 144,12 170,6 170,36 0,36 Z",
+			LinePath:   "M0,28 18,25 36,26 54,20 72,22 90,14 108,17 126,9 144,12 170,6",
+		},
+	}
+}
+
+func trendLabel(current, previous int) string {
+	if previous == 0 {
+		if current == 0 {
+			return "0.0%"
+		}
+		return "+100%"
+	}
+	delta := float64(current-previous) * 100 / float64(previous)
+	if delta > 0 {
+		return fmt.Sprintf("+%.1f%%", delta)
+	}
+	return fmt.Sprintf("%.1f%%", delta)
 }
 
 // unreadAlertCount returns how many blocked requests happened since the
