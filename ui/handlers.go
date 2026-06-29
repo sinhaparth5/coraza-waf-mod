@@ -24,6 +24,8 @@ import (
 	"coraza-waf-mod/storage"
 
 	"github.com/labstack/echo/v4"
+	"golang.org/x/text/language"
+	"golang.org/x/text/language/display"
 )
 
 //go:embed templates
@@ -52,7 +54,7 @@ var funcs = template.FuncMap{
 	"add":      func(a, b int) int { return a + b },
 	"sub":      func(a, b int) int { return a - b },
 	"isOdd":    func(i int) bool { return i%2 == 1 },
-	"contains":   strings.Contains,
+	"contains": strings.Contains,
 	"splitComma": func(s string) []string {
 		var out []string
 		for _, p := range strings.Split(s, ",") {
@@ -95,6 +97,13 @@ type Handler struct {
 	reloadRateLimit func()
 	reloadWAF       func()
 	syncThreatIntel func(id int64)
+}
+
+type dashboardCountry struct {
+	Code       string
+	Name       string
+	Count      int
+	WidthClass string
 }
 
 // NewHandler builds the UI handler. jsFS must contain the minified JS
@@ -334,10 +343,15 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		blockedOffset = -(allowedArc + gap)
 	}
 	botStats := h.db.GetBotStats()
+	topCountryCounts, err := h.db.GetTopCountries(5, 24)
+	if err != nil {
+		return err
+	}
 	return h.render(c, "dashboard", map[string]any{
 		"Stats":         stats,
 		"Recent":        recent,
 		"TopBlocked":    topBlocked,
+		"TopCountries":  dashboardCountries(topCountryCounts),
 		"BlockRate":     blockRate,
 		"HasTraffic":    hasTraffic,
 		"TrackArc":      arc240,
@@ -347,6 +361,40 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		"Apps":          h.registry.List(),
 		"BotStats":      botStats,
 	})
+}
+
+func dashboardCountries(rows []storage.CountryCount) []dashboardCountry {
+	widths := []string{"w-full", "w-[85%]", "w-[79%]", "w-[75%]", "w-[70%]"}
+	out := make([]dashboardCountry, 0, len(rows))
+	for i, row := range rows {
+		code := strings.ToUpper(strings.TrimSpace(row.Country))
+		if code == "" {
+			continue
+		}
+		widthClass := widths[len(widths)-1]
+		if i < len(widths) {
+			widthClass = widths[i]
+		}
+		out = append(out, dashboardCountry{
+			Code:       code,
+			Name:       countryName(code),
+			Count:      row.Count,
+			WidthClass: widthClass,
+		})
+	}
+	return out
+}
+
+func countryName(code string) string {
+	region, err := language.ParseRegion(code)
+	if err != nil {
+		return code
+	}
+	name := display.English.Regions().Name(region)
+	if name == "" {
+		return code
+	}
+	return name
 }
 
 // unreadAlertCount returns how many blocked requests happened since the
@@ -1435,13 +1483,13 @@ func (h *Handler) SaveWebhookConfig(c echo.Context) error {
 		saveErr = err.Error()
 	}
 	return h.renderPartial(c, "settings", "webhook-card", map[string]any{
-		"AdminPath":       h.cfg.Admin.Path,
-		"WebhookURL":      url,
-		"WebhookSecret":   secret,
-		"WebhookEnabled":  cfg.Enabled,
-		"WebhookEvents":   events,
-		"WebhookSaveOK":   saveErr == "",
-		"WebhookSaveErr":  saveErr,
+		"AdminPath":      h.cfg.Admin.Path,
+		"WebhookURL":     url,
+		"WebhookSecret":  secret,
+		"WebhookEnabled": cfg.Enabled,
+		"WebhookEvents":  events,
+		"WebhookSaveOK":  saveErr == "",
+		"WebhookSaveErr": saveErr,
 	})
 }
 

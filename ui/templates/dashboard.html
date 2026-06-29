@@ -265,7 +265,7 @@
     </div>
   </div>
 
-  <!-- Top countries (placeholder rows until per-country aggregation is wired up) -->
+  <!-- Top countries -->
   <div class="card w-[300px] shrink-0 p-6">
     <div class="flex items-start justify-between mb-5">
       <div>
@@ -277,43 +277,22 @@
       </a>
     </div>
     <div class="flex flex-col gap-2">
-      <div class="relative w-full rounded-lg bg-gradient-to-r from-[#CFEADB] to-transparent py-2 pl-3 pr-14">
+      {{range .TopCountries}}
+      <div class="relative {{.WidthClass}} rounded-lg bg-gradient-to-r from-[#CFEADB] to-transparent py-2 pl-3 pr-14">
         <div class="flex items-center gap-2">
-          <span class="fi fi-us w-6 h-[18px] bg-cover inline-block rounded-[3px] shrink-0"></span>
-          <span class="text-[13px] font-semibold text-slate-800 truncate">United States</span>
+          <span class="{{flagClass .Code}} w-6 h-[18px] bg-cover inline-block rounded-[3px] shrink-0"></span>
+          <span class="text-[13px] font-semibold text-slate-800 truncate">{{.Name}}</span>
         </div>
-        <span class="absolute right-3 top-2 text-[11px] font-medium text-slate-700">1,284</span>
+        <span class="absolute right-3 top-2 text-[11px] font-medium text-slate-700">{{.Count}}</span>
       </div>
-      <div class="relative w-[85%] rounded-lg bg-gradient-to-r from-[#CFEADB] to-transparent py-2 pl-3 pr-14">
-        <div class="flex items-center gap-2">
-          <span class="fi fi-de w-6 h-[18px] bg-cover inline-block rounded-[3px] shrink-0"></span>
-          <span class="text-[13px] font-semibold text-slate-800 truncate">Germany</span>
-        </div>
-        <span class="absolute right-3 top-2 text-[11px] font-medium text-slate-700">742</span>
+      {{else}}
+      <div class="text-center py-8 text-slate-300">
+        <i class="hgi hgi-stroke hgi-rounded hgi-earth text-[28px] block mx-auto mb-2 opacity-[.35]"></i>
+        <p class="text-[13px]">No country data yet</p>
       </div>
-      <div class="relative w-[79%] rounded-lg bg-gradient-to-r from-[#CFEADB] to-transparent py-2 pl-3 pr-14">
-        <div class="flex items-center gap-2">
-          <span class="fi fi-cn w-6 h-[18px] bg-cover inline-block rounded-[3px] shrink-0"></span>
-          <span class="text-[13px] font-semibold text-slate-800 truncate">China</span>
-        </div>
-        <span class="absolute right-3 top-2 text-[11px] font-medium text-slate-700">615</span>
-      </div>
-      <div class="relative w-[75%] rounded-lg bg-gradient-to-r from-[#CFEADB] to-transparent py-2 pl-3 pr-14">
-        <div class="flex items-center gap-2">
-          <span class="fi fi-br w-6 h-[18px] bg-cover inline-block rounded-[3px] shrink-0"></span>
-          <span class="text-[13px] font-semibold text-slate-800 truncate">Brazil</span>
-        </div>
-        <span class="absolute right-3 top-2 text-[11px] font-medium text-slate-700">488</span>
-      </div>
-      <div class="relative w-[70%] rounded-lg bg-gradient-to-r from-[#CFEADB] to-transparent py-2 pl-3 pr-14">
-        <div class="flex items-center gap-2">
-          <span class="fi fi-in w-6 h-[18px] bg-cover inline-block rounded-[3px] shrink-0"></span>
-          <span class="text-[13px] font-semibold text-slate-800 truncate">India</span>
-        </div>
-        <span class="absolute right-3 top-2 text-[11px] font-medium text-slate-700">311</span>
-      </div>
+      {{end}}
     </div>
-    <p class="text-[11px] text-slate-300 mt-5 text-center">sample data, live aggregation coming soon</p>
+    <p class="text-[11px] text-slate-300 mt-5 text-center">requests by country, last 24h</p>
   </div>
 
   <!-- Recent threats -->
