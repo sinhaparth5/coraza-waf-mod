@@ -165,7 +165,7 @@ func (db *DB) Close() error {
 
 func (db *DB) migrate() error {
 	// Idempotent column migration for existing databases.
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN country TEXT NOT NULL DEFAULT ''`)         //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN country TEXT NOT NULL DEFAULT ''`)            //nolint
 	db.conn.Exec(`ALTER TABLE requests ADD COLUMN proxy_ip TEXT NOT NULL DEFAULT ''`)           //nolint
 	db.conn.Exec(`ALTER TABLE requests ADD COLUMN headers_json TEXT NOT NULL DEFAULT ''`)       //nolint
 	db.conn.Exec(`ALTER TABLE requests ADD COLUMN request_id TEXT NOT NULL DEFAULT ''`)         //nolint
@@ -178,14 +178,14 @@ func (db *DB) migrate() error {
 	db.conn.Exec(`ALTER TABLE requests ADD COLUMN query TEXT NOT NULL DEFAULT ''`)              //nolint
 	db.conn.Exec(`ALTER TABLE requests ADD COLUMN ja3_hash TEXT NOT NULL DEFAULT ''`)           //nolint
 	db.conn.Exec(`ALTER TABLE requests ADD COLUMN bot_score INTEGER NOT NULL DEFAULT 0`)        //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_mode TEXT NOT NULL DEFAULT 'none'`)          //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_cert_path TEXT NOT NULL DEFAULT ''`)         //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_key_path TEXT NOT NULL DEFAULT ''`)          //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_expires_at TEXT NOT NULL DEFAULT ''`)        //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_rps REAL NOT NULL DEFAULT 0`)         //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_burst INTEGER NOT NULL DEFAULT 0`)    //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN bot_mode TEXT NOT NULL DEFAULT 'inherit'`)       //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cert_id INTEGER NOT NULL DEFAULT 0`)             //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_mode TEXT NOT NULL DEFAULT 'none'`)       //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_cert_path TEXT NOT NULL DEFAULT ''`)      //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_key_path TEXT NOT NULL DEFAULT ''`)       //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_expires_at TEXT NOT NULL DEFAULT ''`)     //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_rps REAL NOT NULL DEFAULT 0`)      //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_burst INTEGER NOT NULL DEFAULT 0`) //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN bot_mode TEXT NOT NULL DEFAULT 'inherit'`)    //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cert_id INTEGER NOT NULL DEFAULT 0`)          //nolint
 
 	_, err := db.conn.Exec(`
 	CREATE TABLE IF NOT EXISTS requests (
@@ -801,6 +801,18 @@ type BotStats struct {
 	PassedToday     int // requests that reached a backend without being blocked today
 }
 
+// AtAGlanceStats contains the live metric strip values shown on the dashboard.
+type AtAGlanceStats struct {
+	RequestsLastMinute     int
+	RequestsPrevMinute     int
+	AvgLatencyMS           int
+	PrevAvgLatencyMS       int
+	BlockedLastMinute      int
+	BlockedPrevMinute      int
+	WAFRuleHitsToday       int
+	WAFRuleHitsPreviousDay int
+}
+
 // GetBotStats returns today's bot-challenge count alongside clean (unblocked)
 // requests. Same UTC-midnight boundary trick as GetStats — no SQLite date funcs.
 func (db *DB) GetBotStats() BotStats {
@@ -841,6 +853,60 @@ func (db *DB) GetStats() (Stats, error) {
 
 	err := row.Scan(&s.TotalToday, &s.BlockedToday, &s.TotalAll, &s.BlockedAll)
 	return s, err
+}
+
+// GetAtAGlanceStats computes compact dashboard metrics without SQLite date
+// functions, because requests.ts is stored in Go's time.String() format.
+func (db *DB) GetAtAGlanceStats() (AtAGlanceStats, error) {
+	now := time.Now().UTC()
+	thisMinute := now.Add(-1 * time.Minute)
+	prevMinute := now.Add(-2 * time.Minute)
+	thisLatency := now.Add(-5 * time.Minute)
+	prevLatency := now.Add(-10 * time.Minute)
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	startOfPrevDay := startOfDay.Add(-24 * time.Hour)
+
+	var s AtAGlanceStats
+	var avgLatency, prevAvgLatency sql.NullFloat64
+	err := db.conn.QueryRow(`
+		SELECT
+			COUNT(*) FILTER (WHERE ts >= ?),
+			COUNT(*) FILTER (WHERE ts >= ? AND ts < ?),
+			AVG(duration_ms) FILTER (WHERE ts >= ?),
+			AVG(duration_ms) FILTER (WHERE ts >= ? AND ts < ?),
+			COUNT(*) FILTER (WHERE ts >= ? AND blocked = 1),
+			COUNT(*) FILTER (WHERE ts >= ? AND ts < ? AND blocked = 1),
+			COUNT(*) FILTER (WHERE ts >= ? AND rule_id > 0 AND blocked = 1),
+			COUNT(*) FILTER (WHERE ts >= ? AND ts < ? AND rule_id > 0 AND blocked = 1)
+		FROM requests`,
+		thisMinute,
+		prevMinute, thisMinute,
+		thisLatency,
+		prevLatency, thisLatency,
+		thisMinute,
+		prevMinute, thisMinute,
+		startOfDay,
+		startOfPrevDay, startOfDay,
+	).Scan(
+		&s.RequestsLastMinute,
+		&s.RequestsPrevMinute,
+		&avgLatency,
+		&prevAvgLatency,
+		&s.BlockedLastMinute,
+		&s.BlockedPrevMinute,
+		&s.WAFRuleHitsToday,
+		&s.WAFRuleHitsPreviousDay,
+	)
+	if err != nil {
+		return AtAGlanceStats{}, err
+	}
+	if avgLatency.Valid {
+		s.AvgLatencyMS = int(avgLatency.Float64 + 0.5)
+	}
+	if prevAvgLatency.Valid {
+		s.PrevAvgLatencyMS = int(prevAvgLatency.Float64 + 0.5)
+	}
+	return s, nil
 }
 
 type LogRow struct {
@@ -1632,7 +1698,7 @@ func (db *DB) GetDisabledWAFRuleIDs() ([]int, error) {
 // that database/sql won't auto-convert — see the CLAUDE.md SQLite date gotcha.
 var tsFormats = []string{
 	"2006-01-02 15:04:05.999999999 -0700 MST", // Go time.String() with sub-seconds
-	"2006-01-02 15:04:05 -0700 MST",            // Go time.String() exact seconds
+	"2006-01-02 15:04:05 -0700 MST",           // Go time.String() exact seconds
 	time.RFC3339Nano,
 	time.RFC3339,
 	"2006-01-02 15:04:05",

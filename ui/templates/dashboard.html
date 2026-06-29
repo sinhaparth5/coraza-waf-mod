@@ -90,123 +90,32 @@
   <p class="text-[12px] text-slate-500 mb-3 px-1">At a glance</p>
   <div class="flex gap-3 overflow-x-auto">
 
-    <!-- Requests/sec -->
-    <div class="flex flex-col gap-3 shrink-0 w-[170px] rounded-2xl bg-brand-tint p-4">
+    {{range .AtAGlance}}
+    <div class="flex flex-col gap-3 shrink-0 w-[170px] rounded-2xl {{.CardClass}} p-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-[6px]">
-          <i class="hgi hgi-stroke hgi-rounded hgi-activity-01 text-sm text-brand-dark"></i>
-          <span class="text-[12px] font-semibold text-slate-700">Requests/sec</span>
+          <i class="hgi hgi-stroke hgi-rounded {{.Icon}} text-sm {{.IconClass}}"></i>
+          <span class="text-[12px] font-semibold text-slate-700">{{.Label}}</span>
         </div>
-        <span class="text-[11px] font-semibold text-brand-dark">+12.4%</span>
+        <span class="text-[11px] font-semibold {{.TrendClass}}">{{.Trend}}</span>
       </div>
       <div>
         <p class="text-[11px] text-slate-500 mb-px">Current value</p>
-        <p class="text-[20px] font-extrabold text-slate-900">842</p>
+        <p class="text-[20px] font-extrabold text-slate-900">{{.Value}}</p>
       </div>
       <svg viewBox="0 0 170 36" class="w-full h-9" preserveAspectRatio="none">
-        <defs><linearGradient id="spark-req" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#76C893" stop-opacity="0.35"/>
-          <stop offset="100%" stop-color="#76C893" stop-opacity="0"/>
+        <defs><linearGradient id="{{.SparkID}}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="{{.SparkColor}}" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="{{.SparkColor}}" stop-opacity="0"/>
         </linearGradient></defs>
-        <path d="M0,26 18,23 36,25 54,16 72,19 90,9 108,13 126,5 144,8 170,3 170,36 0,36 Z" fill="url(#spark-req)"/>
-        <path d="M0,26 18,23 36,25 54,16 72,19 90,9 108,13 126,5 144,8 170,3" fill="none" stroke="#76C893" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="{{.AreaPath}}" fill="url(#{{.SparkID}})"/>
+        <path d="{{.LinePath}}" fill="none" stroke="{{.SparkColor}}" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </div>
-
-    <!-- Avg latency -->
-    <div class="flex flex-col gap-3 shrink-0 w-[170px] rounded-2xl bg-blue-50 p-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-[6px]">
-          <i class="hgi hgi-stroke hgi-rounded hgi-loading-03 text-sm text-blue-500"></i>
-          <span class="text-[12px] font-semibold text-slate-700">Avg latency</span>
-        </div>
-        <span class="text-[11px] font-semibold text-blue-500">-6.2%</span>
-      </div>
-      <div>
-        <p class="text-[11px] text-slate-500 mb-px">Current value</p>
-        <p class="text-[20px] font-extrabold text-slate-900">184ms</p>
-      </div>
-      <svg viewBox="0 0 170 36" class="w-full h-9" preserveAspectRatio="none">
-        <defs><linearGradient id="spark-lat" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.30"/>
-          <stop offset="100%" stop-color="#3B82F6" stop-opacity="0"/>
-        </linearGradient></defs>
-        <path d="M0,10 18,14 36,9 54,18 72,15 90,22 108,17 126,26 144,22 170,28 170,36 0,36 Z" fill="url(#spark-lat)"/>
-        <path d="M0,10 18,14 36,9 54,18 72,15 90,22 108,17 126,26 144,22 170,28" fill="none" stroke="#3B82F6" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </div>
-
-    <!-- Blocked/min -->
-    <div class="flex flex-col gap-3 shrink-0 w-[170px] rounded-2xl bg-amber-50 p-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-[6px]">
-          <i class="hgi hgi-stroke hgi-rounded hgi-shield-ban text-sm text-amber-600"></i>
-          <span class="text-[12px] font-semibold text-slate-700">Blocked/min</span>
-        </div>
-        <span class="text-[11px] font-semibold text-amber-600">-8.1%</span>
-      </div>
-      <div>
-        <p class="text-[11px] text-slate-500 mb-px">Current value</p>
-        <p class="text-[20px] font-extrabold text-slate-900">37</p>
-      </div>
-      <svg viewBox="0 0 170 36" class="w-full h-9" preserveAspectRatio="none">
-        <defs><linearGradient id="spark-blk" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#D97706" stop-opacity="0.28"/>
-          <stop offset="100%" stop-color="#D97706" stop-opacity="0"/>
-        </linearGradient></defs>
-        <path d="M0,8 18,12 36,11 54,17 72,15 90,20 108,18 126,24 144,21 170,27 170,36 0,36 Z" fill="url(#spark-blk)"/>
-        <path d="M0,8 18,12 36,11 54,17 72,15 90,20 108,18 126,24 144,21 170,27" fill="none" stroke="#D97706" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </div>
-
-    <!-- Active services -->
-    <div class="flex flex-col gap-3 shrink-0 w-[170px] rounded-2xl bg-surface p-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-[6px]">
-          <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01 text-sm text-slate-500"></i>
-          <span class="text-[12px] font-semibold text-slate-700">Active services</span>
-        </div>
-        <span class="text-[11px] font-semibold text-slate-400">0.0%</span>
-      </div>
-      <div>
-        <p class="text-[11px] text-slate-500 mb-px">Current value</p>
-        <p class="text-[20px] font-extrabold text-slate-900">{{len .Apps}}</p>
-      </div>
-      <svg viewBox="0 0 170 36" class="w-full h-9" preserveAspectRatio="none">
-        <defs><linearGradient id="spark-svc" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#94A3B8" stop-opacity="0.25"/>
-          <stop offset="100%" stop-color="#94A3B8" stop-opacity="0"/>
-        </linearGradient></defs>
-        <path d="M0,18 18,18 36,17 54,18 72,16 90,18 108,17 126,18 144,16 170,18 170,36 0,36 Z" fill="url(#spark-svc)"/>
-        <path d="M0,18 18,18 36,17 54,18 72,16 90,18 108,17 126,18 144,16 170,18" fill="none" stroke="#94A3B8" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </div>
-
-    <!-- WAF rule hits -->
-    <div class="flex flex-col gap-3 shrink-0 w-[170px] rounded-2xl bg-red-50 p-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-[6px]">
-          <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-sm text-red-500"></i>
-          <span class="text-[12px] font-semibold text-slate-700">WAF rule hits</span>
-        </div>
-        <span class="text-[11px] font-semibold text-red-500">+21.7%</span>
-      </div>
-      <div>
-        <p class="text-[11px] text-slate-500 mb-px">Current value</p>
-        <p class="text-[20px] font-extrabold text-slate-900">129</p>
-      </div>
-      <svg viewBox="0 0 170 36" class="w-full h-9" preserveAspectRatio="none">
-        <defs><linearGradient id="spark-rul" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#EF4444" stop-opacity="0.30"/>
-          <stop offset="100%" stop-color="#EF4444" stop-opacity="0"/>
-        </linearGradient></defs>
-        <path d="M0,28 18,25 36,26 54,20 72,22 90,14 108,17 126,9 144,12 170,6 170,36 0,36 Z" fill="url(#spark-rul)"/>
-        <path d="M0,28 18,25 36,26 54,20 72,22 90,14 108,17 126,9 144,12 170,6" fill="none" stroke="#EF4444" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </div>
+    {{end}}
 
   </div>
-  <p class="text-[11px] text-slate-300 mt-3 text-center">sample data, wire up real metrics later</p>
+  <p class="text-[11px] text-slate-300 mt-3 text-center">live metrics from recent request logs</p>
 </div>
 
 <!-- ── Row 2: Breakdown + Top countries + Recent threats ── -->
