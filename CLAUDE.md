@@ -30,6 +30,30 @@ make tag VERSION=v1.0.0  # annotated git tag + push to origin, triggers the GitL
 
 Run a single test: `go test ./proxy/ -run TestName -v` (substitute the package).
 
+**Runtime CLI flags** (passed directly to the binary, not config.yaml):
+
+```
+--listen          HTTP listen address (default :8080)
+--listen-tls      HTTPS listen address (empty = HTTP only)
+--trusted-proxies comma-separated CIDRs for X-Forwarded-For/X-Real-IP trust
+--db              SQLite DB path (default waf.db)
+--certs           TLS certificate cache directory (default ./certs)
+```
+
+**One-shot subcommands** (exit after completing):
+
+```bash
+coraza-waf-mod prune [config.yaml]
+  # Delete request log rows older than db.log_retention_days; see main.go:runPruneOnly
+
+coraza-waf-mod setup --db waf.db --admin-email e@x.com [--domain d] [--acme-email e]
+  # Seed admin credentials and optional ACME config into the DB (reads password from stdin).
+  # Idempotent for credentials — safe to re-run on upgrade without overwriting a changed password.
+
+coraza-waf-mod gencert --cert cert.pem --key key.pem --hosts ip1,hostname [--days 3650]
+  # Generate a self-signed ECDSA P-256 cert with the given SANs (hostnames or IPs).
+```
+
 **Never run `go build` directly after editing JS** — `go:generate` (which runs the JS minifier in `tools/minify`) only fires via `make build`/`make dist`, not bare `go build`. If you must, run `go generate ./...` first.
 
 Do not start the server (`go run .`, `make run`, etc.) without the user explicitly asking each time — verify changes with throwaway `go test` files instead, and delete them once they pass.
@@ -73,6 +97,8 @@ Request logs are not kept forever, but pruning is **not** automatic inside the r
 **Webhook delivery** (`webhook/pusher.go`): `webhook.New(db.GetWebhookConfig)` returns a `Pusher` whose `Push(RequestLog)` is registered as the log fan-out hook via `db.SetWebhookFn` in `main.go`. Delivery is fully asynchronous over an internal goroutine (`run`/`deliver`) so a slow or unreachable webhook endpoint never blocks the SQLite log worker. `shouldSend` filters by the comma-separated event list in the singleton `webhook_config` DB row (id=1), managed from the admin UI.
 
 **SQLite date/time gotcha**: never use SQLite's `date()`/`strftime()` functions on the `requests.ts` column — `modernc.org/sqlite` stores `time.Time` using Go's `.String()` format (`"... +0000 UTC"`), which SQLite's date functions cannot parse and silently return NULL for. All date bucketing (hourly traffic, retention cutoffs) is done in Go using plain `>=`/`<=` comparisons against `ts`. See `storage/db.go`'s `GetHourlyTraffic` for the canonical pattern.
+
+**Security headers** (`proxy/security.go`): `SecurityMiddleware()` is registered globally on the Echo instance (applied before routing), adding standard browser-hardening headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, `COOP`) plus HSTS on TLS connections and `X-Protected-By`/`X-WAF-Engine` identification headers. Registered once in `main.go`, so blocked responses, admin UI pages, and proxied responses all carry the same headers.
 
 **`proxy.responseWriter` must proxy Hijack and Flush**: the status-capturing wrapper in `proxy/handler.go` wraps `http.ResponseWriter` to intercept the status code for logging. Go does not automatically promote interface methods from the embedded concrete value, so `http.Hijacker` and `http.Flusher` must be explicitly implemented and delegated — without them, WebSocket upgrades (e.g. Vite HMR) fail with "can't switch protocols using non-Hijacker ResponseWriter".
 
