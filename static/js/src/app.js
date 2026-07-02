@@ -32,7 +32,10 @@
   }
 
   function markAllRead() {
-    fetch(adminPath + '/api/notifications/seen', { method: 'POST' }).then(function () {
+    fetch(adminPath + '/api/notifications/seen', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': document.body.dataset.csrf || '' }
+    }).then(function () {
       updateBadge(0);
     });
   }
