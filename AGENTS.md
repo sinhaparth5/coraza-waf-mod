@@ -23,7 +23,8 @@ Use standard Go formatting: run `gofmt` on changed Go files and keep package nam
 
 ## Testing Guidelines
 
-Tests exist in `proxy/`, `ratelimit/`, `ja3/`, and `ui/`. Add tests next to the package being changed, using Go’s standard `testing` package and names like `TestRegistryMatchPrefixPriority`. Run `make test` before submitting. For focused work, use `go test ./proxy -run TestName -v` with the relevant package path.
+Tests exist in `proxy/`, `ratelimit/`, `ja3/`, `ja4/`, `services/`, `storage/`, and `ui/`. Add tests next to the package being changed, using Go’s standard `testing` package and names like `TestRegistryMatchPrefixPriority`. Run `make test` before submitting. For focused work, use `go test ./proxy -run TestName -v` with the relevant package path.
+
 ## Commit & Pull Request Guidelines
 
 Recent commits use short, imperative or descriptive summaries such as `ci: run go generate before go test to produce embedded JS assets`. Keep commits focused and mention the affected area when useful. Pull requests should include a brief description, test results, config or migration notes, and screenshots for dashboard UI changes. Call out behavior affecting routing, TLS, storage, or blocking decisions.
