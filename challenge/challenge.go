@@ -141,10 +141,19 @@ func (c *Challenger) ServePage(w http.ResponseWriter, r *http.Request) {
 		"redirect": redir,
 	})
 
+	// Reference ID shown in the page footer (like Cloudflare's Ray ID):
+	// the nonce prefix is enough to find the solve attempt in support cases.
+	refID := nonce
+	if len(refID) > 12 {
+		refID = refID[:12]
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	pageTmpl.Execute(w, map[string]any{ //nolint:errcheck
 		"ConfigJSON": template.JS(cfg),
+		"Host":       r.Host,
+		"RefID":      refID,
 	})
 }
 
