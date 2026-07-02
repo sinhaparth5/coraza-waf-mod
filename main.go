@@ -34,6 +34,7 @@ import (
 	"coraza-waf-mod/geo"
 	ja3pkg "coraza-waf-mod/ja3"
 	ja4pkg "coraza-waf-mod/ja4"
+	"coraza-waf-mod/mailer"
 	"coraza-waf-mod/metrics"
 	"coraza-waf-mod/proxy"
 	"coraza-waf-mod/ratelimit"
@@ -180,6 +181,12 @@ func main() {
 	defer webhookPusher.Stop()
 	db.SetWebhookFn(webhookPusher.Push)
 
+	// Daily report email: crunches the previous day's blocked/403 counts just
+	// after local midnight and mails them via the SMTP settings stored in the
+	// DB (managed from the Settings page — never shipped in config or binary).
+	emailReporter := mailer.NewReporter(db)
+	defer emailReporter.Stop()
+
 	// Bot protection settings come entirely from the DB (managed via Settings page).
 	botEnabled, botThreshold, botTTL, _ := db.GetBotSettings()
 
@@ -242,7 +249,7 @@ func main() {
 		h.ReloadRateLimit(newBackend)
 	}
 
-	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs, reloadBot, buildChallenger, reloadRateLimit, reloadWAF, intelWorker.SyncSource)
+	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs, reloadBot, buildChallenger, reloadRateLimit, reloadWAF, intelWorker.SyncSource, emailReporter.SendNow)
 	if err != nil {
 		log.Fatalf("ui init: %v", err)
 	}

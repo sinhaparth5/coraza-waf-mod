@@ -99,6 +99,7 @@ type Handler struct {
 	reloadRateLimit func()
 	reloadWAF       func()
 	syncThreatIntel func(id int64)
+	sendReportNow   func() error
 	loginLimiter    *loginLimiter
 	trustedNets     []*net.IPNet
 }
@@ -128,7 +129,7 @@ type atAGlanceCard struct {
 // assets at "static/js/dist/*" (see assets.go in the repo root); it's
 // served under /<admin_path>/static/js/. imgsFS must contain
 // "static/imgs/*"; it's served under /<admin_path>/static/imgs/.
-func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64)) (*Handler, error) {
+func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error) (*Handler, error) {
 	sub, err := fs.Sub(jsFS, "static/js/dist")
 	if err != nil {
 		return nil, fmt.Errorf("sub static/js/dist: %w", err)
@@ -137,7 +138,7 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 	if err != nil {
 		return nil, fmt.Errorf("sub static/imgs: %w", err)
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, loginLimiter: newLoginLimiter(), trustedNets: parseTrustedNets(cfg.TrustedProxies)}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, loginLimiter: newLoginLimiter(), trustedNets: parseTrustedNets(cfg.TrustedProxies)}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -252,6 +253,8 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/settings/ratelimit", h.SaveRateLimitConfig)
 	g.POST("/settings/ratelimit/test", h.TestRedisConnection)
 	g.POST("/settings/webhook", h.SaveWebhookConfig)
+	g.POST("/settings/email", h.SaveEmailSettings)
+	g.POST("/settings/email/test", h.TestEmailReport)
 	g.GET("/waf-rules", h.WAFRulesPage)
 	g.POST("/waf-rules/disable", h.DisableWAFRule)
 	g.DELETE("/waf-rules/:id", h.EnableWAFRule)
@@ -1554,6 +1557,7 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 		rlBackend = "redis"
 	}
 	wh, _ := h.db.GetWebhookConfig()
+	ec, _ := h.db.GetEmailConfig()
 	return h.render(c, "settings", map[string]any{
 		"AdminEmail":     email,
 		"BotEnabled":     botEnabled,
@@ -1565,6 +1569,13 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 		"WebhookSecret":  wh.Secret,
 		"WebhookEnabled": wh.Enabled,
 		"WebhookEvents":  wh.Events,
+		"EmailEnabled":   ec.Enabled,
+		"EmailHost":      ec.Host,
+		"EmailPort":      ec.Port,
+		"EmailUsername":  ec.Username,
+		"EmailFrom":      ec.From,
+		"EmailTo":        ec.To,
+		"EmailTokenSet":  ec.Token != "",
 	})
 }
 
@@ -1690,6 +1701,75 @@ func (h *Handler) SaveWebhookConfig(c echo.Context) error {
 		"WebhookSaveOK":  saveErr == "",
 		"WebhookSaveErr": saveErr,
 	})
+}
+
+// SaveEmailSettings persists the daily-report SMTP settings. A blank token
+// field keeps the stored token, so re-saving other fields never wipes the
+// credential (and the token is never echoed back into the page).
+func (h *Handler) SaveEmailSettings(c echo.Context) error {
+	stored, _ := h.db.GetEmailConfig()
+
+	cfg := storage.EmailConfig{
+		Enabled:  c.FormValue("email_enabled") == "1",
+		Host:     strings.TrimSpace(c.FormValue("email_host")),
+		Username: strings.TrimSpace(c.FormValue("email_username")),
+		Token:    strings.TrimSpace(c.FormValue("email_token")),
+		From:     strings.TrimSpace(c.FormValue("email_from")),
+		To:       strings.TrimSpace(c.FormValue("email_to")),
+	}
+	cfg.Port, _ = strconv.Atoi(c.FormValue("email_port"))
+	if cfg.Token == "" {
+		cfg.Token = stored.Token
+	}
+	if cfg.Host == "" {
+		cfg.Host = storage.DefaultEmailHost
+	}
+	if cfg.Port <= 0 {
+		cfg.Port = storage.DefaultEmailPort
+	}
+	if cfg.Username == "" {
+		cfg.Username = storage.DefaultEmailUsername
+	}
+
+	saveErr := ""
+	if cfg.Enabled && (cfg.From == "" || cfg.To == "" || cfg.Token == "") {
+		saveErr = "Sender, recipient and API token are required to enable email alerts."
+		cfg.Enabled = false
+	}
+	if saveErr == "" {
+		if err := h.db.SetEmailConfig(cfg); err != nil {
+			saveErr = err.Error()
+		}
+	}
+
+	return h.renderPartial(c, "settings", "email-card", map[string]any{
+		"AdminPath":     h.cfg.Admin.Path,
+		"EmailEnabled":  cfg.Enabled,
+		"EmailHost":     cfg.Host,
+		"EmailPort":     cfg.Port,
+		"EmailUsername": cfg.Username,
+		"EmailFrom":     cfg.From,
+		"EmailTo":       cfg.To,
+		"EmailTokenSet": cfg.Token != "",
+		"EmailSaveOK":   saveErr == "",
+		"EmailSaveErr":  saveErr,
+	})
+}
+
+// TestEmailReport sends a report for the last 24 hours right now, using the
+// saved settings. Returns an inline HTML fragment for HTMX, mirroring
+// TestRedisConnection.
+func (h *Handler) TestEmailReport(c echo.Context) error {
+	if h.sendReportNow == nil {
+		return c.HTML(http.StatusOK,
+			`<span class="text-red-600 text-[13px]">Email reporting is not available.</span>`)
+	}
+	if err := h.sendReportNow(); err != nil {
+		return c.HTML(http.StatusOK,
+			`<span class="text-red-600 text-[13px]">Send failed: `+template.HTMLEscapeString(err.Error())+`</span>`)
+	}
+	return c.HTML(http.StatusOK,
+		`<span class="text-brand text-[13px] font-medium">Report sent — check the inbox.</span>`)
 }
 
 // ExportLogs streams the filtered request log as NDJSON (one JSON object per
