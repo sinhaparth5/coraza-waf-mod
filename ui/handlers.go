@@ -459,6 +459,19 @@ func dashboardAtAGlance(s storage.AtAGlanceStats, serviceCount int) []atAGlanceC
 			LinePath:   "M0,8 18,12 36,11 54,17 72,15 90,20 108,18 126,24 144,21 170,27",
 		},
 		{
+			Label:      "Unique visitors",
+			Icon:       "hgi-user-account",
+			IconClass:  "text-violet-500",
+			CardClass:  "bg-violet-50",
+			TrendClass: "text-violet-500",
+			Trend:      trendLabel(s.UniqueVisitorsToday, s.UniqueVisitorsPrevDay),
+			Value:      strconv.Itoa(s.UniqueVisitorsToday),
+			SparkID:    "spark-vis",
+			SparkColor: "#8B5CF6",
+			AreaPath:   "M0,24 18,20 36,22 54,15 72,18 90,11 108,14 126,8 144,10 170,5 170,36 0,36 Z",
+			LinePath:   "M0,24 18,20 36,22 54,15 72,18 90,11 108,14 126,8 144,10 170,5",
+		},
+		{
 			Label:      "Active services",
 			Icon:       "hgi-server-stack-01",
 			IconClass:  "text-slate-500",
@@ -775,6 +788,7 @@ func (h *Handler) LogDetail(c echo.Context) error {
 		"org":         d.Org,
 		"ja3_hash":    d.JA3Hash,
 		"ja4":         d.JA4,
+		"visitor_id":  d.VisitorID,
 		"bot_score":   d.BotScore,
 		"headers":     headers,
 	})
