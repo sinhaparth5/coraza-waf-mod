@@ -20,6 +20,7 @@ Requires **Go 1.25+**.
 
 ```bash
 make build       # go generate (minifies JS) + go build -> ./coraza-waf-mod
+make generate    # regenerate minified JS only (go generate ./...), no build
 make run         # build + run
 make test        # go test ./...
 make clean       # remove binary, minified JS, dist/
@@ -28,7 +29,7 @@ make checksums   # sha256sum dist/* -> dist/checksums.txt
 make tag VERSION=v1.0.0  # annotated git tag + push to origin, triggers the GitLab release pipeline
 ```
 
-Run a single test: `go test ./proxy/ -run TestName -v` (substitute the package).
+Run a single test: `go test ./proxy/ -run TestName -v` (substitute the package). Existing tests live in `proxy/`, `ratelimit/`, `ja3/`, and `ui/`.
 
 **Runtime CLI flags** (passed directly to the binary, not config.yaml):
 
@@ -52,6 +53,9 @@ coraza-waf-mod setup --db waf.db --admin-email e@x.com [--domain d] [--acme-emai
 
 coraza-waf-mod gencert --cert cert.pem --key key.pem --hosts ip1,hostname [--days 3650]
   # Generate a self-signed ECDSA P-256 cert with the given SANs (hostnames or IPs).
+
+coraza-waf-mod --version
+  # Print the version baked in via -ldflags "-X main.version=..." (make sets it from git describe; bare go build gives "dev").
 ```
 
 **Never run `go build` directly after editing JS** — `go:generate` (which runs the JS minifier in `tools/minify`) only fires via `make build`/`make dist`, not bare `go build`. If you must, run `go generate ./...` first.
@@ -80,7 +84,7 @@ Request logs are not kept forever, but pruning is **not** automatic inside the r
 
 **Styling is Tailwind via the CDN Play script, not a build pipeline.** `ui/templates/base.html` loads `<script src="https://cdn.tailwindcss.com">` and sets a `tailwind.config` (custom `brand`/`navy`/`canvas`/`surface`/`line` colors, `sans`/`mono` font families) inline — there is no `tailwind.config.js`, no PostCSS, no purge step. All templates use `class="..."` utilities, including arbitrary-value syntax (`w-[34px]`, `bg-[#E4F5EC]`) for one-off values outside the theme scale; do not introduce `style="..."` attributes or `<style>` blocks for anything Tailwind can express. JS that toggles visibility/color (`static/js/src/*.js`) does it via `classList`, never `element.style.*` — for show/hide, keep a permanent `flex`/`block` class alongside the toggled `hidden` class (Tailwind doesn't merge a bare `hidden` removal back into a layout display value on its own). Go HTML templates: content outside `{{define}}` blocks is never rendered — modal HTML must be inside the `{{define "content"}}` block, not after its closing `{{end}}`.
 
-**Bot protection** (`bot/`, `challenge/`, `ja3/`): `bot.Analyze(r)` scores each request O(1) from headers only — scanner UAs (+10, `IsBot=true`), HTTP lib UAs (+3), missing headers (+1–2 each). Trusted SEO/social crawlers (Googlebot, Bingbot, Applebot, etc.) are detected first and bypass all scoring — `IsTrustedCrawler=true` skips the challenge gate entirely, regardless of per-service `bot_mode`. When a challenger is active, requests not carrying a valid bypass cookie are redirected to `/_cz/challenge` (JS proof-of-work, SHA-256 nonce, solved in <1s by real browsers). Challenge routes `/_cz/challenge` and `/_cz/verify` are always registered before the catch-all proxy route so Echo routes them correctly regardless of whether bot protection is currently enabled. JA3 fingerprints (`ja3/ja3.go`) are computed at TLS handshake time via `GetConfigForClient`, stored in a `sync.Map` keyed by `remoteAddr`, retrieved in the request handler. Per-service `bot_mode` — `inherit` / `always` / `off` — overrides the global setting; `always` challenges every non-trusted client regardless of score.
+**Bot protection** (`bot/`, `challenge/`, `ja3/`): `bot.Analyze(r)` scores each request O(1) from headers only — scanner UAs (+10, `IsBot=true`), HTTP lib UAs (+3), missing headers (+1–2 each). Trusted SEO/social crawlers (Googlebot, Bingbot, Applebot, etc.) are detected first and bypass all scoring — `IsTrustedCrawler=true` skips the challenge gate entirely, regardless of per-service `bot_mode`. When a challenger is active, requests not carrying a valid bypass cookie are redirected to `/_cz/challenge` (JS proof-of-work, SHA-256 nonce, solved in <1s by real browsers). Challenge routes `/_cz/challenge` and `/_cz/verify` are always registered before the catch-all proxy route so Echo routes them correctly regardless of whether bot protection is currently enabled. JA3 fingerprints (`ja3/ja3.go`) are computed at TLS handshake time via `GetConfigForClient`, stored in a `sync.Map` keyed by `remoteAddr`, retrieved in the request handler, and deleted by the `ConnState` hook in `startTLS` when the TLS connection closes/hijacks — without that hook the store grows without bound. Per-service `bot_mode` — `inherit` / `always` / `off` — overrides the global setting; `always` challenges every non-trusted client regardless of score.
 
 **Rate limiting** (`ratelimit/`): the `Backend` interface (`Allow`, `TrackedIPs`, `Stop`) is satisfied by both `*Limiter` (in-process token bucket) and `*RedisBackend` (Lua-script atomic token bucket in Redis). The active backend is stored in `proxy.Handler.ratelimit` behind a `ratelimitMu sync.RWMutex`. `Limiter` has `Snapshot`/`RestoreFrom`/`StartPersistence(StateStore)` for SQLite write-back (every 10s), so token-bucket state survives restarts. `RedisBackend` fails open on Redis unavailability. `PingRedis(addr, password)` tests connectivity without creating a persistent client. Per-service limiters in `services.Registry` always use `*Limiter` (distribution not needed at the service level). The active backend choice (memory vs. Redis) and Redis credentials are stored in the DB `meta` table — not config.yaml.
 
@@ -90,7 +94,7 @@ Request logs are not kept forever, but pruning is **not** automatic inside the r
 
 **ASN lookup is also bundled.** `asn/dbip-asn-lite.mmdb` (DB-IP Lite, CC BY 4.0) is `//go:embed`-ed via `asn/embedded.go`. `asn.New()` opens it in-process — no external DB, no MaxMind account required. License attribution is in `THIRD_PARTY_NOTICES.md`.
 
-**Hot-reload pattern**: three subsystems support live config changes without a server restart, all using the same `sync.RWMutex` swap pattern in `proxy.Handler`: `ReloadWAF(*waf.Engine)`, `ReloadBotProtection(*challenge.Challenger)`, `ReloadRateLimit(ratelimit.Backend)`. The Settings page save handlers call the corresponding `reloadX` callback passed into `ui.NewHandler` from `main.go`. The old value is stopped/discarded after the swap.
+**Hot-reload pattern**: three subsystems support live config changes without a server restart, all using the same `sync.RWMutex` swap pattern in `proxy.Handler`: `ReloadWAF(*waf.Engine)`, `ReloadBotProtection(*challenge.Challenger)`, `ReloadRateLimit(ratelimit.Backend)`. The Settings page save handlers call the corresponding `reloadX` callback passed into `ui.NewHandler` from `main.go`. The old value is stopped/discarded after the swap. `SIGHUP` rebuilds and swaps the WAF engine (the only way to pick up on-disk `rules_dir` edits without a restart; services already reload on every UI change). `SIGINT`/`SIGTERM` trigger graceful shutdown (`shutdownOnSignal` in `main.go`, 10s timeout) so in-flight requests complete and the deferred `db.Close()` drains the log queue before exit.
 
 **Threat-intel auto-sync** (`threatintel/worker.go`): `threatintel.New(db, reloadIPBL)` starts a background goroutine that periodically downloads external plain-text IP block lists, parses out IP/CIDR tokens (skipping `#`/`;` comments, capped at a 10 MiB read), and writes them to the DB. The `blocklist` package reads from that same store, so synced IPs take effect via the `reloadIPBL` callback with no restart. The UI's "sync now" button calls `Worker.SyncSource` (wired through `ui.NewHandler`) to fetch a single source on demand. `Worker.Stop()` is deferred in `main.go`.
 

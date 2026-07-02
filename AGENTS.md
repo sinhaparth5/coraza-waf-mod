@@ -23,7 +23,7 @@ Use standard Go formatting: run `gofmt` on changed Go files and keep package nam
 
 ## Testing Guidelines
 
-There are currently no checked-in `*_test.go` files. Add tests next to the package being changed, using Go’s standard `testing` package and names like `TestRegistryMatchPrefixPriority`. Run `make test` before submitting. For focused work, use `go test ./proxy -run TestName -v` with the relevant package path.
+Tests exist in `proxy/`, `ratelimit/`, `ja3/`, and `ui/`. Add tests next to the package being changed, using Go’s standard `testing` package and names like `TestRegistryMatchPrefixPriority`. Run `make test` before submitting. For focused work, use `go test ./proxy -run TestName -v` with the relevant package path.
 
 ## Commit & Pull Request Guidelines
 

@@ -5,10 +5,12 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -75,6 +77,53 @@ func ParseCertInfo(certPEM []byte) (domains []string, expiresAt time.Time, err e
 		domains = []string{leaf.Subject.CommonName}
 	}
 	return domains, leaf.NotAfter, nil
+}
+
+// CertCoversHost reports whether the leaf certificate in certPEM is valid for
+// host (exact SAN or wildcard match). The returned error is x509's own
+// hostname mismatch message, which lists the names the cert actually covers —
+// suitable for showing directly in the UI. A non-standard port on host is
+// ignored for matching.
+func CertCoversHost(certPEM []byte, host string) error {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	block, _ := pem.Decode(certPEM)
+	if block == nil {
+		return fmt.Errorf("no PEM block found in certificate")
+	}
+	leaf, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return fmt.Errorf("parse certificate: %w", err)
+	}
+	if err := leaf.VerifyHostname(host); err != nil {
+		// Legacy CN-only certs: VerifyHostname ignores the Common Name, so
+		// accept an exact/wildcard CN match before rejecting.
+		if len(leaf.DNSNames) == 0 && hostMatchesPattern(leaf.Subject.CommonName, host) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// hostMatchesPattern matches host against a certificate name pattern,
+// supporting a single leading "*." wildcard label.
+func hostMatchesPattern(pattern, host string) bool {
+	pattern = strings.ToLower(strings.TrimSpace(pattern))
+	host = strings.ToLower(host)
+	if pattern == "" {
+		return false
+	}
+	if pattern == host {
+		return true
+	}
+	if rest, ok := strings.CutPrefix(pattern, "*."); ok {
+		if i := strings.Index(host, "."); i > 0 {
+			return host[i+1:] == rest
+		}
+	}
+	return false
 }
 
 // SavePoolCert validates the cert+key pair and writes them into the shared
