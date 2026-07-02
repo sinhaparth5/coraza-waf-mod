@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This is a single-binary Go WAF and reverse proxy with an embedded admin UI. `main.go` wires startup, config, TLS, pruning, and server modes. Core packages include `config/`, `waf/`, `proxy/`, `services/`, `storage/`, and `metrics/`. Blocking and detection logic lives in `blocklist/`, `geo/`, `asn/`, `bot/`, `ja3/`, `ratelimit/`, and `threatintel/`. The dashboard lives in `ui/handlers.go` and `ui/templates/`. Frontend sources are in `static/js/src/`; generated files go to `static/js/dist/`.
+This is a single-binary Go WAF and reverse proxy with an embedded admin UI. `main.go` wires startup, config, TLS, pruning, and server modes. Core packages include `config/`, `waf/`, `proxy/`, `services/`, `storage/`, and `metrics/`. Blocking and detection logic lives in `blocklist/`, `geo/`, `asn/`, `bot/`, `ja3/`, `ja4/`, `ratelimit/`, and `threatintel/`. The dashboard lives in `ui/handlers.go` and `ui/templates/`. Frontend sources are in `static/js/src/`; generated files go to `static/js/dist/`.
 
 ## Build, Test, and Development Commands
 
@@ -24,7 +24,6 @@ Use standard Go formatting: run `gofmt` on changed Go files and keep package nam
 ## Testing Guidelines
 
 Tests exist in `proxy/`, `ratelimit/`, `ja3/`, and `ui/`. Add tests next to the package being changed, using Go’s standard `testing` package and names like `TestRegistryMatchPrefixPriority`. Run `make test` before submitting. For focused work, use `go test ./proxy -run TestName -v` with the relevant package path.
-
 ## Commit & Pull Request Guidelines
 
 Recent commits use short, imperative or descriptive summaries such as `ci: run go generate before go test to produce embedded JS assets`. Keep commits focused and mention the affected area when useful. Pull requests should include a brief description, test results, config or migration notes, and screenshots for dashboard UI changes. Call out behavior affecting routing, TLS, storage, or blocking decisions.

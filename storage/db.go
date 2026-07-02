@@ -75,7 +75,8 @@ type RequestLog struct {
 	TLSSNI      string // SNI hostname from TLS ClientHello
 	ASN         uint   // autonomous system number
 	Org         string // ISP / organization name
-	JA3Hash     string // JA3 TLS fingerprint MD5 hex; empty for plain HTTP
+	JA3Hash     string // JA3 TLS fingerprint MD5 hex (legacy); empty for plain HTTP
+	JA4         string // JA4 TLS fingerprint (a_b_c format); empty for plain HTTP
 	BotScore    int    // anomaly score from bot signal analysis (0 = clean)
 }
 
@@ -177,6 +178,7 @@ func (db *DB) migrate() error {
 	db.conn.Exec(`ALTER TABLE requests ADD COLUMN org TEXT NOT NULL DEFAULT ''`)                //nolint
 	db.conn.Exec(`ALTER TABLE requests ADD COLUMN query TEXT NOT NULL DEFAULT ''`)              //nolint
 	db.conn.Exec(`ALTER TABLE requests ADD COLUMN ja3_hash TEXT NOT NULL DEFAULT ''`)           //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN ja4 TEXT NOT NULL DEFAULT ''`)                //nolint
 	db.conn.Exec(`ALTER TABLE requests ADD COLUMN bot_score INTEGER NOT NULL DEFAULT 0`)        //nolint
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_mode TEXT NOT NULL DEFAULT 'none'`)       //nolint
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_cert_path TEXT NOT NULL DEFAULT ''`)      //nolint
@@ -214,6 +216,7 @@ func (db *DB) migrate() error {
 		asn_num      INTEGER NOT NULL DEFAULT 0,
 		org          TEXT NOT NULL DEFAULT '',
 		ja3_hash     TEXT NOT NULL DEFAULT '',
+		ja4          TEXT NOT NULL DEFAULT '',
 		bot_score    INTEGER NOT NULL DEFAULT 0
 	);
 	CREATE INDEX IF NOT EXISTS idx_requests_ts         ON requests(ts);
@@ -696,8 +699,8 @@ func (db *DB) InsertRequest(r RequestLog) (int64, error) {
 			(ts, app_name, real_ip, proxy_ip, country, method, host, path, query,
 			 status, blocked, rule_id, action, user_agent, duration_ms, headers_json,
 			 request_id, proto, tls_version, tls_cipher, tls_sni, asn_num, org,
-			 ja3_hash, bot_score)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 ja3_hash, ja4, bot_score)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.Timestamp.UTC(),
 		r.AppName,
 		r.RealIP,
@@ -722,6 +725,7 @@ func (db *DB) InsertRequest(r RequestLog) (int64, error) {
 		r.ASN,
 		r.Org,
 		r.JA3Hash,
+		r.JA4,
 		r.BotScore,
 	)
 	if err != nil {
@@ -759,6 +763,7 @@ type LogDetail struct {
 	ASN         uint
 	Org         string
 	JA3Hash     string
+	JA4         string
 	BotScore    int
 }
 
@@ -771,13 +776,13 @@ func (db *DB) GetRequestByID(id int) (*LogDetail, error) {
 		SELECT id, ts, app_name, real_ip, proxy_ip, country, method, host, path, query,
 		       status, blocked, rule_id, action, user_agent, duration_ms, headers_json,
 		       request_id, proto, tls_version, tls_cipher, tls_sni, asn_num, org,
-		       ja3_hash, bot_score
+		       ja3_hash, ja4, bot_score
 		FROM requests WHERE id = ?`, id).Scan(
 		&d.ID, &d.Timestamp, &d.AppName, &d.RealIP, &d.ProxyIP, &d.Country,
 		&d.Method, &d.Host, &d.Path, &d.Query,
 		&d.Status, &blocked, &d.RuleID, &d.Action, &d.UserAgent, &d.Duration,
 		&d.HeadersJSON, &d.RequestID, &d.Proto, &d.TLSVersion, &d.TLSCipher,
-		&d.TLSSNI, &d.ASN, &d.Org, &d.JA3Hash, &d.BotScore,
+		&d.TLSSNI, &d.ASN, &d.Org, &d.JA3Hash, &d.JA4, &d.BotScore,
 	)
 	if err != nil {
 		return nil, err
@@ -1796,7 +1801,7 @@ func (db *DB) ExportRequests(f LogFilter, fn func(RequestLog) bool) error {
 	where, args := f.where()
 	query := `SELECT id, ts, app_name, real_ip, proxy_ip, country, method, host, path, query,
 	                 status, blocked, rule_id, action, user_agent, duration_ms, headers_json,
-	                 request_id, proto, tls_version, tls_cipher, tls_sni, asn_num, org, ja3_hash, bot_score
+	                 request_id, proto, tls_version, tls_cipher, tls_sni, asn_num, org, ja3_hash, ja4, bot_score
 	          FROM requests ` + where + ` ORDER BY ts DESC`
 	rows, err := db.conn.Query(query, args...)
 	if err != nil {
@@ -1810,7 +1815,7 @@ func (db *DB) ExportRequests(f LogFilter, fn func(RequestLog) bool) error {
 			&r.ID, &r.Timestamp, &r.AppName, &r.RealIP, &r.ProxyIP, &r.Country,
 			&r.Method, &r.Host, &r.Path, &r.Query,
 			&r.Status, &blocked, &r.RuleID, &r.Action, &r.UserAgent, &r.Duration, &r.HeadersJSON,
-			&r.RequestID, &r.Proto, &r.TLSVersion, &r.TLSCipher, &r.TLSSNI, &r.ASN, &r.Org, &r.JA3Hash, &r.BotScore,
+			&r.RequestID, &r.Proto, &r.TLSVersion, &r.TLSCipher, &r.TLSSNI, &r.ASN, &r.Org, &r.JA3Hash, &r.JA4, &r.BotScore,
 		); err != nil {
 			return err
 		}
