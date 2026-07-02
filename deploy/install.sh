@@ -274,6 +274,12 @@ if [ "$IS_UPGRADE" = "0" ] && [ "$DRY_RUN" != "1" ]; then
 elif [ "$DRY_RUN" = "1" ]; then
 	echo "==> [DRY RUN] Would generate self-signed cert at ${CERT_FILE}"
 	TLS_FLAGS="--listen :80 --listen-tls :443 --tls-cert ${CERT_FILE} --tls-key ${KEY_FILE}"
+elif [ "$IS_UPGRADE" = "1" ] && [ -f "${CERT_FILE}" ] && [ -f "${KEY_FILE}" ]; then
+	# Upgrade of a self-signed install: the cert files only exist on the
+	# non-ACME path, so keep passing them — otherwise the rewritten unit
+	# would drop the fallback cert and break HTTPS-by-IP after restart.
+	echo "==> Keeping existing self-signed certificate"
+	TLS_FLAGS="--listen :80 --listen-tls :443 --tls-cert ${CERT_FILE} --tls-key ${KEY_FILE}"
 fi
 
 # ── Seed admin credentials (non-ACME path / fresh install) ───────────────────
