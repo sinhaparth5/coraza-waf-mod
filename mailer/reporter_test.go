@@ -132,6 +132,52 @@ func TestSendNowWorksWhileDisabled(t *testing.T) {
 	}
 }
 
+func TestSendBanAlertGatedOnEnabledConfig(t *testing.T) {
+	now := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
+
+	// Fully configured: one alert goes out, subject names the IP.
+	db := &fakeStore{cfg: enabledConfig()}
+	r, subjects := testReporter(db, now)
+	if err := r.SendBanAlert("203.0.113.7", "12 blocked requests in 10 min"); err != nil {
+		t.Fatalf("SendBanAlert: %v", err)
+	}
+	if len(*subjects) != 1 || !strings.Contains((*subjects)[0], "203.0.113.7") {
+		t.Fatalf("subjects = %v, want one alert naming the IP", *subjects)
+	}
+
+	// Disabled or incomplete config: skipped silently, no error.
+	for name, mutate := range map[string]func(*storage.EmailConfig){
+		"disabled": func(c *storage.EmailConfig) { c.Enabled = false },
+		"no token": func(c *storage.EmailConfig) { c.Token = "" },
+		"no to":    func(c *storage.EmailConfig) { c.To = "" },
+	} {
+		cfg := enabledConfig()
+		mutate(&cfg)
+		r, subjects := testReporter(&fakeStore{cfg: cfg}, now)
+		if err := r.SendBanAlert("203.0.113.7", "reason"); err != nil {
+			t.Errorf("%s: SendBanAlert returned error %v, want silent skip", name, err)
+		}
+		if len(*subjects) != 0 {
+			t.Errorf("%s: alert sent despite incomplete config", name)
+		}
+	}
+}
+
+func TestComposeBanAlertIncludesIPAndReason(t *testing.T) {
+	at := time.Date(2026, 7, 2, 3, 4, 0, 0, time.UTC)
+	subject, text, html := composeBanAlert("203.0.113.7", "2 critical WAF hits in 10 min", at)
+	if !strings.Contains(subject, "203.0.113.7") {
+		t.Errorf("subject missing IP: %q", subject)
+	}
+	for _, body := range []string{text, html} {
+		for _, want := range []string{"203.0.113.7", "2 critical WAF hits in 10 min", "IP Rules"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("body missing %q:\n%s", want, body)
+			}
+		}
+	}
+}
+
 func TestComposeReportIncludesCounts(t *testing.T) {
 	subject, text, html := composeReport("2026-07-01", storage.DailyReport{
 		Total: 1234, Blocked: 56, Status403: 44, UniqueBlockedIPs: 9,

@@ -101,6 +101,7 @@ type Handler struct {
 	reloadWAF       func()
 	syncThreatIntel func(id int64)
 	sendReportNow   func() error
+	reloadAutoban   func()
 	loginLimiter    *loginLimiter
 	trustedNets     []*net.IPNet
 }
@@ -130,7 +131,7 @@ type atAGlanceCard struct {
 // assets at "static/js/dist/*" (see assets.go in the repo root); it's
 // served under /<admin_path>/static/js/. imgsFS must contain
 // "static/imgs/*"; it's served under /<admin_path>/static/imgs/.
-func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error) (*Handler, error) {
+func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error, reloadAutoban func()) (*Handler, error) {
 	sub, err := fs.Sub(jsFS, "static/js/dist")
 	if err != nil {
 		return nil, fmt.Errorf("sub static/js/dist: %w", err)
@@ -139,7 +140,7 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 	if err != nil {
 		return nil, fmt.Errorf("sub static/imgs: %w", err)
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, loginLimiter: newLoginLimiter(), trustedNets: parseTrustedNets(cfg.TrustedProxies)}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, reloadAutoban: reloadAutoban, loginLimiter: newLoginLimiter(), trustedNets: parseTrustedNets(cfg.TrustedProxies)}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -232,6 +233,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.GET("/logs/:id", h.LogDetail)
 	g.GET("/ip-rules", h.IPRulesPage)
 	g.POST("/ip-rules", h.AddIPRule)
+	g.POST("/ip-rules/autoban", h.SaveAutobanSettings)
 	g.DELETE("/ip-rules/:id", h.DeleteIPRule)
 	g.GET("/geo-rules", h.GeoRulesPage)
 	g.POST("/geo-rules", h.AddGeoRule)
@@ -847,13 +849,43 @@ func (h *Handler) IPRulesPage(c echo.Context) error {
 		blockPct = blockCount * 100 / total
 		allowPct = allowCount * 100 / total
 	}
+	ab, _ := h.db.GetAutobanConfig()
 	return h.render(c, "ip_rules", map[string]any{
-		"Rules":      rules,
-		"Apps":       h.registry.List(),
-		"BlockCount": blockCount,
-		"AllowCount": allowCount,
-		"BlockPct":   blockPct,
-		"AllowPct":   allowPct,
+		"Rules":          rules,
+		"Apps":           h.registry.List(),
+		"BlockCount":     blockCount,
+		"AllowCount":     allowCount,
+		"BlockPct":       blockPct,
+		"AllowPct":       allowPct,
+		"AutobanEnabled": ab.Enabled,
+		"AutobanThresh":  ab.Threshold,
+		"AutobanWindow":  ab.WindowMinutes,
+	})
+}
+
+// SaveAutobanSettings persists the automatic-banning knobs shown on the IP
+// Rules page and hot-reloads the banner so they apply immediately.
+func (h *Handler) SaveAutobanSettings(c echo.Context) error {
+	cfg := storage.DefaultAutobanConfig()
+	cfg.Enabled = c.FormValue("autoban_enabled") == "1"
+	if n, err := strconv.Atoi(c.FormValue("autoban_threshold")); err == nil && n >= 1 && n <= 1000 {
+		cfg.Threshold = n
+	}
+	if n, err := strconv.Atoi(c.FormValue("autoban_window")); err == nil && n >= 1 && n <= 1440 {
+		cfg.WindowMinutes = n
+	}
+	saveErr := ""
+	if err := h.db.SetAutobanConfig(cfg); err != nil {
+		saveErr = "Could not save: " + err.Error()
+	} else if h.reloadAutoban != nil {
+		h.reloadAutoban()
+	}
+	return h.renderPartial(c, "ip_rules", "autoban-card", map[string]any{
+		"AutobanEnabled": cfg.Enabled,
+		"AutobanThresh":  cfg.Threshold,
+		"AutobanWindow":  cfg.WindowMinutes,
+		"AutobanSaveOK":  saveErr == "",
+		"AutobanSaveErr": saveErr,
 	})
 }
 

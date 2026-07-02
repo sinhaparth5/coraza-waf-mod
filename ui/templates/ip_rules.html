@@ -65,6 +65,8 @@
       </div>
     </div>
 
+    {{template "autoban-card" .}}
+
     <!-- Rules overview -->
     <div class="rounded-[28px] bg-navy p-6 flex flex-col gap-2">
       <p class="text-[12px] text-white/50 mb-1">Rules overview</p>
@@ -115,6 +117,55 @@
 </div>
 {{end}}
 
+{{define "autoban-card"}}
+<div class="card p-6" id="autoban-card">
+  <div class="flex items-center gap-[10px] mb-2">
+    <div class="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center">
+      <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-[14px] text-red-500"></i>
+    </div>
+    <h2 class="text-[17px] font-bold text-slate-900">Automatic banning</h2>
+  </div>
+  <p class="text-[12px] text-slate-500 mb-4">Repeat offenders and severe attacks (SQL injection, RCE, XSS classes) are banned permanently once they cross the score below. Bans appear in the list as <span class="font-semibold text-slate-600">Auto</span> rules and can be removed like any other.</p>
+
+  {{if .AutobanSaveOK}}
+  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Saved — automatic banning settings applied.</div>
+  {{end}}
+  {{if .AutobanSaveErr}}
+  <div class="rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px] px-4 py-3 mb-4">{{.AutobanSaveErr}}</div>
+  {{end}}
+
+  <form hx-post="/admin/ip-rules/autoban" hx-target="#autoban-card" hx-swap="outerHTML" class="flex flex-col gap-4">
+    <label class="flex items-center justify-between cursor-pointer">
+      <span class="text-[13px] font-medium text-slate-700">Ban IPs automatically</span>
+      <span class="relative inline-block">
+        <input type="checkbox" name="autoban_enabled" value="1" class="peer sr-only" {{if .AutobanEnabled}}checked{{end}}/>
+        <span class="block w-10 h-6 bg-slate-200 peer-checked:bg-brand rounded-full transition-colors duration-200 peer-focus:outline-none"></span>
+        <span class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-4"></span>
+      </span>
+    </label>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Ban score</label>
+        <input name="autoban_threshold" type="number" min="1" max="1000" value="{{.AutobanThresh}}"
+          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+      </div>
+      <div>
+        <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Window (min)</label>
+        <input name="autoban_window" type="number" min="1" max="1440" value="{{.AutobanWindow}}"
+          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+      </div>
+    </div>
+    <p class="text-[12px] text-slate-500 -mt-1">Scoring inside the window: critical WAF hit = 5, other WAF hit = 2, rate-limited = 1. Private and allow-listed IPs are never banned.</p>
+
+    <button type="submit" class="btn-primary w-full flex items-center justify-center gap-2">
+      <i class="hgi hgi-stroke hgi-rounded hgi-checkmark-circle-02 text-sm"></i>
+      Save &amp; apply
+    </button>
+  </form>
+</div>
+{{end}}
+
 {{define "ip-rules-rows"}}
 {{range .}}
 <div class="flex items-center gap-3 p-3 rounded-2xl hover:bg-surface transition-colors duration-150">
@@ -127,8 +178,11 @@
   </div>
   <div class="flex-1 min-w-0">
     <div class="mono text-[14px] font-semibold text-slate-900 truncate">{{.IP}}</div>
-    <div class="text-[12px] text-slate-500 truncate">{{if .AppName}}{{.AppName}}{{else}}Global{{end}} · {{fmtTime .CreatedAt}}</div>
+    <div class="text-[12px] text-slate-500 truncate">{{if .AppName}}{{.AppName}}{{else}}Global{{end}} · {{fmtTime .CreatedAt}}{{if .Note}} · {{.Note}}{{end}}</div>
   </div>
+  {{if .Auto}}
+  <span class="text-[12px] font-semibold px-[10px] py-1 rounded-full shrink-0 bg-amber-100 text-amber-700">Auto</span>
+  {{end}}
   <span class="text-[12px] font-semibold px-[10px] py-1 rounded-full shrink-0 {{if eq .RuleType "block"}}bg-red-100 text-red-600{{else}}bg-green-100 text-green-600{{end}}">{{if eq .RuleType "block"}}Block{{else}}Allow{{end}}</span>
   {{template "remove-btn" (map "URL" (printf "/admin/ip-rules/%d" .ID) "Target" "#ip-rules-body" "Confirm" (printf "Remove rule for %s?" .IP))}}
 </div>

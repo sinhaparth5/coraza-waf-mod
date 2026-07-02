@@ -118,6 +118,21 @@ func (r *Reporter) SendNow() error {
 	return r.send(cfg, subject, text, html)
 }
 
+// SendBanAlert emails a notice that ip was automatically banned (autoban
+// package). Silently skipped (nil) when email alerts are disabled or not
+// fully configured — a ban must never depend on email being set up.
+func (r *Reporter) SendBanAlert(ip, reason string) error {
+	cfg, err := r.db.GetEmailConfig()
+	if err != nil {
+		return err
+	}
+	if !cfg.Enabled || cfg.Token == "" || cfg.To == "" {
+		return nil
+	}
+	subject, text, html := composeBanAlert(ip, reason, r.now())
+	return r.send(cfg, subject, text, html)
+}
+
 // fontStack mirrors the admin UI's typography (base.html); Plus Jakarta Sans
 // is used when the recipient has it installed, otherwise the system fallback.
 const fontStack = `'Plus Jakarta Sans',-apple-system,'Segoe UI',Arial,sans-serif`
@@ -205,6 +220,82 @@ func composeReport(day string, rep storage.DailyReport) (subject, text, html str
 	// Footer.
 	h.WriteString(`<tr><td style="padding:8px 32px 28px">`)
 	h.WriteString(`<p style="margin:0;font:400 12px ` + fontStack + `;color:#94A3B8">Sent automatically by Coraza WAF Mod from ` + Sender + `.</p>`)
+	h.WriteString(`</td></tr>`)
+
+	h.WriteString(`</table></td></tr></table>`)
+
+	return subject, t.String(), h.String()
+}
+
+// composeBanAlert renders the notice sent when the autoban package bans an
+// IP. Same visual language as the daily report: canvas backdrop, white
+// rounded card, brand header, inline styles only.
+func composeBanAlert(ip, reason string, at time.Time) (subject, text, html string) {
+	subject = fmt.Sprintf("WAF banned IP %s", ip)
+	when := at.Format("2006-01-02 15:04 MST")
+
+	var t strings.Builder
+	fmt.Fprintf(&t, "Coraza WAF Mod — automatic IP ban\n\n")
+	fmt.Fprintf(&t, "IP address:  %s\n", ip)
+	fmt.Fprintf(&t, "Reason:      %s\n", reason)
+	fmt.Fprintf(&t, "Banned at:   %s\n", when)
+	fmt.Fprintf(&t, "Scope:       Global (all services)\n\n")
+	t.WriteString("The IP now appears on the IP Rules page, where the ban can be lifted.\n")
+
+	rows := []struct{ label, value string }{
+		{"IP address", ip},
+		{"Reason", reason},
+		{"Banned at", when},
+		{"Scope", "Global (all services)"},
+	}
+
+	var h strings.Builder
+	h.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EAEBED"><tr><td align="center" style="padding:32px 12px">`)
+	h.WriteString(`<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#ffffff;border:1px solid #EEF1F3;border-radius:28px">`)
+
+	// Brand header: logo badge (deep-green rounded square + three filter bars) and full name.
+	h.WriteString(`<tr><td style="padding:28px 32px 0">`)
+	h.WriteString(`<table role="presentation" cellpadding="0" cellspacing="0"><tr>`)
+	h.WriteString(`<td width="40" height="40" align="center" style="width:40px;height:40px;background:#1a3d28;border-radius:10px;vertical-align:middle">`)
+	h.WriteString(`<div style="width:22px;height:4px;background:#8edba8;border-radius:3px;margin:0 auto 3px"></div>`)
+	h.WriteString(`<div style="width:17px;height:4px;background:#6cc98a;border-radius:3px;margin:0 auto 3px"></div>`)
+	h.WriteString(`<div style="width:12px;height:4px;background:#4db872;border-radius:3px;margin:0 auto"></div>`)
+	h.WriteString(`</td>`)
+	h.WriteString(`<td style="padding-left:12px;vertical-align:middle">`)
+	h.WriteString(`<p style="margin:0;font:700 16px ` + fontStack + `;color:#0f172a">Coraza WAF Mod</p>`)
+	h.WriteString(`<p style="margin:2px 0 0;font:400 12px ` + fontStack + `;color:#64748b">Automatic IP ban</p>`)
+	h.WriteString(`</td></tr></table>`)
+	h.WriteString(`</td></tr>`)
+
+	// Red alert banner with the banned IP.
+	h.WriteString(`<tr><td style="padding:20px 32px 0">`)
+	h.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FEF2F2;border:1px solid #FECACA;border-radius:14px"><tr><td style="padding:14px 18px">`)
+	h.WriteString(`<p style="margin:0;font:600 11px ` + fontStack + `;color:#DC2626;text-transform:uppercase;letter-spacing:.05em">IP address banned</p>`)
+	h.WriteString(`<p style="margin:4px 0 0;font:700 20px 'SF Mono',Consolas,monospace;color:#0f172a">` + ip + `</p>`)
+	h.WriteString(`</td></tr></table>`)
+	h.WriteString(`</td></tr>`)
+
+	// Detail rows, styled like the daily report's metric table.
+	h.WriteString(`<tr><td style="padding:16px 32px 8px">`)
+	h.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">`)
+	for i, row := range rows {
+		bg := "#ffffff"
+		if i%2 == 1 {
+			bg = "#F4F7F9"
+		}
+		fmt.Fprintf(&h,
+			`<tr style="background:%s">`+
+				`<td style="padding:10px 12px;border-bottom:1px solid #F4F7F9;font:400 13px %s;color:#64748b;white-space:nowrap">%s</td>`+
+				`<td style="padding:10px 12px;border-bottom:1px solid #F4F7F9;font:600 13px %s;color:#334155">%s</td>`+
+				`</tr>`,
+			bg, fontStack, row.label, fontStack, row.value)
+	}
+	h.WriteString(`</table>`)
+	h.WriteString(`</td></tr>`)
+
+	// Footer.
+	h.WriteString(`<tr><td style="padding:8px 32px 28px">`)
+	h.WriteString(`<p style="margin:0;font:400 12px ` + fontStack + `;color:#94A3B8">The ban is a global block rule on the IP Rules page — remove it there to lift it. Sent automatically by Coraza WAF Mod from ` + Sender + `.</p>`)
 	h.WriteString(`</td></tr>`)
 
 	h.WriteString(`</table></td></tr></table>`)

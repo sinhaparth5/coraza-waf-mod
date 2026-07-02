@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"coraza-waf-mod/ratelimit"
@@ -33,6 +34,15 @@ type DB struct {
 	logDone     chan struct{}
 	broadcastFn func(RequestLog)
 	webhookFn   func(RequestLog)
+	autobanFn   func(RequestLog)
+}
+
+// SetAutobanFn registers a callback invoked (from the log worker goroutine)
+// after each successful DB insert. Used to feed blocked events to the
+// automatic IP banner without coupling storage to the autoban package.
+// The callback must be fast — it runs on the single log worker goroutine.
+func (db *DB) SetAutobanFn(fn func(RequestLog)) {
+	db.autobanFn = fn
 }
 
 // SetWebhookFn registers a callback invoked (from the log worker goroutine)
@@ -136,6 +146,9 @@ func (db *DB) runLogWorker() {
 			if db.webhookFn != nil {
 				db.webhookFn(entry)
 			}
+			if db.autobanFn != nil {
+				db.autobanFn(entry)
+			}
 		}
 	}
 }
@@ -190,6 +203,7 @@ func (db *DB) migrate() error {
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_burst INTEGER NOT NULL DEFAULT 0`) //nolint
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN bot_mode TEXT NOT NULL DEFAULT 'inherit'`)    //nolint
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN cert_id INTEGER NOT NULL DEFAULT 0`)          //nolint
+	db.conn.Exec(`ALTER TABLE ip_rules ADD COLUMN note TEXT NOT NULL DEFAULT ''`)               //nolint
 
 	_, err := db.conn.Exec(`
 	CREATE TABLE IF NOT EXISTS requests (
@@ -233,6 +247,7 @@ func (db *DB) migrate() error {
 		app_name   TEXT NOT NULL DEFAULT '',
 		ip         TEXT NOT NULL,
 		rule_type  TEXT NOT NULL CHECK(rule_type IN ('block','allow')),
+		note       TEXT NOT NULL DEFAULT '',
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		UNIQUE(app_name, ip)
 	);
@@ -344,16 +359,42 @@ type IPRule struct {
 	AppName   string // "" = global
 	IP        string
 	RuleType  string // "block" | "allow"
+	Note      string // "" for manual rules; ban reason for auto-banned IPs
 	CreatedAt time.Time
 }
 
+// Auto reports whether this rule was created by the automatic IP banner
+// (rather than entered by an admin). Used by the IP Rules page template.
+func (r IPRule) Auto() bool { return strings.HasPrefix(r.Note, "Auto-banned") }
+
 func (db *DB) AddIPRule(appName, ip, ruleType string) error {
+	return db.AddIPRuleWithNote(appName, ip, ruleType, "")
+}
+
+// AddIPRuleWithNote upserts an IP rule carrying a note (shown on the IP Rules
+// page). The autoban package uses the note to record why an IP was banned.
+func (db *DB) AddIPRuleWithNote(appName, ip, ruleType, note string) error {
 	_, err := db.conn.Exec(
-		`INSERT INTO ip_rules (app_name, ip, rule_type) VALUES (?, ?, ?)
-		 ON CONFLICT(app_name, ip) DO UPDATE SET rule_type = excluded.rule_type`,
-		appName, ip, ruleType,
+		`INSERT INTO ip_rules (app_name, ip, rule_type, note) VALUES (?, ?, ?, ?)
+		 ON CONFLICT(app_name, ip) DO UPDATE SET rule_type = excluded.rule_type, note = excluded.note`,
+		appName, ip, ruleType, note,
 	)
 	return err
+}
+
+// GetIPRuleType returns the rule type ("block" or "allow") for an exact
+// app+IP pair, or "" when no rule exists. The autoban package checks this
+// before banning so an admin allow rule (or an existing ban) is never
+// overwritten.
+func (db *DB) GetIPRuleType(appName, ip string) (string, error) {
+	var rt string
+	err := db.conn.QueryRow(
+		`SELECT rule_type FROM ip_rules WHERE app_name = ? AND ip = ?`, appName, ip,
+	).Scan(&rt)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return rt, err
 }
 
 func (db *DB) RemoveIPRule(id int) error {
@@ -363,7 +404,7 @@ func (db *DB) RemoveIPRule(id int) error {
 
 func (db *DB) ListIPRules() ([]IPRule, error) {
 	rows, err := db.conn.Query(
-		`SELECT id, app_name, ip, rule_type, created_at FROM ip_rules ORDER BY created_at DESC`,
+		`SELECT id, app_name, ip, rule_type, note, created_at FROM ip_rules ORDER BY created_at DESC`,
 	)
 	if err != nil {
 		return nil, err
@@ -373,12 +414,63 @@ func (db *DB) ListIPRules() ([]IPRule, error) {
 	var rules []IPRule
 	for rows.Next() {
 		var r IPRule
-		if err := rows.Scan(&r.ID, &r.AppName, &r.IP, &r.RuleType, &r.CreatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.AppName, &r.IP, &r.RuleType, &r.Note, &r.CreatedAt); err != nil {
 			return nil, err
 		}
 		rules = append(rules, r)
 	}
 	return rules, rows.Err()
+}
+
+// ── Autoban config ───────────────────────────────────────────────────────────
+
+// AutobanConfig controls the automatic IP banner (autoban package). Stored in
+// the meta table and managed from the IP Rules page.
+type AutobanConfig struct {
+	Enabled       bool
+	Threshold     int // points within the window that trigger a permanent ban
+	WindowMinutes int // sliding window size
+}
+
+// DefaultAutobanConfig is used when nothing is stored yet: enabled, ban at 10
+// points in 10 minutes (≈2 critical WAF hits, 4 generic WAF hits, or 10
+// rate-limited requests — see autoban's scoring).
+func DefaultAutobanConfig() AutobanConfig {
+	return AutobanConfig{Enabled: true, Threshold: 10, WindowMinutes: 10}
+}
+
+func (db *DB) GetAutobanConfig() (AutobanConfig, error) {
+	cfg := DefaultAutobanConfig()
+	if v, err := db.getMeta("autoban_enabled"); err != nil {
+		return cfg, err
+	} else if v != "" {
+		cfg.Enabled = v == "1"
+	}
+	if v, _ := db.getMeta("autoban_threshold"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.Threshold = n
+		}
+	}
+	if v, _ := db.getMeta("autoban_window_min"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.WindowMinutes = n
+		}
+	}
+	return cfg, nil
+}
+
+func (db *DB) SetAutobanConfig(cfg AutobanConfig) error {
+	enabled := "0"
+	if cfg.Enabled {
+		enabled = "1"
+	}
+	if err := db.setMeta("autoban_enabled", enabled); err != nil {
+		return err
+	}
+	if err := db.setMeta("autoban_threshold", strconv.Itoa(cfg.Threshold)); err != nil {
+		return err
+	}
+	return db.setMeta("autoban_window_min", strconv.Itoa(cfg.WindowMinutes))
 }
 
 // ── Geo rules ─────────────────────────────────────────────────────────────────

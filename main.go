@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"coraza-waf-mod/asn"
+	"coraza-waf-mod/autoban"
 	"coraza-waf-mod/blocklist"
 	"coraza-waf-mod/challenge"
 	"coraza-waf-mod/config"
@@ -187,6 +188,21 @@ func main() {
 	emailReporter := mailer.NewReporter(db)
 	defer emailReporter.Stop()
 
+	// Automatic IP banning: scores blocked events per client IP from the log
+	// stream and turns repeat offenders / severe attackers into permanent
+	// global block rules, hot-reloading the blocklist and emailing the admin.
+	banner := autoban.New(db, func() {
+		if err := ipbl.Reload(db); err != nil {
+			log.Printf("autoban: blocklist reload: %v", err)
+		}
+	}, func(ip, reason string) {
+		if err := emailReporter.SendBanAlert(ip, reason); err != nil {
+			log.Printf("autoban: ban alert email for %s: %v", ip, err)
+		}
+	})
+	defer banner.Stop()
+	db.SetAutobanFn(banner.Record)
+
 	// Bot protection settings come entirely from the DB (managed via Settings page).
 	botEnabled, botThreshold, botTTL, _ := db.GetBotSettings()
 
@@ -249,7 +265,7 @@ func main() {
 		h.ReloadRateLimit(newBackend)
 	}
 
-	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs, reloadBot, buildChallenger, reloadRateLimit, reloadWAF, intelWorker.SyncSource, emailReporter.SendNow)
+	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs, reloadBot, buildChallenger, reloadRateLimit, reloadWAF, intelWorker.SyncSource, emailReporter.SendNow, banner.ReloadConfig)
 	if err != nil {
 		log.Fatalf("ui init: %v", err)
 	}
