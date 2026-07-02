@@ -96,6 +96,20 @@ func (h *Handler) ServeChallengeVerify(w http.ResponseWriter, r *http.Request) {
 	ch.ServeVerify(w, r)
 }
 
+// ServeFingerprintJS serves the vendored FingerprintJS bundle used by the
+// challenge page. Registered as GET /_cz/fp.js alongside the other challenge
+// routes so it exists regardless of whether bot protection is currently on.
+func (h *Handler) ServeFingerprintJS(w http.ResponseWriter, r *http.Request) {
+	h.challengerMu.RLock()
+	ch := h.challenger
+	h.challengerMu.RUnlock()
+	if ch == nil {
+		http.NotFound(w, r)
+		return
+	}
+	ch.ServeFingerprintJS(w, r)
+}
+
 // ReloadRateLimit swaps in a new rate-limit backend without dropping in-flight
 // requests. The old backend is stopped after the swap. Pass nil to disable
 // rate limiting (the Allow call becomes a no-op for nil Backend).
@@ -161,6 +175,17 @@ func (h *Handler) Handle(c echo.Context) error {
 		ja4Fp = ja4pkg.Get(r.RemoteAddr)
 	}
 
+	// challengerMu guards live hot-reloads from the Settings page. Fetched
+	// before meta so the FingerprintJS visitor ID (bound into the bypass
+	// cookie at challenge-solve time) can be logged on every request.
+	h.challengerMu.RLock()
+	ch := h.challenger
+	h.challengerMu.RUnlock()
+	visitorID := ""
+	if ch != nil {
+		visitorID = ch.VisitorID(r)
+	}
+
 	meta := reqMeta{
 		RequestID:  reqID,
 		Proto:      r.Proto,
@@ -172,15 +197,11 @@ func (h *Handler) Handle(c echo.Context) error {
 		Query:      r.URL.RawQuery,
 		JA3Hash:    ja3Hash,
 		JA4:        ja4Fp,
+		VisitorID:  visitorID,
 		BotScore:   botAnalysis.Score,
 	}
 
 	// Bot protection: challenge clients based on global setting + per-service override.
-	// challengerMu guards live hot-reloads from the Settings page.
-	h.challengerMu.RLock()
-	ch := h.challenger
-	h.challengerMu.RUnlock()
-
 	if ch != nil && !botAnalysis.IsTrustedCrawler {
 		svcMode := "inherit"
 		if app != nil && app.BotMode != "" {
@@ -336,6 +357,7 @@ type reqMeta struct {
 	Query      string
 	JA3Hash    string
 	JA4        string
+	VisitorID  string
 	BotScore   int
 }
 
@@ -366,6 +388,7 @@ func (h *Handler) logRequest(r *http.Request, appName, clientIP, country string,
 		Org:         m.Org,
 		JA3Hash:     m.JA3Hash,
 		JA4:         m.JA4,
+		VisitorID:   m.VisitorID,
 		BotScore:    m.BotScore,
 	})
 }
@@ -397,6 +420,7 @@ func (h *Handler) logBlocked(r *http.Request, appName, clientIP, country string,
 		Org:         m.Org,
 		JA3Hash:     m.JA3Hash,
 		JA4:         m.JA4,
+		VisitorID:   m.VisitorID,
 		BotScore:    m.BotScore,
 	})
 }
@@ -431,6 +455,7 @@ func (h *Handler) logChallenged(r *http.Request, appName, clientIP string, statu
 		Org:         m.Org,
 		JA3Hash:     m.JA3Hash,
 		JA4:         m.JA4,
+		VisitorID:   m.VisitorID,
 		BotScore:    m.BotScore,
 	})
 }

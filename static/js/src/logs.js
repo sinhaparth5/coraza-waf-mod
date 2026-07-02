@@ -494,11 +494,12 @@
 
     var botSection = document.getElementById('ld-bot-section');
     if (botSection) {
-      if (d.bot_score || d.ja3_hash || d.ja4) {
+      if (d.bot_score || d.ja3_hash || d.ja4 || d.visitor_id) {
         botSection.classList.remove('hidden');
         setText('ld-bot-score', d.bot_score != null ? String(d.bot_score) : '0');
         setText('ld-ja4', d.ja4 || '—');
         setText('ld-ja3', d.ja3_hash || '—');
+        setText('ld-visitor', d.visitor_id || '—');
       } else {
         botSection.classList.add('hidden');
       }

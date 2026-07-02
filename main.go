@@ -258,6 +258,10 @@ func main() {
 		h.ServeChallengeVerify(c.Response().Writer, c.Request())
 		return nil
 	})
+	e.GET("/_cz/fp.js", func(c echo.Context) error {
+		h.ServeFingerprintJS(c.Response().Writer, c.Request())
+		return nil
+	})
 
 	e.Any("/*", h.Handle)
 

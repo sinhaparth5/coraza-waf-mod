@@ -16,6 +16,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -24,9 +25,31 @@ import (
 //go:embed page.html
 var pageHTML string
 
+// fpJS is the vendored FingerprintJS v5 IIFE bundle (MIT — see
+// THIRD_PARTY_NOTICES.md), served at /_cz/fp.js and loaded by the challenge
+// page to compute a browser visitor ID alongside the PoW. Vendored rather
+// than loaded from openfpcdn.io because ad blockers and Brave/Firefox block
+// the public CDN, which would silently disable visitor tracking.
+//
+//go:embed fp.min.js
+var fpJS []byte
+
 var pageTmpl = template.Must(template.New("challenge").Parse(pageHTML))
 
 const cookieName = "cz_bot_ok"
+
+// visitorIDPattern matches FingerprintJS visitor IDs (32-char hex today;
+// allow a little slack but nothing that could break the cookie format).
+var visitorIDPattern = regexp.MustCompile(`^[0-9a-zA-Z]{8,64}$`)
+
+// sanitizeVisitorID returns id if it looks like a FingerprintJS visitor ID,
+// "" otherwise — never trust a client-supplied string into a cookie verbatim.
+func sanitizeVisitorID(id string) string {
+	if visitorIDPattern.MatchString(id) {
+		return id
+	}
+	return ""
+}
 
 // Challenger generates, verifies, and cookie-guards JS PoW challenges.
 type Challenger struct {
@@ -53,7 +76,29 @@ func (c *Challenger) PassedChallenge(r *http.Request) bool {
 	if err != nil {
 		return false
 	}
-	return c.verifyCookie(ck.Value)
+	_, ok := c.parseCookie(ck.Value)
+	return ok
+}
+
+// VisitorID returns the FingerprintJS visitor ID bound into the request's
+// bypass cookie, or "" when there is no valid cookie or the challenge was
+// solved without a fingerprint. The value is covered by the cookie HMAC, so
+// a client can't swap in someone else's ID without invalidating the cookie.
+func (c *Challenger) VisitorID(r *http.Request) string {
+	ck, err := r.Cookie(cookieName)
+	if err != nil {
+		return ""
+	}
+	vid, _ := c.parseCookie(ck.Value)
+	return vid
+}
+
+// ServeFingerprintJS serves the vendored FingerprintJS bundle. Handles
+// GET /_cz/fp.js. Cacheable: the bundle only changes with a binary upgrade.
+func (c *Challenger) ServeFingerprintJS(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Write(fpJS) //nolint:errcheck
 }
 
 // ChallengeURL builds the redirect destination for the challenge page.
@@ -109,6 +154,10 @@ type verifyRequest struct {
 	Exp      int64  `json:"exp"`
 	Sig      string `json:"sig"`
 	Solution uint64 `json:"solution"`
+	// VisitorID is the FingerprintJS browser fingerprint, "" when the
+	// library failed/was blocked. Optional: the PoW alone passes the
+	// challenge; the fingerprint only enriches logging.
+	VisitorID string `json:"visitor_id"`
 }
 
 // ServeVerify handles POST /_cz/verify: authenticates the token, checks the
@@ -131,7 +180,7 @@ func (c *Challenger) ServeVerify(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "incorrect solution", http.StatusForbidden)
 		return
 	}
-	c.issueCookie(w)
+	c.issueCookie(w, sanitizeVisitorID(req.VisitorID))
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -143,11 +192,11 @@ func verifyPoW(nonce string, solution uint64) bool {
 	return h[0] == 0x00
 }
 
-func (c *Challenger) issueCookie(w http.ResponseWriter) {
+func (c *Challenger) issueCookie(w http.ResponseWriter, visitorID string) {
 	expiry := time.Now().Unix() + int64(c.ttl)
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
-		Value:    c.buildCookieValue(expiry),
+		Value:    c.buildCookieValue(expiry, visitorID),
 		Path:     "/",
 		Expires:  time.Unix(expiry, 0),
 		HttpOnly: true,
@@ -155,25 +204,43 @@ func (c *Challenger) issueCookie(w http.ResponseWriter) {
 	})
 }
 
-func (c *Challenger) buildCookieValue(expiry int64) string {
+// buildCookieValue produces "expiry.visitorID.sig" with the visitor ID inside
+// the HMAC input, so the fingerprint travels with every request tamper-evident
+// and without any server-side session state. visitorID may be "".
+func (c *Challenger) buildCookieValue(expiry int64, visitorID string) string {
 	mac := hmac.New(sha256.New, []byte(c.secret))
-	fmt.Fprintf(mac, "cz-pass:%d", expiry)
-	return fmt.Sprintf("%d.%s", expiry, hex.EncodeToString(mac.Sum(nil)[:16]))
+	fmt.Fprintf(mac, "cz-pass:%d:%s", expiry, visitorID)
+	return fmt.Sprintf("%d.%s.%s", expiry, visitorID, hex.EncodeToString(mac.Sum(nil)[:16]))
 }
 
-func (c *Challenger) verifyCookie(value string) bool {
-	parts := strings.SplitN(value, ".", 2)
-	if len(parts) != 2 {
-		return false
+// parseCookie validates a bypass cookie and returns the visitor ID bound into
+// it. Accepts the current "expiry.visitorID.sig" format and the legacy
+// pre-fingerprint "expiry.sig" format (no visitor ID), so cookies issued
+// before an upgrade stay valid until they expire.
+func (c *Challenger) parseCookie(value string) (visitorID string, ok bool) {
+	parts := strings.Split(value, ".")
+	if len(parts) != 2 && len(parts) != 3 {
+		return "", false
 	}
 	expiry, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil || time.Now().Unix() > expiry {
-		return false
+		return "", false
 	}
+
 	mac := hmac.New(sha256.New, []byte(c.secret))
-	fmt.Fprintf(mac, "cz-pass:%d", expiry)
+	sig := parts[1]
+	if len(parts) == 3 {
+		visitorID = parts[1]
+		sig = parts[2]
+		fmt.Fprintf(mac, "cz-pass:%d:%s", expiry, visitorID)
+	} else {
+		fmt.Fprintf(mac, "cz-pass:%d", expiry)
+	}
 	expected := hex.EncodeToString(mac.Sum(nil)[:16])
-	return hmac.Equal([]byte(expected), []byte(parts[1]))
+	if !hmac.Equal([]byte(expected), []byte(sig)) {
+		return "", false
+	}
+	return visitorID, true
 }
 
 func (c *Challenger) signNonce(nonce string, expiry int64) string {

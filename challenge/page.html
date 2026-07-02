@@ -58,9 +58,22 @@
   <p id="msg">Please wait a moment.</p>
   <p class="brand">Protected by Coraza WAF</p>
 </div>
+<script src="/_cz/fp.js"></script>
 <script>
 (function () {
   var cfg = {{.ConfigJSON}};
+
+  // Browser fingerprint (FingerprintJS) — computed while the PoW runs.
+  // Never blocks verification: any failure or a 3s timeout yields ''.
+  function getVisitorId() {
+    if (typeof FingerprintJS === 'undefined') return Promise.resolve('');
+    var timeout = new Promise(function (resolve) { setTimeout(function () { resolve(''); }, 3000); });
+    var fingerprint = FingerprintJS.load()
+      .then(function (fp) { return fp.get(); })
+      .then(function (result) { return result.visitorId || ''; })
+      .catch(function () { return ''; });
+    return Promise.race([fingerprint, timeout]);
+  }
 
   async function solve(nonce) {
     var sol = 0;
@@ -74,12 +87,12 @@
     }
   }
 
-  solve(cfg.nonce)
-    .then(function (solution) {
+  Promise.all([solve(cfg.nonce), getVisitorId()])
+    .then(function (results) {
       return fetch('/_cz/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nonce: cfg.nonce, exp: cfg.exp, sig: cfg.sig, solution: solution })
+        body: JSON.stringify({ nonce: cfg.nonce, exp: cfg.exp, sig: cfg.sig, solution: results[0], visitor_id: results[1] })
       });
     })
     .then(function (resp) {

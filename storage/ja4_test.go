@@ -16,6 +16,7 @@ func TestJA4RoundTrip(t *testing.T) {
 	defer db.Close()
 
 	const ja4 = "t13d1516h2_8daaf6152771_02713d6af862"
+	const visitorID = "a1b2c3d4e5f60718293a4b5c6d7e8f90"
 	id, err := db.InsertRequest(RequestLog{
 		Timestamp: time.Now().UTC(),
 		AppName:   "app",
@@ -26,6 +27,7 @@ func TestJA4RoundTrip(t *testing.T) {
 		Status:    200,
 		JA3Hash:   "0123456789abcdef0123456789abcdef",
 		JA4:       ja4,
+		VisitorID: visitorID,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -40,6 +42,9 @@ func TestJA4RoundTrip(t *testing.T) {
 	}
 	if d.JA3Hash == "" {
 		t.Error("GetRequestByID lost the legacy JA3 hash")
+	}
+	if d.VisitorID != visitorID {
+		t.Errorf("GetRequestByID VisitorID = %q, want %q", d.VisitorID, visitorID)
 	}
 
 	found := false
