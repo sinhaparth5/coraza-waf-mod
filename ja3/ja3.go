@@ -1,6 +1,13 @@
 // Package ja3 computes JA3 TLS fingerprints from tls.ClientHelloInfo and
 // stores them in a per-connection sync.Map so the HTTP handler can retrieve
 // them after the handshake is complete.
+//
+// Deprecated: JA3 is superseded by the ja4 package. Its MD5 hash is trivially
+// evaded by clients that shuffle cipher/extension order per connection, which
+// JA4 defeats by sorting before hashing. JA3 is still computed and logged
+// (ja3_hash column, "legacy" in the UI) only for continuity with existing log
+// data and external JA3-keyed threat feeds — do not build new detection logic
+// on it. Remove this package once historical JA3 data is no longer needed.
 package ja3
 
 import (
