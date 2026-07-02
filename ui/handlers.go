@@ -2,11 +2,13 @@ package ui
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"embed"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"io/fs"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -97,6 +99,8 @@ type Handler struct {
 	reloadRateLimit func()
 	reloadWAF       func()
 	syncThreatIntel func(id int64)
+	loginLimiter    *loginLimiter
+	trustedNets     []*net.IPNet
 }
 
 type dashboardCountry struct {
@@ -133,7 +137,7 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 	if err != nil {
 		return nil, fmt.Errorf("sub static/imgs: %w", err)
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, loginLimiter: newLoginLimiter(), trustedNets: parseTrustedNets(cfg.TrustedProxies)}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -204,13 +208,13 @@ func (h *Handler) Register(e *echo.Echo) {
 	// Public routes — no session required.
 	e.GET(base+"/login", h.LoginPage)
 	e.POST(base+"/login", h.LoginPost)
-	e.POST(base+"/logout", h.Logout)
 	// Static assets are public so the login page can load spirals/JS before auth.
 	e.StaticFS(base+"/static/js", h.staticJS)
 	e.StaticFS(base+"/static/imgs", h.staticImgs)
 
 	g := e.Group(base)
-	g.Use(h.sessionAuth)
+	g.Use(h.sessionAuth, h.csrfProtect)
+	g.POST("/logout", h.Logout)
 
 	g.GET("/metrics", echo.WrapHandler(metrics.Handler()))
 
@@ -258,7 +262,9 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/threat-intel/:id/sync", h.SyncThreatIntelSource)
 	g.GET("/settings", h.SettingsPage)
 	g.POST("/settings/credentials", h.ChangeCredentials)
-	g.GET("/settings/backup", h.BackupDB)
+	// POST, not GET: this streams the full DB (admin hash, challenge secret),
+	// so it must never be reachable via cross-site top-level navigation.
+	g.POST("/settings/backup", h.BackupDB)
 }
 
 // ── Login / logout ────────────────────────────────────────────────────────────
@@ -274,21 +280,37 @@ func (h *Handler) LoginPage(c echo.Context) error {
 }
 
 func (h *Handler) LoginPost(c echo.Context) error {
+	ip := h.clientIP(c.Request())
+	if wait, locked := h.loginLimiter.blocked(ip); locked {
+		log.Printf("admin login: rejected attempt from %s (locked out for %s)", ip, wait.Round(time.Second))
+		return h.renderLoginStatus(c, http.StatusTooManyRequests,
+			"Too many failed attempts. Try again later.")
+	}
+
 	email := strings.TrimSpace(c.FormValue("email"))
 	password := c.FormValue("password")
 
 	adminEmail, _ := h.db.GetAdminEmail()
-	ok, _ := h.db.CheckAdminPassword(password)
-	// Constant-time comparison: always check both email and password
-	// (same error message for both) so an attacker can't enumerate emails.
-	if email != adminEmail || !ok {
+	// Always evaluate both checks with the same error message so response
+	// timing and content can't be used to enumerate the admin email.
+	passOK, _ := h.db.CheckAdminPassword(password)
+	emailOK := subtle.ConstantTimeCompare([]byte(email), []byte(adminEmail)) == 1
+	if !emailOK || !passOK {
+		if h.loginLimiter.fail(ip) {
+			log.Printf("admin login: %s locked out after %d failed attempts", ip, maxLoginFailures)
+			return h.renderLoginStatus(c, http.StatusTooManyRequests,
+				"Too many failed attempts. Try again later.")
+		}
+		log.Printf("admin login: failed attempt from %s", ip)
 		return h.renderLogin(c, "Invalid email or password.")
 	}
+	h.loginLimiter.success(ip)
 
 	token, err := h.db.CreateSession()
 	if err != nil {
 		return h.renderLogin(c, "Internal error — please try again.")
 	}
+	log.Printf("admin login: successful login from %s", ip)
 
 	c.SetCookie(&http.Cookie{
 		Name:     sessionCookie,
@@ -297,6 +319,7 @@ func (h *Handler) LoginPost(c echo.Context) error {
 		Path:     "/",
 		MaxAge:   int((24 * time.Hour).Seconds()),
 		SameSite: http.SameSiteLaxMode,
+		Secure:   secureCookie(c),
 	})
 	return c.Redirect(http.StatusFound, h.cfg.Admin.Path)
 }
@@ -311,12 +334,18 @@ func (h *Handler) Logout(c echo.Context) error {
 		HttpOnly: true,
 		Path:     "/",
 		MaxAge:   -1,
+		Secure:   secureCookie(c),
 	})
 	return c.Redirect(http.StatusFound, h.cfg.Admin.Path+"/login")
 }
 
 func (h *Handler) renderLogin(c echo.Context, errMsg string) error {
+	return h.renderLoginStatus(c, http.StatusOK, errMsg)
+}
+
+func (h *Handler) renderLoginStatus(c echo.Context, status int, errMsg string) error {
 	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
+	c.Response().WriteHeader(status)
 	return h.tmpls["login"].ExecuteTemplate(c.Response(), "login", map[string]any{
 		"Error":     errMsg,
 		"AdminPath": h.cfg.Admin.Path,
@@ -1753,7 +1782,7 @@ func (h *Handler) ChangeCredentials(c echo.Context) error {
 	if cookie, err := c.Cookie(sessionCookie); err == nil {
 		h.db.DeleteSession(cookie.Value) //nolint
 	}
-	c.SetCookie(&http.Cookie{Name: sessionCookie, Value: "", HttpOnly: true, Path: "/", MaxAge: -1})
+	c.SetCookie(&http.Cookie{Name: sessionCookie, Value: "", HttpOnly: true, Path: "/", MaxAge: -1, Secure: secureCookie(c)})
 	return c.Redirect(http.StatusFound, h.cfg.Admin.Path+"/login")
 }
 
@@ -1795,6 +1824,11 @@ func (h *Handler) render(c echo.Context, page string, data map[string]any) error
 	}
 	if _, ok := data["AlertCount"]; !ok {
 		data["AlertCount"] = h.unreadAlertCount()
+	}
+	// CSRF token for this session: picked up by hx-headers on <body> for all
+	// HTMX requests and by hidden _csrf inputs in plain HTML forms.
+	if _, ok := data["CSRF"]; !ok {
+		data["CSRF"] = h.csrfFromContext(c)
 	}
 	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
 	// no-store keeps these pages out of the browser's back/forward cache.

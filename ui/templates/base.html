@@ -45,7 +45,7 @@
     .focus-green:focus { border-color: #76C893 !important; }
   </style>
 </head>
-<body class="min-h-screen bg-canvas text-slate-800 font-sans text-[14px]" data-admin-path="{{.AdminPath}}">
+<body class="min-h-screen bg-canvas text-slate-800 font-sans text-[14px]" data-admin-path="{{.AdminPath}}" data-csrf="{{.CSRF}}" hx-headers='{"X-CSRF-Token":"{{.CSRF}}"}'>
 
 <!-- ── Sidebar Navigation ─────────────────────────────────── -->
 <aside class="fixed left-4 top-4 bottom-4 w-[264px] bg-white rounded-2xl border border-line flex flex-col z-50">
@@ -85,7 +85,7 @@
       Certificates
     </a>
     <a href="/admin/waf-rules" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "waf_rules"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
-      <i class="hgi hgi-stroke hgi-rounded hgi-shield-ban text-base"></i>
+      <i class="hgi hgi-stroke hgi-rounded hgi-security-block text-base"></i>
       WAF Rules
     </a>
     <a href="/admin/threat-intel" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "threat_intel"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
@@ -106,6 +106,7 @@
       <div class="flex items-center gap-1 shrink-0">
       <!-- Logout -->
       <form action="{{.AdminPath}}/logout" method="POST" class="contents">
+        <input type="hidden" name="_csrf" value="{{.CSRF}}">
         <button type="submit" title="Sign out"
                 class="w-8 h-8 rounded-full bg-surface border border-line flex items-center justify-center text-slate-500 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors cursor-pointer">
           <i class="hgi hgi-stroke hgi-rounded hgi-logout-02 text-[14px]"></i>

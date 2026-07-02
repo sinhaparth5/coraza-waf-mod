@@ -6,7 +6,7 @@
     <div class="card p-6">
       <div class="flex items-center gap-[10px] mb-6">
         <div class="w-8 h-8 rounded-full bg-brand-tint flex items-center justify-center">
-          <i class="hgi hgi-stroke hgi-rounded hgi-shield-ban text-[14px] text-brand-dark"></i>
+          <i class="hgi hgi-stroke hgi-rounded hgi-security-block text-[14px] text-brand-dark"></i>
         </div>
         <h2 class="text-[17px] font-bold text-slate-900">Disable Rule</h2>
       </div>
@@ -28,7 +28,7 @@
         </div>
 
         <button type="submit" class="btn-primary w-full flex items-center justify-center gap-2">
-          <i class="hgi hgi-stroke hgi-rounded hgi-shield-ban text-sm"></i>
+          <i class="hgi hgi-stroke hgi-rounded hgi-security-block text-sm"></i>
           Disable Rule
         </button>
       </form>
@@ -109,7 +109,7 @@
       {{range .Disabled}}
       <div class="flex items-center gap-3 p-3 rounded-2xl hover:bg-surface transition-colors duration-150">
         <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-amber-50">
-          <i class="hgi hgi-stroke hgi-rounded hgi-shield-ban text-base text-amber-500"></i>
+          <i class="hgi hgi-stroke hgi-rounded hgi-security-block text-base text-amber-500"></i>
         </div>
         <div class="flex-1 min-w-0">
           <div class="font-mono text-[14px] font-semibold text-slate-900">Rule {{.RuleID}}</div>
