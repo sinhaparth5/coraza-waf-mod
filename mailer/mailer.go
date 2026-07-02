@@ -19,6 +19,26 @@ import (
 	"coraza-waf-mod/storage"
 )
 
+// Cloudflare Email Service is the only supported provider: the submission
+// endpoint, the literal "api_token" username, and the sender address are
+// fixed. Only the API token (the SMTP password) and the recipients come from
+// the DB config.
+const (
+	smtpHost     = "smtp.mx.cloudflare.net"
+	smtpPort     = 465 // implicit TLS only — Cloudflare does not offer STARTTLS
+	smtpUsername = "api_token"
+	// Sender is the fixed From address; its domain must stay onboarded for
+	// Email Sending on the Cloudflare account that owns the API token.
+	Sender = "alert@astrareconslabs.com"
+	// SenderName is the display name mail clients show instead of the bare
+	// address ("Coraza WAF Mod" in the Gmail sender column, not alert@…).
+	SenderName = "Coraza WAF Mod"
+)
+
+// fromHeader is the RFC 5322 From value; the envelope MAIL FROM stays the
+// bare Sender address.
+func fromHeader() string { return SenderName + " <" + Sender + ">" }
+
 // sendTimeout bounds the whole SMTP session (dial, auth, data, quit) so a
 // stalled server can never wedge the reporter goroutine or a UI test request.
 const sendTimeout = 45 * time.Second
@@ -26,24 +46,24 @@ const sendTimeout = 45 * time.Second
 // Send delivers one multipart (plain + HTML) message using cfg. Recipients
 // are the comma-separated cfg.To list.
 func Send(cfg storage.EmailConfig, subject, textBody, htmlBody string) error {
-	if cfg.From == "" || cfg.To == "" || cfg.Token == "" {
-		return fmt.Errorf("email is not fully configured (sender, recipient and API token are required)")
+	if cfg.To == "" || cfg.Token == "" {
+		return fmt.Errorf("email is not fully configured (recipient and API token are required)")
 	}
 	recipients := splitAddrs(cfg.To)
 	if len(recipients) == 0 {
 		return fmt.Errorf("no valid recipient address in %q", cfg.To)
 	}
 
-	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
+	addr := net.JoinHostPort(smtpHost, strconv.Itoa(smtpPort))
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
-	// Implicit TLS from the first byte — Cloudflare does not offer STARTTLS.
-	conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{ServerName: cfg.Host})
+	// Implicit TLS from the first byte.
+	conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{ServerName: smtpHost})
 	if err != nil {
 		return fmt.Errorf("smtp dial %s: %w", addr, err)
 	}
 	_ = conn.SetDeadline(time.Now().Add(sendTimeout))
 
-	c, err := smtp.NewClient(conn, cfg.Host)
+	c, err := smtp.NewClient(conn, smtpHost)
 	if err != nil {
 		conn.Close()
 		return fmt.Errorf("smtp greeting: %w", err)
@@ -52,10 +72,10 @@ func Send(cfg storage.EmailConfig, subject, textBody, htmlBody string) error {
 
 	// PlainAuth is safe here: net/smtp marks the session as TLS because the
 	// underlying conn is a *tls.Conn, so it allows AUTH PLAIN.
-	if err := c.Auth(smtp.PlainAuth("", cfg.Username, cfg.Token, cfg.Host)); err != nil {
+	if err := c.Auth(smtp.PlainAuth("", smtpUsername, cfg.Token, smtpHost)); err != nil {
 		return fmt.Errorf("smtp auth: %w", err)
 	}
-	if err := c.Mail(cfg.From); err != nil {
+	if err := c.Mail(Sender); err != nil {
 		return fmt.Errorf("smtp MAIL FROM: %w", err)
 	}
 	for _, rcpt := range recipients {
@@ -67,7 +87,7 @@ func Send(cfg storage.EmailConfig, subject, textBody, htmlBody string) error {
 	if err != nil {
 		return fmt.Errorf("smtp DATA: %w", err)
 	}
-	if _, err := w.Write(buildMessage(cfg.From, recipients, subject, textBody, htmlBody)); err != nil {
+	if _, err := w.Write(buildMessage(fromHeader(), recipients, subject, textBody, htmlBody)); err != nil {
 		return fmt.Errorf("smtp write body: %w", err)
 	}
 	if err := w.Close(); err != nil {

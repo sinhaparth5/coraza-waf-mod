@@ -20,6 +20,7 @@ import (
 	"coraza-waf-mod/challenge"
 	"coraza-waf-mod/config"
 	"coraza-waf-mod/geo"
+	"coraza-waf-mod/mailer"
 	"coraza-waf-mod/metrics"
 	"coraza-waf-mod/ratelimit"
 	"coraza-waf-mod/services"
@@ -1570,10 +1571,7 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 		"WebhookEnabled": wh.Enabled,
 		"WebhookEvents":  wh.Events,
 		"EmailEnabled":   ec.Enabled,
-		"EmailHost":      ec.Host,
-		"EmailPort":      ec.Port,
-		"EmailUsername":  ec.Username,
-		"EmailFrom":      ec.From,
+		"EmailSender":    mailer.Sender,
 		"EmailTo":        ec.To,
 		"EmailTokenSet":  ec.Token != "",
 	})
@@ -1703,37 +1701,25 @@ func (h *Handler) SaveWebhookConfig(c echo.Context) error {
 	})
 }
 
-// SaveEmailSettings persists the daily-report SMTP settings. A blank token
-// field keeps the stored token, so re-saving other fields never wipes the
-// credential (and the token is never echoed back into the page).
+// SaveEmailSettings persists the daily-report email settings (recipients and
+// Cloudflare API token — everything else is hardcoded in the mailer package).
+// A blank token field keeps the stored token, so re-saving other fields never
+// wipes the credential, and the token is never echoed back into the page.
 func (h *Handler) SaveEmailSettings(c echo.Context) error {
 	stored, _ := h.db.GetEmailConfig()
 
 	cfg := storage.EmailConfig{
-		Enabled:  c.FormValue("email_enabled") == "1",
-		Host:     strings.TrimSpace(c.FormValue("email_host")),
-		Username: strings.TrimSpace(c.FormValue("email_username")),
-		Token:    strings.TrimSpace(c.FormValue("email_token")),
-		From:     strings.TrimSpace(c.FormValue("email_from")),
-		To:       strings.TrimSpace(c.FormValue("email_to")),
+		Enabled: c.FormValue("email_enabled") == "1",
+		Token:   strings.TrimSpace(c.FormValue("email_token")),
+		To:      strings.TrimSpace(c.FormValue("email_to")),
 	}
-	cfg.Port, _ = strconv.Atoi(c.FormValue("email_port"))
 	if cfg.Token == "" {
 		cfg.Token = stored.Token
 	}
-	if cfg.Host == "" {
-		cfg.Host = storage.DefaultEmailHost
-	}
-	if cfg.Port <= 0 {
-		cfg.Port = storage.DefaultEmailPort
-	}
-	if cfg.Username == "" {
-		cfg.Username = storage.DefaultEmailUsername
-	}
 
 	saveErr := ""
-	if cfg.Enabled && (cfg.From == "" || cfg.To == "" || cfg.Token == "") {
-		saveErr = "Sender, recipient and API token are required to enable email alerts."
+	if cfg.Enabled && (cfg.To == "" || cfg.Token == "") {
+		saveErr = "A recipient address and the API token are required to enable email alerts."
 		cfg.Enabled = false
 	}
 	if saveErr == "" {
@@ -1745,10 +1731,7 @@ func (h *Handler) SaveEmailSettings(c echo.Context) error {
 	return h.renderPartial(c, "settings", "email-card", map[string]any{
 		"AdminPath":     h.cfg.Admin.Path,
 		"EmailEnabled":  cfg.Enabled,
-		"EmailHost":     cfg.Host,
-		"EmailPort":     cfg.Port,
-		"EmailUsername": cfg.Username,
-		"EmailFrom":     cfg.From,
+		"EmailSender":   mailer.Sender,
 		"EmailTo":       cfg.To,
 		"EmailTokenSet": cfg.Token != "",
 		"EmailSaveOK":   saveErr == "",

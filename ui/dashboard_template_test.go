@@ -71,10 +71,7 @@ func TestBaseTemplateCarriesCSRF(t *testing.T) {
 		"WebhookEnabled": false,
 		"WebhookEvents":  "",
 		"EmailEnabled":   false,
-		"EmailHost":      storage.DefaultEmailHost,
-		"EmailPort":      storage.DefaultEmailPort,
-		"EmailUsername":  storage.DefaultEmailUsername,
-		"EmailFrom":      "",
+		"EmailSender":    "alert@example.com",
 		"EmailTo":        "",
 		"EmailTokenSet":  false,
 	}

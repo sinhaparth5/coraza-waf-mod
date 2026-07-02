@@ -27,11 +27,7 @@ func (f *fakeStore) GetEmailReportSentFor() (string, error) { return f.sentFor, 
 func (f *fakeStore) SetEmailReportSentFor(day string) error { f.sentFor = day; return nil }
 
 func enabledConfig() storage.EmailConfig {
-	return storage.EmailConfig{
-		Enabled: true, Host: "smtp.example.com", Port: 465,
-		Username: "api_token", Token: "secret",
-		From: "alert@example.com", To: "ops@example.com",
-	}
+	return storage.EmailConfig{Enabled: true, Token: "secret", To: "ops@example.com"}
 }
 
 // testReporter returns a Reporter with a captured send func and a fixed clock,
@@ -81,7 +77,6 @@ func TestMaybeSendDailySkipsWhenDisabledOrIncomplete(t *testing.T) {
 		"disabled": func(c *storage.EmailConfig) { c.Enabled = false },
 		"no token": func(c *storage.EmailConfig) { c.Token = "" },
 		"no to":    func(c *storage.EmailConfig) { c.To = "" },
-		"no from":  func(c *storage.EmailConfig) { c.From = "" },
 	} {
 		cfg := enabledConfig()
 		mutate(&cfg)
@@ -159,6 +154,14 @@ func TestUntilNextMidnight(t *testing.T) {
 	got := untilNextMidnight(now)
 	if got != time.Hour+time.Minute {
 		t.Errorf("untilNextMidnight = %v, want 1h1m (1h to midnight + 1m pad)", got)
+	}
+}
+
+func TestFromHeaderCarriesDisplayName(t *testing.T) {
+	msg := string(buildMessage(fromHeader(), []string{"b@y.com"}, "Subj", "text", "<p>html</p>"))
+	want := "From: Coraza WAF Mod <alert@astrareconslabs.com>\r\n"
+	if !strings.Contains(msg, want) {
+		t.Errorf("message missing %q — Gmail would show the bare address", want)
 	}
 }
 

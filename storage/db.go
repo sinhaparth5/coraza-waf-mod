@@ -1807,59 +1807,29 @@ func (db *DB) SetWebhookConfig(cfg WebhookConfig) error {
 
 // ── Email alerts ──────────────────────────────────────────────────────────────
 
-// Default SMTP settings match Cloudflare Email Service's submission endpoint
-// (implicit TLS only; the username is the literal string "api_token" and the
-// password is a Cloudflare API token with Email Sending: Edit permission).
-const (
-	DefaultEmailHost     = "smtp.mx.cloudflare.net"
-	DefaultEmailPort     = 465
-	DefaultEmailUsername = "api_token"
-)
-
-// EmailConfig holds the SMTP settings for the daily report email. Stored in
-// the meta table and managed from the admin UI — the API token never lives in
-// config.yaml or the binary.
+// EmailConfig holds the daily-report email settings. Delivery is
+// Cloudflare-only — host, port, username and sender address are hardcoded in
+// the mailer package; only the recipient list and the API token are
+// configurable. Stored in the meta table and managed from the admin UI — the
+// token never lives in config.yaml or the binary.
 type EmailConfig struct {
-	Enabled  bool
-	Host     string
-	Port     int
-	Username string
-	Token    string // SMTP password (Cloudflare API token)
-	From     string
-	To       string // comma-separated recipient list
+	Enabled bool
+	Token   string // Cloudflare API token with Email Sending: Edit (SMTP password)
+	To      string // comma-separated recipient list
 }
 
 func (db *DB) GetEmailConfig() (EmailConfig, error) {
 	var cfg EmailConfig
-	for key, dst := range map[string]*string{
-		"email_host":     &cfg.Host,
-		"email_username": &cfg.Username,
-		"email_token":    &cfg.Token,
-		"email_from":     &cfg.From,
-		"email_to":       &cfg.To,
-	} {
-		v, err := db.getMeta(key)
-		if err != nil {
-			return EmailConfig{}, err
-		}
-		*dst = v
-	}
 	enabled, err := db.getMeta("email_enabled")
 	if err != nil {
 		return EmailConfig{}, err
 	}
 	cfg.Enabled = enabled == "1"
-	if port, err := db.getMeta("email_port"); err == nil && port != "" {
-		cfg.Port, _ = strconv.Atoi(port)
+	if cfg.Token, err = db.getMeta("email_token"); err != nil {
+		return EmailConfig{}, err
 	}
-	if cfg.Host == "" {
-		cfg.Host = DefaultEmailHost
-	}
-	if cfg.Port <= 0 {
-		cfg.Port = DefaultEmailPort
-	}
-	if cfg.Username == "" {
-		cfg.Username = DefaultEmailUsername
+	if cfg.To, err = db.getMeta("email_to"); err != nil {
+		return EmailConfig{}, err
 	}
 	return cfg, nil
 }
@@ -1870,13 +1840,9 @@ func (db *DB) SetEmailConfig(cfg EmailConfig) error {
 		enabled = "1"
 	}
 	for key, val := range map[string]string{
-		"email_enabled":  enabled,
-		"email_host":     cfg.Host,
-		"email_port":     strconv.Itoa(cfg.Port),
-		"email_username": cfg.Username,
-		"email_token":    cfg.Token,
-		"email_from":     cfg.From,
-		"email_to":       cfg.To,
+		"email_enabled": enabled,
+		"email_token":   cfg.Token,
+		"email_to":      cfg.To,
 	} {
 		if err := db.setMeta(key, val); err != nil {
 			return err

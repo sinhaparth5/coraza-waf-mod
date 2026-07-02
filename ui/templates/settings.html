@@ -194,7 +194,7 @@
 {{define "email-card"}}
 <div class="card p-6" id="email-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">Email Alerts</h2>
-  <p class="text-[13px] text-slate-500 mb-5">Every night just after midnight, a summary of the previous day — blocked requests, 403 responses, and a per-stage breakdown — is emailed to the recipients below. Works with any SMTPS (implicit TLS) provider; defaults are set for Cloudflare Email Service.</p>
+  <p class="text-[13px] text-slate-500 mb-5">Every night just after midnight, a summary of the previous day — blocked requests, 403 responses, and a per-stage breakdown — is emailed to the recipients below via Cloudflare Email Service.</p>
 
   {{if .EmailSaveOK}}
   <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Email settings saved — the next report goes out after midnight.</div>
@@ -217,44 +217,24 @@
       </label>
     </div>
 
-    <div class="flex gap-4">
-      <div class="flex-1">
-        <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="email_from">Sender address</label>
-        <input id="email_from" name="email_from" type="email" value="{{.EmailFrom}}" placeholder="alert@yourdomain.com"
-               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition font-mono"/>
-        <p class="text-[11px] text-slate-400 mt-1">Must be on a domain onboarded for sending with your provider.</p>
-      </div>
-      <div class="flex-1">
-        <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="email_to">Recipients</label>
-        <input id="email_to" name="email_to" type="text" value="{{.EmailTo}}" placeholder="you@example.com, ops@example.com"
-               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition font-mono"/>
-        <p class="text-[11px] text-slate-400 mt-1">Comma-separated list.</p>
-      </div>
-    </div>
-
-    <div class="flex gap-4">
-      <div class="flex-[2]">
-        <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="email_host">SMTP host</label>
-        <input id="email_host" name="email_host" type="text" value="{{.EmailHost}}" placeholder="smtp.mx.cloudflare.net"
-               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition font-mono"/>
-      </div>
-      <div class="w-[90px]">
-        <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="email_port">Port</label>
-        <input id="email_port" name="email_port" type="number" min="1" max="65535" value="{{.EmailPort}}"
-               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition font-mono"/>
-      </div>
-      <div class="flex-1">
-        <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="email_username">Username</label>
-        <input id="email_username" name="email_username" type="text" value="{{.EmailUsername}}" placeholder="api_token"
-               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition font-mono"/>
-      </div>
+    <div>
+      <label class="block text-[13px] font-semibold text-slate-700 mb-1">Sender</label>
+      <p class="text-[13px] text-slate-500 bg-surface border border-line rounded-lg px-3 py-2 font-mono">{{.EmailSender}}</p>
+      <p class="text-[11px] text-slate-400 mt-1">Fixed — reports are delivered through Cloudflare Email Service.</p>
     </div>
 
     <div>
-      <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="email_token">API token <span class="font-normal text-slate-400">(SMTP password{{if .EmailTokenSet}} — saved, leave blank to keep{{end}})</span></label>
-      <input id="email_token" name="email_token" type="password" placeholder="{{if .EmailTokenSet}}••••••••••••{{else}}Cloudflare API token with Email Sending: Edit{{end}}"
+      <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="email_to">Recipients</label>
+      <input id="email_to" name="email_to" type="text" value="{{.EmailTo}}" placeholder="you@example.com, ops@example.com"
+             class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition font-mono"/>
+      <p class="text-[11px] text-slate-400 mt-1">Comma-separated list.</p>
+    </div>
+
+    <div>
+      <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="email_token">Cloudflare API token{{if .EmailTokenSet}} <span class="font-normal text-slate-400">(saved — leave blank to keep)</span>{{end}}</label>
+      <input id="email_token" name="email_token" type="password" autocomplete="off" placeholder="{{if .EmailTokenSet}}••••••••••••••••{{else}}Token with Email Sending: Edit permission{{end}}"
              class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition"/>
-      <p class="text-[11px] text-slate-400 mt-1">Stored only in <code class="font-mono text-[11px]">waf.db</code> on this server — never in config files or releases.</p>
+      <p class="text-[11px] text-slate-400 mt-1">Stored only in <code class="font-mono text-[11px]">waf.db</code> on this server — never in config files or releases, and never shown here again.</p>
     </div>
 
     <div class="pt-1 flex items-center gap-3">

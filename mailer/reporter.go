@@ -71,7 +71,7 @@ func (r *Reporter) maybeSendDaily() {
 		log.Printf("mailer: read config: %v", err)
 		return
 	}
-	if !cfg.Enabled || cfg.Token == "" || cfg.To == "" || cfg.From == "" {
+	if !cfg.Enabled || cfg.Token == "" || cfg.To == "" {
 		return
 	}
 
@@ -118,8 +118,16 @@ func (r *Reporter) SendNow() error {
 	return r.send(cfg, subject, text, html)
 }
 
+// fontStack mirrors the admin UI's typography (base.html); Plus Jakarta Sans
+// is used when the recipient has it installed, otherwise the system fallback.
+const fontStack = `'Plus Jakarta Sans',-apple-system,'Segoe UI',Arial,sans-serif`
+
 // composeReport renders the plain-text and HTML bodies for one report window.
-// HTML styling is inline (email clients ignore stylesheets).
+// The HTML mirrors the admin dashboard theme (canvas background, white
+// rounded card, zebra-striped table with an uppercase header row) using only
+// inline styles and nested tables — email clients ignore stylesheets, and
+// Gmail strips SVG, so the logo badge is recreated as its three filter bars
+// on the deep-green rounded square from static/imgs/logo.svg.
 func composeReport(day string, rep storage.DailyReport) (subject, text, html string) {
 	subject = fmt.Sprintf("WAF daily report %s — %d blocked, %d × 403, %d requests",
 		day, rep.Blocked, rep.Status403, rep.Total)
@@ -127,16 +135,17 @@ func composeReport(day string, rep storage.DailyReport) (subject, text, html str
 	rows := []struct {
 		label string
 		value int
+		alert bool // render in red when non-zero
 	}{
-		{"Total requests", rep.Total},
-		{"Blocked requests", rep.Blocked},
-		{"403 responses", rep.Status403},
-		{"Unique blocked IPs", rep.UniqueBlockedIPs},
-		{"WAF rule blocks", rep.WAFBlocked},
-		{"IP blocklist blocks", rep.IPBlocked},
-		{"Geo blocks", rep.GeoBlocked},
-		{"Rate limited", rep.RateLimited},
-		{"Bot challenges served", rep.BotChallenged},
+		{"Total requests", rep.Total, false},
+		{"Blocked requests", rep.Blocked, true},
+		{"403 responses", rep.Status403, true},
+		{"Unique blocked IPs", rep.UniqueBlockedIPs, false},
+		{"WAF rule blocks", rep.WAFBlocked, false},
+		{"IP blocklist blocks", rep.IPBlocked, false},
+		{"Geo blocks", rep.GeoBlocked, false},
+		{"Rate limited", rep.RateLimited, false},
+		{"Bot challenges served", rep.BotChallenged, false},
 	}
 
 	var t strings.Builder
@@ -147,23 +156,58 @@ func composeReport(day string, rep storage.DailyReport) (subject, text, html str
 	t.WriteString("\nSent automatically by Coraza WAF Mod.\n")
 
 	var h strings.Builder
-	h.WriteString(`<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:520px;margin:0 auto;color:#1e293b">`)
-	h.WriteString(`<h2 style="font-size:18px;margin:24px 0 4px">Coraza WAF Mod — daily report</h2>`)
-	h.WriteString(`<p style="font-size:13px;color:#64748b;margin:0 0 16px">` + day + `</p>`)
-	h.WriteString(`<table style="width:100%;border-collapse:collapse;font-size:14px">`)
+	// Canvas-colored backdrop, card centered inside.
+	h.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EAEBED"><tr><td align="center" style="padding:32px 12px">`)
+	h.WriteString(`<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#ffffff;border:1px solid #EEF1F3;border-radius:28px">`)
+
+	// Brand header: logo badge (deep-green rounded square + three filter bars) and full name.
+	h.WriteString(`<tr><td style="padding:28px 32px 0">`)
+	h.WriteString(`<table role="presentation" cellpadding="0" cellspacing="0"><tr>`)
+	h.WriteString(`<td width="40" height="40" align="center" style="width:40px;height:40px;background:#1a3d28;border-radius:10px;vertical-align:middle">`)
+	h.WriteString(`<div style="width:22px;height:4px;background:#8edba8;border-radius:3px;margin:0 auto 3px"></div>`)
+	h.WriteString(`<div style="width:17px;height:4px;background:#6cc98a;border-radius:3px;margin:0 auto 3px"></div>`)
+	h.WriteString(`<div style="width:12px;height:4px;background:#4db872;border-radius:3px;margin:0 auto"></div>`)
+	h.WriteString(`</td>`)
+	h.WriteString(`<td style="padding-left:12px;vertical-align:middle">`)
+	h.WriteString(`<p style="margin:0;font:700 16px ` + fontStack + `;color:#0f172a">Coraza WAF Mod</p>`)
+	h.WriteString(`<p style="margin:2px 0 0;font:400 12px ` + fontStack + `;color:#64748b">Daily security report &middot; ` + day + `</p>`)
+	h.WriteString(`</td></tr></table>`)
+	h.WriteString(`</td></tr>`)
+
+	// Metrics table, styled like the dashboard's request table.
+	h.WriteString(`<tr><td style="padding:20px 32px 8px">`)
+	h.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">`)
+	h.WriteString(`<tr>` +
+		`<th align="left" style="padding:0 12px 10px;border-bottom:1px solid #EAEBED;font:600 11px ` + fontStack + `;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Metric</th>` +
+		`<th align="right" style="padding:0 12px 10px;border-bottom:1px solid #EAEBED;font:600 11px ` + fontStack + `;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Count</th>` +
+		`</tr>`)
 	for i, row := range rows {
 		bg := "#ffffff"
-		if i%2 == 0 {
-			bg = "#f4f7f9"
+		if row.alert && row.value > 0 {
+			bg = "#FEF2F2" // red-50, like blocked rows in the live logs table
+		} else if i%2 == 1 {
+			bg = "#F4F7F9" // surface, the dashboard's zebra stripe
+		}
+		valueColor := "#0f172a"
+		if row.alert && row.value > 0 {
+			valueColor = "#DC2626"
 		}
 		fmt.Fprintf(&h,
-			`<tr style="background:%s"><td style="padding:8px 12px;border:1px solid #e2e5ea">%s</td>`+
-				`<td style="padding:8px 12px;border:1px solid #e2e5ea;text-align:right;font-weight:600">%d</td></tr>`,
-			bg, row.label, row.value)
+			`<tr style="background:%s">`+
+				`<td style="padding:10px 12px;border-bottom:1px solid #F4F7F9;font:400 13px %s;color:#334155">%s</td>`+
+				`<td align="right" style="padding:10px 12px;border-bottom:1px solid #F4F7F9;font:600 13px %s;color:%s">%d</td>`+
+				`</tr>`,
+			bg, fontStack, row.label, fontStack, valueColor, row.value)
 	}
 	h.WriteString(`</table>`)
-	h.WriteString(`<p style="font-size:12px;color:#94a3b8;margin-top:16px">Sent automatically by Coraza WAF Mod.</p>`)
-	h.WriteString(`</div>`)
+	h.WriteString(`</td></tr>`)
+
+	// Footer.
+	h.WriteString(`<tr><td style="padding:8px 32px 28px">`)
+	h.WriteString(`<p style="margin:0;font:400 12px ` + fontStack + `;color:#94A3B8">Sent automatically by Coraza WAF Mod from ` + Sender + `.</p>`)
+	h.WriteString(`</td></tr>`)
+
+	h.WriteString(`</table></td></tr></table>`)
 
 	return subject, t.String(), h.String()
 }
