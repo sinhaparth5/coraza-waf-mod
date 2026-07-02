@@ -21,6 +21,7 @@ import (
 	"coraza-waf-mod/challenge"
 	"coraza-waf-mod/geo"
 	ja3pkg "coraza-waf-mod/ja3"
+	ja4pkg "coraza-waf-mod/ja4"
 	"coraza-waf-mod/metrics"
 	"coraza-waf-mod/ratelimit"
 	"coraza-waf-mod/services"
@@ -146,13 +147,18 @@ func (h *Handler) Handle(c echo.Context) error {
 	asnNum, org := h.asnLookup.Lookup(clientIP)
 	tlsVer, tlsCipher, tlsSNI := tlsInfo(r)
 
-	// Bot signal analysis + JA3 fingerprint (both O(1), no I/O).
+	// Bot signal analysis + TLS fingerprints (both O(1), no I/O).
 	botAnalysis := bot.Analyze(r)
-	// JA3: prefer the Cloudflare header (only set when RemoteAddr is a CF IP),
-	// then fall back to the per-connection store populated by TLS handshake.
+	// JA4 (primary) and JA3 (legacy): prefer the Cloudflare headers (only set
+	// when RemoteAddr is a CF IP), then fall back to the per-connection store
+	// populated at TLS handshake time.
 	ja3Hash := r.Header.Get("Cf-Ja3-Fp")
 	if ja3Hash == "" {
 		ja3Hash = ja3pkg.Get(r.RemoteAddr)
+	}
+	ja4Fp := r.Header.Get("Cf-Ja4")
+	if ja4Fp == "" {
+		ja4Fp = ja4pkg.Get(r.RemoteAddr)
 	}
 
 	meta := reqMeta{
@@ -165,6 +171,7 @@ func (h *Handler) Handle(c echo.Context) error {
 		Org:        org,
 		Query:      r.URL.RawQuery,
 		JA3Hash:    ja3Hash,
+		JA4:        ja4Fp,
 		BotScore:   botAnalysis.Score,
 	}
 
@@ -328,6 +335,7 @@ type reqMeta struct {
 	Org        string
 	Query      string
 	JA3Hash    string
+	JA4        string
 	BotScore   int
 }
 
@@ -357,6 +365,7 @@ func (h *Handler) logRequest(r *http.Request, appName, clientIP, country string,
 		ASN:         m.ASN,
 		Org:         m.Org,
 		JA3Hash:     m.JA3Hash,
+		JA4:         m.JA4,
 		BotScore:    m.BotScore,
 	})
 }
@@ -387,6 +396,7 @@ func (h *Handler) logBlocked(r *http.Request, appName, clientIP, country string,
 		ASN:         m.ASN,
 		Org:         m.Org,
 		JA3Hash:     m.JA3Hash,
+		JA4:         m.JA4,
 		BotScore:    m.BotScore,
 	})
 }
@@ -420,6 +430,7 @@ func (h *Handler) logChallenged(r *http.Request, appName, clientIP string, statu
 		ASN:         m.ASN,
 		Org:         m.Org,
 		JA3Hash:     m.JA3Hash,
+		JA4:         m.JA4,
 		BotScore:    m.BotScore,
 	})
 }

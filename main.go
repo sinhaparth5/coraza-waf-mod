@@ -33,6 +33,7 @@ import (
 	"coraza-waf-mod/config"
 	"coraza-waf-mod/geo"
 	ja3pkg "coraza-waf-mod/ja3"
+	ja4pkg "coraza-waf-mod/ja4"
 	"coraza-waf-mod/metrics"
 	"coraza-waf-mod/proxy"
 	"coraza-waf-mod/ratelimit"
@@ -360,6 +361,7 @@ func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db 
 		}
 		if state == http.StateClosed || state == http.StateHijacked {
 			ja3pkg.Delete(conn.RemoteAddr().String())
+			ja4pkg.Delete(conn.RemoteAddr().String())
 		}
 	}
 
@@ -387,14 +389,16 @@ func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db 
 
 	s.TLSConfig = &tls.Config{
 		GetCertificate: getCert,
-		// Capture the ClientHello so we can compute a JA3 fingerprint for each
-		// connection. The hash is stored in ja3pkg's sync.Map keyed by remoteAddr
-		// and retrieved later in the proxy handler when the HTTP request arrives.
+		// Capture the ClientHello so we can compute JA3 (legacy) and JA4
+		// fingerprints for each connection. Both are stored in their package's
+		// sync.Map keyed by remoteAddr and retrieved later in the proxy handler
+		// when the HTTP request arrives.
 		GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
-			hash := ja3pkg.Compute(hello)
-			if hash != "" {
-				ja3pkg.Store(hello.Conn.RemoteAddr().String(), hash)
+			remoteAddr := hello.Conn.RemoteAddr().String()
+			if hash := ja3pkg.Compute(hello); hash != "" {
+				ja3pkg.Store(remoteAddr, hash)
 			}
+			ja4pkg.Store(remoteAddr, ja4pkg.Compute(hello))
 			return nil, nil
 		},
 	}

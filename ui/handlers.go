@@ -774,6 +774,7 @@ func (h *Handler) LogDetail(c echo.Context) error {
 		"asn":         d.ASN,
 		"org":         d.Org,
 		"ja3_hash":    d.JA3Hash,
+		"ja4":         d.JA4,
 		"bot_score":   d.BotScore,
 		"headers":     headers,
 	})
