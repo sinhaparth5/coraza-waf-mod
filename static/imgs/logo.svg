@@ -1,0 +1,74 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Badge background: deep forest green -->
+    <linearGradient id="badgeGrad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1a3d28"/>
+      <stop offset="100%" stop-color="#0c2018"/>
+    </linearGradient>
+    <!-- Shield body: medium to dark green -->
+    <linearGradient id="shieldGrad" x1="32" y1="7" x2="32" y2="57" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3aab6a"/>
+      <stop offset="100%" stop-color="#1c5a38"/>
+    </linearGradient>
+    <!-- Shield surface highlight -->
+    <linearGradient id="shieldHighlight" x1="32" y1="7" x2="32" y2="33" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.13"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Shield inner depth shadow -->
+    <linearGradient id="shieldShadow" x1="32" y1="33" x2="32" y2="57" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.18"/>
+    </linearGradient>
+    <!-- Bar 1: brightest -->
+    <linearGradient id="bar1" x1="18" y1="0" x2="46" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#8edba8"/>
+      <stop offset="100%" stop-color="#b5eecc"/>
+    </linearGradient>
+    <!-- Bar 2: medium -->
+    <linearGradient id="bar2" x1="21" y1="0" x2="43" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6cc98a"/>
+      <stop offset="100%" stop-color="#8edba8"/>
+    </linearGradient>
+    <!-- Bar 3: deepest -->
+    <linearGradient id="bar3" x1="24" y1="0" x2="40" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4db872"/>
+      <stop offset="100%" stop-color="#6cc98a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Badge background (rounded square) -->
+  <rect width="64" height="64" rx="15" fill="url(#badgeGrad)"/>
+
+  <!-- Subtle inner border for badge polish -->
+  <rect x="1" y="1" width="62" height="62" rx="14.5" stroke="#2a6040" stroke-width="1" fill="none" opacity="0.5"/>
+
+  <!-- Shield drop shadow (blurred offset) -->
+  <path d="M33 10L15 17.5V30C15 42 23 51 33 55C43 51 51 42 51 30V17.5L33 10Z"
+        fill="#000000" opacity="0.22"/>
+
+  <!-- Shield body -->
+  <path d="M32 8L14 15.5V29C14 41 22.5 50.5 32 54C41.5 50.5 50 41 50 29V15.5L32 8Z"
+        fill="url(#shieldGrad)"/>
+
+  <!-- Shield surface highlight overlay -->
+  <path d="M32 8L14 15.5V29C14 41 22.5 50.5 32 54C41.5 50.5 50 41 50 29V15.5L32 8Z"
+        fill="url(#shieldHighlight)"/>
+
+  <!-- Shield inner shadow at bottom -->
+  <path d="M32 8L14 15.5V29C14 41 22.5 50.5 32 54C41.5 50.5 50 41 50 29V15.5L32 8Z"
+        fill="url(#shieldShadow)"/>
+
+  <!-- Shield rim: subtle lighter stroke for definition -->
+  <path d="M32 8L14 15.5V29C14 41 22.5 50.5 32 54C41.5 50.5 50 41 50 29V15.5L32 8Z"
+        stroke="#5dca85" stroke-width="0.75" fill="none" opacity="0.6"/>
+
+  <!-- Filter bar 1 — widest, brightest (top = most incoming traffic) -->
+  <rect x="18" y="22" width="28" height="5" rx="2.5" fill="url(#bar1)"/>
+
+  <!-- Filter bar 2 — medium -->
+  <rect x="21" y="30" width="22" height="5" rx="2.5" fill="url(#bar2)"/>
+
+  <!-- Filter bar 3 — narrowest, deepest (bottom = filtered through all stages) -->
+  <rect x="24" y="38" width="16" height="5" rx="2.5" fill="url(#bar3)"/>
+</svg>

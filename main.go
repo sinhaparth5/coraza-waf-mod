@@ -262,6 +262,16 @@ func main() {
 		h.ServeFingerprintJS(c.Response().Writer, c.Request())
 		return nil
 	})
+	// Logo + favicon for the challenge page. Served under /_cz/ (not the
+	// admin path) because the challenge renders on every proxied domain.
+	e.GET("/_cz/logo.svg", func(c echo.Context) error {
+		data, err := staticImgs.ReadFile("static/imgs/logo.svg")
+		if err != nil {
+			return echo.NewHTTPError(http.StatusNotFound)
+		}
+		c.Response().Header().Set("Cache-Control", "public, max-age=86400")
+		return c.Blob(http.StatusOK, "image/svg+xml", data)
+	})
 
 	e.Any("/*", h.Handle)
 

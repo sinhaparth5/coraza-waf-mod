@@ -3,65 +3,182 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Checking your browser…</title>
+  <meta name="robots" content="noindex, nofollow">
+  <title>Just a moment — {{.Host}}</title>
+  <link rel="icon" type="image/svg+xml" href="/_cz/logo.svg">
   <style>
+    :root {
+      --bg: #ffffff;
+      --ink: #232323;
+      --muted: #595959;
+      --faint: #8a8f8a;
+      --line: #e3e6e3;
+      --green: #3aab6a;
+      --green-dark: #2f8f57;
+      --red: #c2452d;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c1e1c;
+        --ink: #ececec;
+        --muted: #a8ada8;
+        --faint: #7c817c;
+        --line: #343834;
+        --green: #4dbd7c;
+        --green-dark: #6fd39a;
+        --red: #e06a52;
+      }
+    }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #F4F7F9;
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      display: flex;
+      justify-content: center;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page {
+      width: min(600px, 100% - 48px);
+      display: flex;
+      flex-direction: column;
+      padding-top: 18vh;
+      padding-bottom: 32px;
+      min-height: 100%;
+    }
+    .wordmark {
       display: flex;
       align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      color: #1e293b;
+      gap: 10px;
+      margin-bottom: 36px;
     }
-    .card {
-      background: #fff;
-      border-radius: 24px;
-      border: 1px solid #E2E5EA;
-      box-shadow: 0 10px 40px rgba(0,0,0,.05);
-      padding: 48px 40px;
-      text-align: center;
-      width: 100%;
+    .wordmark img { width: 32px; height: 32px; display: block; }
+    .wordmark span {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: .01em;
+    }
+    h1 {
+      font-size: 30px;
+      font-weight: 600;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+      margin-bottom: 10px;
+    }
+    .sub {
+      font-size: 16px;
+      color: var(--muted);
+      line-height: 1.5;
+      margin-bottom: 28px;
+    }
+    /* Verification widget — the one stateful element on the page. */
+    .widget {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 16px 18px;
       max-width: 380px;
+      margin-bottom: 28px;
     }
-    .shield {
-      width: 56px;
-      height: 56px;
-      background: #EAF7EE;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 20px;
-    }
-    .shield svg { width: 28px; height: 28px; }
+    .widget .state { width: 28px; height: 28px; position: relative; flex-shrink: 0; }
     .spinner {
-      width: 44px;
-      height: 44px;
-      border: 3px solid #E2E5EA;
-      border-top-color: #76C893;
+      width: 28px; height: 28px;
+      border: 3px solid var(--line);
+      border-top-color: var(--green);
       border-radius: 50%;
-      animation: spin .75s linear infinite;
-      margin: 0 auto 20px;
+      animation: spin .8s linear infinite;
     }
+    .check, .cross { display: none; width: 28px; height: 28px; }
+    .widget[data-state="ok"] .spinner,
+    .widget[data-state="fail"] .spinner { display: none; }
+    .widget[data-state="ok"] .check { display: block; animation: pop .25s ease-out; }
+    .widget[data-state="fail"] .cross { display: block; }
+    .widget p { font-size: 14px; font-weight: 500; }
+    .widget[data-state="fail"] p { color: var(--red); }
     @keyframes spin { to { transform: rotate(360deg); } }
-    h2 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
-    p  { font-size: 14px; color: #64748b; line-height: 1.5; }
-    .brand { font-size: 11px; color: #94a3b8; margin-top: 32px; letter-spacing: .04em; }
+    @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      .spinner { animation: none; }
+      .widget[data-state="ok"] .check { animation: none; }
+    }
+    .hint {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.6;
+      max-width: 46ch;
+    }
+    footer {
+      margin-top: auto;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: var(--faint);
+    }
+    footer .ref { font-variant-numeric: tabular-nums; }
+    footer .by { display: flex; align-items: center; gap: 7px; }
+    footer .by img { width: 16px; height: 16px; }
+    footer .by b { font-weight: 600; color: var(--muted); }
+    /* CSS vars don't resolve in SVG presentation attributes — style via CSS. */
+    .check circle, .check path { stroke: var(--green); }
+    .cross circle, .cross path { stroke: var(--red); }
   </style>
 </head>
 <body>
-<div class="card">
-  <div class="spinner" id="spin"></div>
-  <h2>Checking your browser…</h2>
-  <p id="msg">Please wait a moment.</p>
-  <p class="brand">Protected by Coraza WAF</p>
+<div class="page">
+  <div class="wordmark">
+    <img src="/_cz/logo.svg" alt="">
+    <span>Coraza WAF</span>
+  </div>
+
+  <h1>{{.Host}}</h1>
+  <p class="sub">Checking your browser before you continue.</p>
+
+  <div class="widget" id="widget" data-state="wait">
+    <div class="state">
+      <div class="spinner"></div>
+      <svg class="check" viewBox="0 0 28 28" aria-hidden="true">
+        <circle cx="14" cy="14" r="13" fill="none" stroke-width="2"/>
+        <path d="M8 14.5l4 4 8-9" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <svg class="cross" viewBox="0 0 28 28" aria-hidden="true">
+        <circle cx="14" cy="14" r="13" fill="none" stroke-width="2"/>
+        <path d="M9.5 9.5l9 9M18.5 9.5l-9 9" fill="none" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <p id="widget-msg" role="status" aria-live="polite">Verifying your browser…</p>
+  </div>
+
+  <p class="hint" id="hint">This check is automatic — you'll be redirected to your requested page in a few seconds.</p>
+
+  <footer>
+    <span class="ref">Reference ID: {{.RefID}}</span>
+    <span class="by">
+      <img src="/_cz/logo.svg" alt="">
+      <span>Performance &amp; security by <b>Coraza WAF</b></span>
+    </span>
+  </footer>
 </div>
+
 <script src="/_cz/fp.js"></script>
 <script>
 (function () {
   var cfg = {{.ConfigJSON}};
+  var widget = document.getElementById('widget');
+  var msg = document.getElementById('widget-msg');
+  var hint = document.getElementById('hint');
+
+  function setState(state, text) {
+    widget.dataset.state = state;
+    msg.textContent = text;
+  }
 
   // Browser fingerprint (FingerprintJS) — computed while the PoW runs.
   // Never blocks verification: any failure or a 3s timeout yields ''.
@@ -97,15 +214,17 @@
     })
     .then(function (resp) {
       if (resp.ok) {
-        document.getElementById('spin').style.cssText = 'border-color:#76C893;animation:none;';
-        document.getElementById('msg').textContent = 'Verified! Redirecting…';
+        setState('ok', 'Verification successful');
+        hint.textContent = 'Redirecting…';
         setTimeout(function () { window.location.href = cfg.redirect || '/'; }, 400);
       } else {
-        document.getElementById('msg').textContent = 'Challenge failed — please refresh.';
+        setState('fail', 'Verification failed');
+        hint.textContent = 'Your browser could not be verified. Refresh the page to try again.';
       }
     })
     .catch(function () {
-      document.getElementById('msg').textContent = 'An error occurred. Please refresh.';
+      setState('fail', 'Something went wrong');
+      hint.textContent = 'The check could not be completed. Refresh the page to try again.';
     });
 })();
 </script>

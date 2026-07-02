@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -127,6 +128,33 @@ func TestVerifyFlowEndToEnd(t *testing.T) {
 	}
 	if got := c.VisitorID(follow); got != testVisitorID {
 		t.Fatalf("VisitorID() = %q, want %q", got, testVisitorID)
+	}
+}
+
+// TestServePageRenders requests a real signed challenge URL and checks the
+// page renders with the visitor's host, the reference ID, and the logo.
+func TestServePageRenders(t *testing.T) {
+	c := New("secret", 3600, 5)
+
+	req := httptest.NewRequest(http.MethodGet, c.ChallengeURL("/account"), nil)
+	req.Host = "app.example.com"
+	rec := httptest.NewRecorder()
+	c.ServePage(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ServePage returned %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		"app.example.com",       // visitor's domain is the headline
+		"Reference ID:",         // nonce-derived support reference
+		"/_cz/logo.svg",         // favicon + wordmark + footer logo
+		"/_cz/fp.js",            // fingerprint bundle still loaded
+		"Checking your browser", // headline copy
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("challenge page missing %q", want)
+		}
 	}
 }
 
