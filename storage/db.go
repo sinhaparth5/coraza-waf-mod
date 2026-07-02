@@ -1805,6 +1805,98 @@ func (db *DB) SetWebhookConfig(cfg WebhookConfig) error {
 	return err
 }
 
+// ── Email alerts ──────────────────────────────────────────────────────────────
+
+// EmailConfig holds the daily-report email settings. Delivery is
+// Cloudflare-only — host, port, username and sender address are hardcoded in
+// the mailer package; only the recipient list and the API token are
+// configurable. Stored in the meta table and managed from the admin UI — the
+// token never lives in config.yaml or the binary.
+type EmailConfig struct {
+	Enabled bool
+	Token   string // Cloudflare API token with Email Sending: Edit (SMTP password)
+	To      string // comma-separated recipient list
+}
+
+func (db *DB) GetEmailConfig() (EmailConfig, error) {
+	var cfg EmailConfig
+	enabled, err := db.getMeta("email_enabled")
+	if err != nil {
+		return EmailConfig{}, err
+	}
+	cfg.Enabled = enabled == "1"
+	if cfg.Token, err = db.getMeta("email_token"); err != nil {
+		return EmailConfig{}, err
+	}
+	if cfg.To, err = db.getMeta("email_to"); err != nil {
+		return EmailConfig{}, err
+	}
+	return cfg, nil
+}
+
+func (db *DB) SetEmailConfig(cfg EmailConfig) error {
+	enabled := "0"
+	if cfg.Enabled {
+		enabled = "1"
+	}
+	for key, val := range map[string]string{
+		"email_enabled": enabled,
+		"email_token":   cfg.Token,
+		"email_to":      cfg.To,
+	} {
+		if err := db.setMeta(key, val); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GetEmailReportSentFor returns the day ("2006-01-02") the last daily report
+// was sent for, so a restart shortly after midnight doesn't send a duplicate.
+func (db *DB) GetEmailReportSentFor() (string, error) {
+	return db.getMeta("email_report_sent_for")
+}
+
+func (db *DB) SetEmailReportSentFor(day string) error {
+	return db.setMeta("email_report_sent_for", day)
+}
+
+// DailyReport aggregates one reporting window of the requests table for the
+// daily alert email.
+type DailyReport struct {
+	Total            int // all requests in the window
+	Blocked          int // requests blocked by any stage
+	Status403        int // requests answered with HTTP 403
+	UniqueBlockedIPs int // distinct client IPs that had at least one block
+	WAFBlocked       int // blocked by a Coraza rule
+	IPBlocked        int // blocked by the IP blocklist (manual or threat intel)
+	GeoBlocked       int // blocked by a geo rule
+	RateLimited      int // rejected by a rate limiter
+	BotChallenged    int // served the JS proof-of-work challenge
+}
+
+// GetDailyReport crunches [from, to) in a single pass. Time bounds are plain
+// comparisons against ts — never SQLite date functions, which can't parse the
+// Go time format modernc/sqlite stores (see GetHourlyTraffic).
+func (db *DB) GetDailyReport(from, to time.Time) (DailyReport, error) {
+	var rep DailyReport
+	err := db.conn.QueryRow(`
+		SELECT COUNT(*),
+		       COUNT(*) FILTER (WHERE blocked = 1),
+		       COUNT(*) FILTER (WHERE status = 403),
+		       COUNT(DISTINCT real_ip) FILTER (WHERE blocked = 1),
+		       COUNT(*) FILTER (WHERE blocked = 1 AND rule_id > 0),
+		       COUNT(*) FILTER (WHERE blocked = 1 AND action LIKE 'ip_blocked%'),
+		       COUNT(*) FILTER (WHERE blocked = 1 AND action LIKE 'geo_blocked%'),
+		       COUNT(*) FILTER (WHERE blocked = 1 AND action = 'rate_limited'),
+		       COUNT(*) FILTER (WHERE action = 'bot_challenge')
+		FROM requests WHERE ts >= ? AND ts < ?`,
+		from.UTC(), to.UTC(),
+	).Scan(&rep.Total, &rep.Blocked, &rep.Status403, &rep.UniqueBlockedIPs,
+		&rep.WAFBlocked, &rep.IPBlocked, &rep.GeoBlocked, &rep.RateLimited, &rep.BotChallenged)
+	return rep, err
+}
+
 // ── Export ────────────────────────────────────────────────────────────────────
 
 // ExportRequests streams all matching request logs through fn. fn returns false

@@ -70,6 +70,10 @@ func TestBaseTemplateCarriesCSRF(t *testing.T) {
 		"WebhookSecret":  "",
 		"WebhookEnabled": false,
 		"WebhookEvents":  "",
+		"EmailEnabled":   false,
+		"EmailSender":    "alert@example.com",
+		"EmailTo":        "",
+		"EmailTokenSet":  false,
 	}
 
 	var buf bytes.Buffer
