@@ -15,6 +15,7 @@
     <p class="text-[13px] text-slate-500 mb-5">Change your login email or password. You will be signed out after saving.</p>
 
     <form action="{{.AdminPath}}/settings/credentials" method="POST" class="flex flex-col gap-4">
+      <input type="hidden" name="_csrf" value="{{.CSRF}}">
 
       <div>
         <label class="block text-[13px] font-semibold text-slate-700 mb-1">Current email</label>
@@ -55,11 +56,14 @@
   <div class="card p-6">
     <h2 class="text-[15px] font-bold text-slate-800 mb-1">Database backup</h2>
     <p class="text-[13px] text-slate-500 mb-4">Downloads a consistent snapshot of <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded">waf.db</code> — all request logs, services, IP/geo rules, and settings. Safe to run while the WAF is live.</p>
-    <a href="{{.AdminPath}}/settings/backup"
-       class="inline-flex items-center gap-2 rounded-full bg-surface border border-line text-slate-700 text-[13px] font-medium px-5 py-2 hover:bg-canvas transition-colors">
-      <i class="hgi hgi-stroke hgi-rounded hgi-download-02 text-base text-slate-500"></i>
-      Download waf.db
-    </a>
+    <form action="{{.AdminPath}}/settings/backup" method="POST">
+      <input type="hidden" name="_csrf" value="{{.CSRF}}">
+      <button type="submit"
+              class="inline-flex items-center gap-2 rounded-full bg-surface border border-line text-slate-700 text-[13px] font-medium px-5 py-2 hover:bg-canvas transition-colors cursor-pointer">
+        <i class="hgi hgi-stroke hgi-rounded hgi-download-02 text-base text-slate-500"></i>
+        Download waf.db
+      </button>
+    </form>
   </div>
 
   {{template "bot-card" .}}

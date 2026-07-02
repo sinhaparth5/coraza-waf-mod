@@ -204,13 +204,13 @@ func (h *Handler) Register(e *echo.Echo) {
 	// Public routes — no session required.
 	e.GET(base+"/login", h.LoginPage)
 	e.POST(base+"/login", h.LoginPost)
-	e.POST(base+"/logout", h.Logout)
 	// Static assets are public so the login page can load spirals/JS before auth.
 	e.StaticFS(base+"/static/js", h.staticJS)
 	e.StaticFS(base+"/static/imgs", h.staticImgs)
 
 	g := e.Group(base)
-	g.Use(h.sessionAuth)
+	g.Use(h.sessionAuth, h.csrfProtect)
+	g.POST("/logout", h.Logout)
 
 	g.GET("/metrics", echo.WrapHandler(metrics.Handler()))
 
@@ -258,7 +258,9 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/threat-intel/:id/sync", h.SyncThreatIntelSource)
 	g.GET("/settings", h.SettingsPage)
 	g.POST("/settings/credentials", h.ChangeCredentials)
-	g.GET("/settings/backup", h.BackupDB)
+	// POST, not GET: this streams the full DB (admin hash, challenge secret),
+	// so it must never be reachable via cross-site top-level navigation.
+	g.POST("/settings/backup", h.BackupDB)
 }
 
 // ── Login / logout ────────────────────────────────────────────────────────────
@@ -1795,6 +1797,11 @@ func (h *Handler) render(c echo.Context, page string, data map[string]any) error
 	}
 	if _, ok := data["AlertCount"]; !ok {
 		data["AlertCount"] = h.unreadAlertCount()
+	}
+	// CSRF token for this session: picked up by hx-headers on <body> for all
+	// HTMX requests and by hidden _csrf inputs in plain HTML forms.
+	if _, ok := data["CSRF"]; !ok {
+		data["CSRF"] = h.csrfFromContext(c)
 	}
 	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
 	// no-store keeps these pages out of the browser's back/forward cache.
