@@ -1224,9 +1224,20 @@ func (h *Handler) AddCertificate(c echo.Context) error {
 		return h.certError(c, "invalid certificate: "+err.Error())
 	}
 
+	// Cert files are commonly saved under generic names (cert.pem/cert.key),
+	// and the Name field autofills from the filename — so a second upload
+	// would collide with the UNIQUE name column. Prefer a name derived from
+	// the cert's own domains over failing.
+	if existing, err := h.db.ListCertificates(); err == nil {
+		name = uniqueCertName(name, domains, existing)
+	}
+
 	// Insert first to obtain the row ID used as the on-disk directory name.
 	id, err := h.db.AddCertificate(name, strings.Join(domains, ", "), expiresAt.UTC().Format(time.RFC3339), "", "")
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			return h.certError(c, fmt.Sprintf("a certificate named %q already exists — choose a different name", name))
+		}
 		return h.certError(c, "save: "+err.Error())
 	}
 
@@ -1241,6 +1252,30 @@ func (h *Handler) AddCertificate(c echo.Context) error {
 	}
 
 	return h.renderCertRows(c)
+}
+
+// uniqueCertName returns requested if no pool cert already uses it; otherwise
+// it falls back to the first non-wildcard domain the cert covers, then to
+// requested-2, requested-3, … until a free name is found.
+func uniqueCertName(requested string, domains []string, existing []storage.CertRecord) string {
+	taken := make(map[string]bool, len(existing))
+	for _, c := range existing {
+		taken[strings.ToLower(c.Name)] = true
+	}
+	if !taken[strings.ToLower(requested)] {
+		return requested
+	}
+	for _, d := range domains {
+		if !strings.HasPrefix(d, "*") && !taken[strings.ToLower(d)] {
+			return d
+		}
+	}
+	for i := 2; ; i++ {
+		cand := fmt.Sprintf("%s-%d", requested, i)
+		if !taken[strings.ToLower(cand)] {
+			return cand
+		}
+	}
 }
 
 // DeleteCertificate removes a cert from the pool. Services that referenced it
@@ -1276,6 +1311,19 @@ func (h *Handler) AssignPoolCert(c echo.Context) error {
 	}
 	if svc.Host == "" {
 		return h.tlsModalError(c, "TLS requires a host-matched service (this one matches by path prefix)")
+	}
+	poolCert, err := h.db.GetCertificate(certID)
+	if err != nil {
+		return h.tlsModalError(c, "certificate not found")
+	}
+	certPEM, err := os.ReadFile(poolCert.CertPath)
+	if err != nil {
+		return h.tlsModalError(c, "read certificate: "+err.Error())
+	}
+	// Reject assigning a cert that doesn't cover this service's domain —
+	// serving it would fail browser validation and Cloudflare Full (strict).
+	if err := services.CertCoversHost(certPEM, svc.Host); err != nil {
+		return h.tlsModalError(c, err.Error())
 	}
 	if err := h.db.SetServiceCertID(serviceID, certID); err != nil {
 		return h.tlsModalError(c, err.Error())
@@ -1327,6 +1375,9 @@ func (h *Handler) UploadServiceTLS(c echo.Context) error {
 	keyPEM := []byte(c.FormValue("key_pem"))
 	if len(certPEM) == 0 || len(keyPEM) == 0 {
 		return h.tlsModalError(c, "paste both the certificate and the private key")
+	}
+	if err := services.CertCoversHost(certPEM, svc.Host); err != nil {
+		return h.tlsModalError(c, err.Error())
 	}
 
 	certPath, keyPath, expiresAt, err := services.SaveCustomCert(svc.Name, certPEM, keyPEM)
