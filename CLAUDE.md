@@ -29,7 +29,7 @@ make checksums   # sha256sum dist/* -> dist/checksums.txt
 make tag VERSION=v1.0.0  # annotated git tag + push to origin, triggers the GitLab release pipeline
 ```
 
-Run a single test: `go test ./proxy/ -run TestName -v` (substitute the package). Existing tests live in `proxy/`, `ratelimit/`, `ja3/`, `storage/`, `mailer/`, `autoban/`, and `ui/`.
+Run a single test: `go test ./proxy/ -run TestName -v` (substitute the package). Existing tests live in `proxy/`, `ratelimit/`, `ja3/`, `ja4/`, `storage/`, `mailer/`, `autoban/`, `challenge/`, `services/`, and `ui/`.
 
 **Runtime CLI flags** (passed directly to the binary, not config.yaml):
 
@@ -113,6 +113,10 @@ Request logs are not kept forever, but pruning is **not** automatic inside the r
 **Config migration direction**: `config.yaml` is for deployment-level settings only (listen addresses, TLS binding, WAF rules dir, DB path). All runtime knobs — bot protection settings, Redis config, ACME email, per-service bot/TLS/rate-limit overrides — are stored in the SQLite `meta` table or per-service columns and managed from the admin UI. `config.yaml` values for these are only read as first-boot defaults if the DB entry is absent.
 
 **Module layout**: `config/` (YAML load + defaults), `waf/` (Coraza engine wrapper), `services/` (DB-backed routing registry + TLS), `proxy/` (the full request pipeline), `storage/` (SQLite access, schema migrations, async log queue, `StateStore` impl for rate-limit persistence), `blocklist/` (IP rules, exact-match), `geo/` (GeoIP2 country blocking, bundled MaxMind GeoLite2), `ratelimit/` (token-bucket `Backend` interface + in-process `Limiter` + `RedisBackend`), `bot/` (header-based signal scoring + trusted-crawler list), `challenge/` (JS PoW challenge page + HMAC token/cookie), `ja3/` (legacy JA3 TLS fingerprint + per-connection sync.Map store), `ja4/` (JA4 TLS fingerprint, same store pattern; primary fingerprint in logs/UI), `asn/` (ASN/org lookup from bundled database), `threatintel/` (background sync of external IP block lists into the DB), `webhook/` (async event delivery to a configured webhook endpoint), `mailer/` (SMTPS sender + midnight daily-report scheduler), `autoban/` (scores blocked events per IP, writes permanent block rules + email alerts), `metrics/` (Prometheus instrumentation), `ui/` (admin dashboard handlers + templates), `tools/minify/` (build-time JS minifier, not shipped in the binary).
+
+## Security & configuration tips
+
+Never commit real admin credentials, TLS private keys, GeoIP databases, or a production `waf.db` file. `deploy/config.yaml.example` is the documented, secret-free template — the repo's own `config.yaml` is for local dev only and should keep any real secrets out of git.
 
 ## Distribution
 
