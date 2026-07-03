@@ -5,11 +5,18 @@
 // crossed it writes a global block rule (visible on the IP Rules page),
 // hot-reloads the in-memory blocklist, and emails the admin the reason.
 //
-// Scoring per blocked event:
+// Scoring per event:
 //
 //	critical WAF rule (SQLi/RCE/XSS/LFI class)  5 points
 //	any other WAF rule block                    2 points
 //	rate limited                                1 point
+//	bot-challenge redirect (never solved)       1 point
+//
+// Challenge redirects are logged with Blocked=false (a challenge is not a
+// deny), but a client that keeps hitting the challenge wall without ever
+// solving it is a scanner — without scoring those, a bot stuck at the
+// challenge gate probes forever and is never banned. Clients that solve the
+// challenge stop producing bot_challenge rows, so they accumulate nothing.
 //
 // Already-blocked traffic (ip_blocked*, geo_blocked*) never scores — banned
 // IPs keep producing blocked log rows forever and must not re-trigger bans or
@@ -29,11 +36,13 @@ import (
 )
 
 // Points per event class. The default threshold (10) means ~2 critical WAF
-// hits, 4 generic WAF hits, or 10 rate-limited requests inside the window.
+// hits, 4 generic WAF hits, or 10 rate-limited or challenged requests inside
+// the window.
 const (
 	ptsCritical    = 5
 	ptsWAF         = 2
 	ptsRateLimited = 1
+	ptsChallenged  = 1
 )
 
 // store is the slice of *storage.DB the banner needs; an interface so tests
@@ -48,7 +57,7 @@ type event struct {
 	t   time.Time
 	pts int
 	// event class for the ban-reason breakdown
-	critical, waf, rl bool
+	critical, waf, rl, chal bool
 }
 
 // Banner accumulates blocked-event scores per IP and issues bans.
@@ -107,7 +116,14 @@ func (b *Banner) ReloadConfig() {
 // goroutine, so the fast path is in-memory only; the ban itself (DB write,
 // blocklist reload, email) happens on a spawned goroutine.
 func (b *Banner) Record(e storage.RequestLog) {
-	if !e.Blocked || e.RealIP == "" {
+	if e.RealIP == "" {
+		return
+	}
+	// Challenge redirects are Blocked=false by design but still score: a
+	// client repeatedly bounced to the challenge without ever solving it is
+	// a scanner, not a browser.
+	challenged := !e.Blocked && e.Action == "bot_challenge"
+	if !e.Blocked && !challenged {
 		return
 	}
 	// Never score traffic that is already blocked by an IP rule or geo rule:
@@ -118,6 +134,8 @@ func (b *Banner) Record(e storage.RequestLog) {
 
 	ev := event{t: e.Timestamp}
 	switch {
+	case challenged:
+		ev.pts, ev.chal = ptsChallenged, true
 	case e.RuleID > 0 && criticalRule(e.RuleID):
 		ev.pts, ev.critical = ptsCritical, true
 	case e.RuleID > 0:
@@ -251,9 +269,9 @@ func bannable(ip string) bool {
 }
 
 // banReason summarises what earned the ban, e.g.
-// "12 blocked requests in 10 min (2 critical WAF hits, 1 WAF hit, 3 rate-limited)".
+// "12 flagged requests in 10 min (2 critical WAF hits, 1 WAF hit, 3 rate-limited)".
 func banReason(evs []event, windowMin int) string {
-	var crit, waf, rl int
+	var crit, waf, rl, chal int
 	for _, ev := range evs {
 		switch {
 		case ev.critical:
@@ -262,6 +280,8 @@ func banReason(evs []event, windowMin int) string {
 			waf++
 		case ev.rl:
 			rl++
+		case ev.chal:
+			chal++
 		}
 	}
 	var parts []string
@@ -274,7 +294,10 @@ func banReason(evs []event, windowMin int) string {
 	if rl > 0 {
 		parts = append(parts, fmt.Sprintf("%d rate-limited", rl))
 	}
-	return fmt.Sprintf("%d blocked requests in %d min (%s)",
+	if chal > 0 {
+		parts = append(parts, fmt.Sprintf("%d unsolved bot %s", chal, plural(chal, "challenge")))
+	}
+	return fmt.Sprintf("%d flagged requests in %d min (%s)",
 		len(evs), windowMin, strings.Join(parts, ", "))
 }
 
