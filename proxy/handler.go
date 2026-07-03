@@ -201,6 +201,17 @@ func (h *Handler) Handle(c echo.Context) error {
 		BotScore:   botAnalysis.Score,
 	}
 
+	// The /_cz/ namespace belongs to the challenge system. Its real routes
+	// (GET /_cz/challenge etc.) are registered before the catch-all, so any
+	// /_cz/ request landing here is an unregistered method/path combo — e.g.
+	// a scanner sending HEAD /_cz/challenge. Redirecting it to the challenge
+	// would bounce it straight back to itself in an endless 307 loop, and
+	// proxying would leak internal paths to the backend, so 404 outright.
+	if strings.HasPrefix(r.URL.Path, "/_cz/") {
+		h.logRequest(r, appName, clientIP, "", http.StatusNotFound, &waf.Result{}, time.Since(start), meta)
+		return c.NoContent(http.StatusNotFound)
+	}
+
 	// Bot protection: challenge clients based on global setting + per-service override.
 	if ch != nil && !botAnalysis.IsTrustedCrawler {
 		svcMode := "inherit"

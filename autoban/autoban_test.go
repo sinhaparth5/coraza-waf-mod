@@ -111,6 +111,48 @@ func TestRepeatOffenderRateLimitedBans(t *testing.T) {
 	}
 }
 
+// challengedEvent mirrors what proxy.logChallenged queues: a 307 redirect to
+// the challenge page, explicitly NOT marked Blocked.
+func challengedEvent(ip string, at time.Time) storage.RequestLog {
+	return storage.RequestLog{Timestamp: at, RealIP: ip, Blocked: false, Action: "bot_challenge", Status: 307}
+}
+
+func TestChallengeLoopBans(t *testing.T) {
+	db := newFakeStore()
+	now := time.Date(2026, 7, 3, 9, 16, 12, 0, time.UTC)
+	b, notified := testBanner(db, now)
+
+	// A scanner bounced to the challenge page over and over without ever
+	// solving it — 10 redirects at 1 point each crosses the default threshold.
+	for i := 0; i < 10; i++ {
+		b.Record(challengedEvent("198.23.130.204", now.Add(time.Duration(i)*time.Second)))
+	}
+	if db.rules[":198.23.130.204"] != "block" {
+		t.Fatal("10 unsolved challenge redirects in the window should ban")
+	}
+	note := db.banNote("198.23.130.204")
+	if !strings.Contains(note, "10 unsolved bot challenges") {
+		t.Errorf("note = %q, want unsolved-challenge breakdown", note)
+	}
+	if len(*notified) != 1 {
+		t.Fatalf("notified %d times, want 1", len(*notified))
+	}
+}
+
+func TestOtherUnblockedTrafficNeverScores(t *testing.T) {
+	db := newFakeStore()
+	now := time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC)
+	b, _ := testBanner(db, now)
+
+	// Plain proxied traffic (Blocked=false, no action) must not accumulate.
+	for i := 0; i < 50; i++ {
+		b.Record(storage.RequestLog{Timestamp: now.Add(time.Duration(i) * time.Second), RealIP: "203.0.113.50", Status: 200})
+	}
+	if db.rules[":203.0.113.50"] != "" {
+		t.Fatal("normal allowed traffic must never contribute to a ban")
+	}
+}
+
 func TestEventsOutsideWindowDoNotCount(t *testing.T) {
 	db := newFakeStore()
 	now := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
