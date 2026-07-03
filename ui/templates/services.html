@@ -107,14 +107,99 @@
 
 </div>
 
-<!-- ── TLS Modal ── -->
-<div id="tls-modal-overlay" class="hidden flex fixed inset-0 bg-slate-900/[.45] z-[200] items-center justify-center">
-  <div class="card w-[440px] p-6">
-    <div class="flex items-center justify-between mb-5">
-      <h2 class="text-[17px] font-bold text-slate-900">TLS for <span id="tls-modal-service-name" class="text-brand"></span></h2>
-      <button type="button" id="tls-modal-close" class="bg-none border-none cursor-pointer text-slate-500 text-lg leading-none">&times;</button>
+<!-- ── Edit Service Modal (all per-service settings in one place) ── -->
+<div id="svc-modal-overlay" class="hidden flex fixed inset-0 bg-slate-900/[.45] z-[200] items-center justify-center">
+  <div class="card w-[480px] max-h-[88vh] overflow-y-auto p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-[17px] font-bold text-slate-900">Edit — <span id="svc-modal-service-name" class="text-brand"></span></h2>
+      <button type="button" id="svc-modal-close" class="bg-none border-none cursor-pointer text-slate-500 text-lg leading-none">&times;</button>
     </div>
 
+    <!-- Tabs -->
+    <div id="svc-tabs" class="flex gap-1 mb-5 bg-surface rounded-full p-1">
+      <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-full text-[12px] font-semibold cursor-pointer font-sans border-none bg-white shadow text-slate-900" data-tab="ratelimit">Rate Limit</button>
+      <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-full text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="bot">Bot</button>
+      <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-full text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="cache">Cache</button>
+      <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-full text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="tls">TLS</button>
+    </div>
+
+    <!-- ── Rate Limit tab ── -->
+    <div class="svc-tab" data-tab="ratelimit">
+      <form id="rl-form" hx-post="/admin/services/ratelimit" hx-target="#services-body" hx-swap="innerHTML">
+        <input type="hidden" name="service_id" id="rl-service-id"/>
+        <div class="flex gap-3 mb-3">
+          <div class="flex-1">
+            <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Requests / second</label>
+            <input id="rl-rps" name="rps" type="number" min="0" step="0.1" placeholder="e.g. 10"
+              class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+          </div>
+          <div class="flex-1">
+            <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Burst</label>
+            <input id="rl-burst" name="burst" type="number" min="0" placeholder="auto (2× RPS)"
+              class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+          </div>
+        </div>
+        <p class="text-[12px] text-slate-400 mb-4 leading-[1.5]">Set 0 or leave blank to fall through to the global limit from config.yaml.</p>
+        <button type="submit" class="btn-primary w-full">Save</button>
+      </form>
+      <div id="rl-error" class="text-[12px] text-red-500 mt-[10px]"></div>
+    </div>
+
+    <!-- ── Bot Protection tab ── -->
+    <div class="svc-tab hidden" data-tab="bot">
+      <form id="bot-form" hx-post="{{.AdminPath}}/services/bot/0" hx-target="#services-body" hx-swap="innerHTML" data-admin-path="{{.AdminPath}}">
+        <input type="hidden" name="service_id" id="bot-service-id"/>
+
+        <p class="text-[12px] text-slate-500 mb-4 leading-[1.5]">Choose how bot protection applies to this service. The global setting is configured on the <a href="{{.AdminPath}}/settings" class="text-brand underline">Settings</a> page.</p>
+
+        <div class="flex flex-col gap-3 mb-5">
+          <label class="flex items-start gap-3 cursor-pointer p-3 rounded-xl border border-line hover:border-brand transition-colors has-[:checked]:border-brand has-[:checked]:bg-green-50">
+            <input type="radio" name="bot_mode" value="inherit" class="mt-[3px] shrink-0 accent-brand"/>
+            <div>
+              <p class="text-[13px] font-semibold text-slate-800">Inherit global setting</p>
+              <p class="text-[12px] text-slate-500 mt-[2px]">Use whatever is configured on the Settings page. This is the default.</p>
+            </div>
+          </label>
+          <label class="flex items-start gap-3 cursor-pointer p-3 rounded-xl border border-line hover:border-brand transition-colors has-[:checked]:border-brand has-[:checked]:bg-green-50">
+            <input type="radio" name="bot_mode" value="always" class="mt-[3px] shrink-0 accent-brand"/>
+            <div>
+              <p class="text-[13px] font-semibold text-slate-800">Always challenge</p>
+              <p class="text-[12px] text-slate-500 mt-[2px]">Every client must solve the JS challenge before reaching this service, regardless of their score. Useful for sensitive admin or API endpoints.</p>
+            </div>
+          </label>
+          <label class="flex items-start gap-3 cursor-pointer p-3 rounded-xl border border-line hover:border-brand transition-colors has-[:checked]:border-brand has-[:checked]:bg-green-50">
+            <input type="radio" name="bot_mode" value="off" class="mt-[3px] shrink-0 accent-brand"/>
+            <div>
+              <p class="text-[13px] font-semibold text-slate-800">Disabled for this service</p>
+              <p class="text-[12px] text-slate-500 mt-[2px]">No bot challenge for this service, even if globally enabled. Use for public APIs or monitoring endpoints hit by legitimate automation.</p>
+            </div>
+          </label>
+        </div>
+
+        <button type="submit" class="btn-primary w-full">Save</button>
+      </form>
+      <div id="bot-error" class="text-[12px] text-red-500 mt-[10px]"></div>
+    </div>
+
+    <!-- ── Cache tab ── -->
+    <div class="svc-tab hidden" data-tab="cache">
+      <form id="svc-cache-form" hx-post="{{.AdminPath}}/services/cache/0" hx-target="#services-body" hx-swap="innerHTML" data-admin-path="{{.AdminPath}}">
+        <p class="text-[12px] text-slate-500 mb-4 leading-[1.5]">Route this service's clean, WAF-inspected traffic through the local Varnish cache to serve static assets from memory. Requires the Varnish integration to be enabled on the <a href="{{.AdminPath}}/settings" class="text-brand underline">Settings</a> page.</p>
+        <label class="flex items-center justify-between cursor-pointer py-2 mb-5">
+          <span class="text-[13px] font-semibold text-slate-700">Cache this service</span>
+          <span class="relative inline-block">
+            <input type="checkbox" name="enabled" value="1" id="svc-cache-enabled" class="peer sr-only"/>
+            <span class="block w-10 h-6 bg-slate-200 peer-checked:bg-brand rounded-full transition-colors duration-200 peer-focus:outline-none"></span>
+            <span class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-4"></span>
+          </span>
+        </label>
+        <button type="submit" class="btn-primary w-full">Save</button>
+      </form>
+      <div id="svc-cache-error" class="text-[12px] text-red-500 mt-[10px]"></div>
+    </div>
+
+    <!-- ── TLS tab (host-matched services only) ── -->
+    <div class="svc-tab hidden" data-tab="tls">
     <div class="flex gap-4 mb-4 flex-wrap">
       <label class="flex items-center gap-2 cursor-pointer">
         <input type="radio" name="tls_action" value="pool" checked class="accent-brand"/>
@@ -175,6 +260,15 @@
       <input type="hidden" name="service_id" class="tls-service-id"/>
       <button type="submit" class="w-full py-[10px] rounded-full border border-red-100 bg-white text-red-500 text-[13px] font-medium cursor-pointer font-sans">Disable TLS for this service</button>
     </form>
+    </div><!-- /TLS tab -->
+
+    <!-- ── Danger zone ── -->
+    <div class="mt-5 border-t border-canvas pt-4">
+      <button type="button" id="svc-delete-btn" hx-target="#services-body" hx-swap="innerHTML"
+        class="w-full py-[10px] rounded-full border border-red-200 bg-red-50 text-red-600 text-[13px] font-semibold cursor-pointer font-sans hover:bg-red-100 transition-colors duration-150">
+        Remove this service
+      </button>
+    </div>
   </div>
 </div>
 
@@ -203,76 +297,6 @@
   </div>
 </div>
 
-<!-- ── Rate Limit Modal ── -->
-<div id="rl-modal-overlay" class="hidden flex fixed inset-0 bg-slate-900/[.45] z-[200] items-center justify-center">
-  <div class="card w-[380px] p-6">
-    <div class="flex items-center justify-between mb-5">
-      <h2 class="text-[17px] font-bold text-slate-900">Rate Limit — <span id="rl-modal-service-name" class="text-brand"></span></h2>
-      <button type="button" id="rl-modal-close" class="bg-none border-none cursor-pointer text-slate-500 text-lg leading-none">&times;</button>
-    </div>
-    <form id="rl-form" hx-post="/admin/services/ratelimit" hx-target="#services-body" hx-swap="innerHTML">
-      <input type="hidden" name="service_id" id="rl-service-id"/>
-      <div class="flex gap-3 mb-3">
-        <div class="flex-1">
-          <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Requests / second</label>
-          <input id="rl-rps" name="rps" type="number" min="0" step="0.1" placeholder="e.g. 10"
-            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
-        </div>
-        <div class="flex-1">
-          <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Burst</label>
-          <input id="rl-burst" name="burst" type="number" min="0" placeholder="auto (2× RPS)"
-            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
-        </div>
-      </div>
-      <p class="text-[12px] text-slate-400 mb-4 leading-[1.5]">Set 0 or leave blank to fall through to the global limit from config.yaml.</p>
-      <button type="submit" class="btn-primary w-full">Save</button>
-    </form>
-    <div id="rl-error" class="text-[12px] text-red-500 mt-[10px]"></div>
-  </div>
-</div>
-
-<!-- ── Bot Protection Modal ── -->
-<div id="bot-modal-overlay" class="hidden flex fixed inset-0 bg-slate-900/[.45] z-[200] items-center justify-center">
-  <div class="card w-[420px] p-6">
-    <div class="flex items-center justify-between mb-5">
-      <h2 class="text-[17px] font-bold text-slate-900">Bot Protection — <span id="bot-modal-service-name" class="text-brand"></span></h2>
-      <button type="button" id="bot-modal-close" class="bg-none border-none cursor-pointer text-slate-500 text-lg leading-none">&times;</button>
-    </div>
-
-    <form id="bot-form" hx-post="{{.AdminPath}}/services/bot/0" hx-target="#services-body" hx-swap="innerHTML" data-admin-path="{{.AdminPath}}">
-      <input type="hidden" name="service_id" id="bot-service-id"/>
-
-      <p class="text-[12px] text-slate-500 mb-4 leading-[1.5]">Choose how bot protection applies to this service. The global setting is configured on the <a href="{{.AdminPath}}/settings" class="text-brand underline">Settings</a> page.</p>
-
-      <div class="flex flex-col gap-3 mb-5">
-        <label class="flex items-start gap-3 cursor-pointer p-3 rounded-xl border border-line hover:border-brand transition-colors has-[:checked]:border-brand has-[:checked]:bg-green-50">
-          <input type="radio" name="bot_mode" value="inherit" class="mt-[3px] shrink-0 accent-brand"/>
-          <div>
-            <p class="text-[13px] font-semibold text-slate-800">Inherit global setting</p>
-            <p class="text-[12px] text-slate-500 mt-[2px]">Use whatever is configured on the Settings page. This is the default.</p>
-          </div>
-        </label>
-        <label class="flex items-start gap-3 cursor-pointer p-3 rounded-xl border border-line hover:border-brand transition-colors has-[:checked]:border-brand has-[:checked]:bg-green-50">
-          <input type="radio" name="bot_mode" value="always" class="mt-[3px] shrink-0 accent-brand"/>
-          <div>
-            <p class="text-[13px] font-semibold text-slate-800">Always challenge</p>
-            <p class="text-[12px] text-slate-500 mt-[2px]">Every client must solve the JS challenge before reaching this service, regardless of their score. Useful for sensitive admin or API endpoints.</p>
-          </div>
-        </label>
-        <label class="flex items-start gap-3 cursor-pointer p-3 rounded-xl border border-line hover:border-brand transition-colors has-[:checked]:border-brand has-[:checked]:bg-green-50">
-          <input type="radio" name="bot_mode" value="off" class="mt-[3px] shrink-0 accent-brand"/>
-          <div>
-            <p class="text-[13px] font-semibold text-slate-800">Disabled for this service</p>
-            <p class="text-[12px] text-slate-500 mt-[2px]">No bot challenge for this service, even if globally enabled. Use for public APIs or monitoring endpoints hit by legitimate automation.</p>
-          </div>
-        </label>
-      </div>
-
-      <button type="submit" class="btn-primary w-full">Save</button>
-    </form>
-    <div id="bot-error" class="text-[12px] text-red-500 mt-[10px]"></div>
-  </div>
-</div>
 {{end}}
 
 {{define "services-rows"}}
@@ -294,42 +318,34 @@
     </div>
     <div class="mono text-[12px] text-slate-500 truncate">{{if .Host}}{{.Host}}{{else}}{{.Prefix}}{{end}} &rarr; {{.Backend}}</div>
   </div>
-  <div class="flex items-center gap-3 shrink-0">
+  <div class="flex items-center gap-2 shrink-0">
     {{if .Host}}
-    <span class="inline-flex items-center gap-[6px]">
-      {{if eq .TLSMode "custom"}}
-      <span class="text-[11px] font-semibold bg-green-100 text-green-600 px-2 py-[2px] rounded-full">
-        {{if .CertName}}{{.CertName}}{{else}}Custom{{if .TLSExpiresAt}} · exp {{shortDate .TLSExpiresAt}}{{end}}{{end}}
-      </span>
-      {{else if eq .TLSMode "auto"}}
-      <span class="text-[11px] font-semibold bg-blue-50 text-blue-500 px-2 py-[2px] rounded-full">Auto (Let's Encrypt)</span>
-      {{else}}
-      <span class="text-[11px] font-semibold bg-slate-100 text-slate-500 px-2 py-[2px] rounded-full">No TLS</span>
-      {{end}}
-      <button type="button" class="tls-manage-btn inline-flex items-center gap-[5px] text-[11px] font-medium text-blue-500 bg-transparent border border-blue-100 rounded-full px-3 py-[5px] cursor-pointer font-sans transition-colors duration-150" data-id="{{.ID}}" data-name="{{.Name}}">
-        <i class="hgi hgi-stroke hgi-rounded hgi-settings-01 text-xs"></i>
-        Manage
-      </button>
+    {{if eq .TLSMode "custom"}}
+    <span class="text-[11px] font-semibold bg-green-100 text-green-600 px-2 py-[2px] rounded-full">
+      {{if .CertName}}{{.CertName}}{{else}}Custom{{if .TLSExpiresAt}} · exp {{shortDate .TLSExpiresAt}}{{end}}{{end}}
     </span>
+    {{else if eq .TLSMode "auto"}}
+    <span class="text-[11px] font-semibold bg-blue-50 text-blue-500 px-2 py-[2px] rounded-full">Auto (Let's Encrypt)</span>
+    {{else}}
+    <span class="text-[11px] font-semibold bg-slate-100 text-slate-500 px-2 py-[2px] rounded-full">No TLS</span>
+    {{end}}
     {{end}}
     {{if gt .RateLimitRPS 0.0}}
     <span class="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-[2px] rounded-full">{{printf "%.0f" .RateLimitRPS}}/s</span>
     {{end}}
-    <button type="button" class="rl-manage-btn inline-flex items-center gap-[5px] text-[11px] font-medium text-slate-500 bg-transparent border border-line rounded-full px-3 py-[5px] cursor-pointer font-sans hover:border-slate-400 transition-colors duration-150"
-      data-id="{{.ID}}" data-name="{{.Name}}" data-rps="{{.RateLimitRPS}}" data-burst="{{.RateLimitBurst}}">
-      <i class="hgi hgi-stroke hgi-rounded hgi-time-04 text-xs"></i>
-      Rate Limit
-    </button>
     {{if ne .BotMode "inherit"}}
     <span class="text-[11px] font-semibold {{if eq .BotMode "always"}}bg-purple-100 text-purple-600{{else}}bg-slate-100 text-slate-500{{end}} px-2 py-[2px] rounded-full">Bot: {{.BotMode}}</span>
     {{end}}
-    <button type="button" class="bot-manage-btn inline-flex items-center gap-[5px] text-[11px] font-medium text-slate-500 bg-transparent border border-line rounded-full px-3 py-[5px] cursor-pointer font-sans hover:border-slate-400 transition-colors duration-150"
-      data-id="{{.ID}}" data-name="{{.Name}}" data-mode="{{.BotMode}}">
-      <i class="hgi hgi-stroke hgi-rounded hgi-bot text-xs"></i>
-      Bot
+    {{if .CacheEnabled}}
+    <span class="text-[11px] font-semibold bg-sky-100 text-sky-600 px-2 py-[2px] rounded-full">Cached</span>
+    {{end}}
+    <span class="text-[12px] text-slate-400 whitespace-nowrap ml-1">{{fmtTime .CreatedAt}}</span>
+    <button type="button" class="svc-edit-btn inline-flex items-center gap-[5px] text-[12px] font-medium text-slate-600 bg-white border border-line rounded-full px-4 py-[6px] cursor-pointer font-sans hover:border-slate-400 transition-colors duration-150 ml-1"
+      data-id="{{.ID}}" data-name="{{.Name}}" data-has-host="{{if .Host}}1{{else}}0{{end}}"
+      data-rps="{{.RateLimitRPS}}" data-burst="{{.RateLimitBurst}}" data-mode="{{.BotMode}}" data-cache="{{if .CacheEnabled}}1{{else}}0{{end}}">
+      <i class="hgi hgi-stroke hgi-rounded hgi-settings-01 text-xs"></i>
+      Edit
     </button>
-    <span class="text-[12px] text-slate-400 whitespace-nowrap">{{fmtTime .CreatedAt}}</span>
-    {{template "remove-btn" (map "URL" (printf "/admin/services/%d" .ID) "Target" "#services-body" "Confirm" (printf "Remove service %s?" .Name))}}
   </div>
 </div>
 {{else}}

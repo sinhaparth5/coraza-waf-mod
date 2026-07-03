@@ -203,6 +203,7 @@ func (db *DB) migrate() error {
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_burst INTEGER NOT NULL DEFAULT 0`) //nolint
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN bot_mode TEXT NOT NULL DEFAULT 'inherit'`)    //nolint
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN cert_id INTEGER NOT NULL DEFAULT 0`)          //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_enabled INTEGER NOT NULL DEFAULT 0`)    //nolint
 	db.conn.Exec(`ALTER TABLE ip_rules ADD COLUMN note TEXT NOT NULL DEFAULT ''`)               //nolint
 
 	_, err := db.conn.Exec(`
@@ -280,7 +281,8 @@ func (db *DB) migrate() error {
 		rate_limit_rps   REAL NOT NULL DEFAULT 0,
 		rate_limit_burst INTEGER NOT NULL DEFAULT 0,
 		bot_mode         TEXT NOT NULL DEFAULT 'inherit',
-		cert_id          INTEGER NOT NULL DEFAULT 0
+		cert_id          INTEGER NOT NULL DEFAULT 0,
+		cache_enabled    INTEGER NOT NULL DEFAULT 0
 	);
 
 	CREATE TABLE IF NOT EXISTS certificates (
@@ -473,6 +475,65 @@ func (db *DB) SetAutobanConfig(cfg AutobanConfig) error {
 	return db.setMeta("autoban_window_min", strconv.Itoa(cfg.WindowMinutes))
 }
 
+// ── Varnish cache config ─────────────────────────────────────────────────────
+
+// VarnishConfig controls the optional Varnish accelerator sitting between the
+// WAF and cache-enabled backends. Stored in the meta table and managed from
+// the Settings page. Traffic makes a loopback round trip:
+//
+//	client → WAF (:80/:443) → varnishd (Addr) → WAF cache-return (ReturnAddr) → backend
+//
+// Cache misses come back to the WAF's cache-return listener, which routes to
+// the real backend from the services table — so the Varnish VCL needs exactly
+// one static backend (ReturnAddr) and never changes when services do. Both
+// addresses must stay loopback-only so nothing reaches the cache, or the
+// return listener's direct-to-backend path, without passing the WAF first.
+type VarnishConfig struct {
+	Enabled    bool
+	Addr       string // host:port of varnishd, e.g. "127.0.0.1:6081"
+	ReturnAddr string // host:port the WAF's cache-return listener binds, e.g. "127.0.0.1:6082"
+}
+
+// DefaultVarnishAddr and DefaultVarnishReturnAddr match the deploy/varnish
+// systemd configuration and the VCL's single backend.
+const (
+	DefaultVarnishAddr       = "127.0.0.1:6081"
+	DefaultVarnishReturnAddr = "127.0.0.1:6082"
+)
+
+func (db *DB) GetVarnishConfig() (VarnishConfig, error) {
+	cfg := VarnishConfig{Addr: DefaultVarnishAddr, ReturnAddr: DefaultVarnishReturnAddr}
+	v, err := db.getMeta("varnish_enabled")
+	if err != nil {
+		return cfg, err
+	}
+	cfg.Enabled = v == "1"
+	if addr, _ := db.getMeta("varnish_addr"); addr != "" {
+		cfg.Addr = addr
+	}
+	if addr, _ := db.getMeta("varnish_return_addr"); addr != "" {
+		cfg.ReturnAddr = addr
+	}
+	return cfg, nil
+}
+
+func (db *DB) SetVarnishConfig(cfg VarnishConfig) error {
+	enabled := "0"
+	if cfg.Enabled {
+		enabled = "1"
+	}
+	if err := db.setMeta("varnish_enabled", enabled); err != nil {
+		return err
+	}
+	if err := db.setMeta("varnish_addr", cfg.Addr); err != nil {
+		return err
+	}
+	if cfg.ReturnAddr == "" {
+		cfg.ReturnAddr = DefaultVarnishReturnAddr
+	}
+	return db.setMeta("varnish_return_addr", cfg.ReturnAddr)
+}
+
 // ── Geo rules ─────────────────────────────────────────────────────────────────
 
 type GeoRule struct {
@@ -543,6 +604,7 @@ type Service struct {
 	RateLimitBurst int
 	BotMode        string // "inherit" | "always" | "off"
 	CertID         int64  // >0 when TLS cert comes from the shared cert pool
+	CacheEnabled   bool   // route clean traffic through the local Varnish cache
 }
 
 func (db *DB) AddService(name, host, prefix, backend string, rps float64, burst int) error {
@@ -614,6 +676,15 @@ func (db *DB) SetServiceRateLimit(id int, rps float64, burst int) error {
 // mode must be one of "inherit", "always", or "off".
 func (db *DB) SetServiceBotMode(id int, mode string) error {
 	_, err := db.conn.Exec(`UPDATE services SET bot_mode = ? WHERE id = ?`, mode, id)
+	return err
+}
+
+// SetServiceCache toggles routing this service's clean traffic through the
+// local Varnish cache. Only takes effect while the global Varnish integration
+// (VarnishConfig.Enabled) is on — the flag is kept independent so per-service
+// choices survive the cache layer being switched off and on.
+func (db *DB) SetServiceCache(id int, enabled bool) error {
+	_, err := db.conn.Exec(`UPDATE services SET cache_enabled = ? WHERE id = ?`, enabled, id)
 	return err
 }
 
@@ -731,7 +802,7 @@ func (db *DB) SetBotSettings(enabled bool, threshold, ttl int) error {
 
 func (db *DB) ListServices() ([]Service, error) {
 	rows, err := db.conn.Query(
-		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id FROM services ORDER BY created_at ASC`,
+		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled FROM services ORDER BY created_at ASC`,
 	)
 	if err != nil {
 		return nil, err
@@ -741,7 +812,7 @@ func (db *DB) ListServices() ([]Service, error) {
 	var out []Service
 	for rows.Next() {
 		var s Service
-		if err := rows.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -753,9 +824,9 @@ func (db *DB) ListServices() ([]Service, error) {
 func (db *DB) GetService(id int) (Service, error) {
 	var s Service
 	err := db.conn.QueryRow(
-		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id FROM services WHERE id = ?`,
+		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled FROM services WHERE id = ?`,
 		id,
-	).Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID)
+	).Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled)
 	return s, err
 }
 
