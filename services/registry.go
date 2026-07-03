@@ -75,15 +75,33 @@ var backendTransport = &http.Transport{
 	ExpectContinueTimeout: 1 * time.Second,
 }
 
+// spoofableHostHeaders are client-controllable headers that frameworks and
+// caches use to reconstruct the request host/URL. Forwarding them into
+// Varnish would let a client poison cache entries with attacker-chosen
+// values (classic X-Forwarded-Host cache poisoning), so they are scrubbed
+// before a request is handed to the cache layer. The proxy itself never
+// relies on them — client identity comes from --trusted-proxies handling.
+var spoofableHostHeaders = []string{
+	"X-Forwarded-Host",
+	"X-Forwarded-Server",
+	"X-Original-URL",
+	"X-Original-Host",
+	"X-Rewrite-URL",
+	"X-Host",
+	"X-HTTP-Host-Override",
+	"Forwarded",
+}
+
 // Registry holds the current service list plus a pre-built reverse proxy
 // per service, refreshed wholesale on Reload.
 type Registry struct {
 	mu        sync.RWMutex
 	list      []storage.Service
 	proxies   map[string]*httputil.ReverseProxy
-	limiters  map[string]*ratelimit.Limiter // service name -> per-service limiter (nil if not configured)
-	certs     map[string]*tls.Certificate   // host (lowercase) -> uploaded custom cert
-	autoHosts map[string]bool               // host (lowercase) -> true if tls_mode == "auto"
+	direct    map[string]*httputil.ReverseProxy // straight-to-backend proxies for the cache-return path
+	limiters  map[string]*ratelimit.Limiter     // service name -> per-service limiter (nil if not configured)
+	certs     map[string]*tls.Certificate       // host (lowercase) -> uploaded custom cert
+	autoHosts map[string]bool                   // host (lowercase) -> true if tls_mode == "auto"
 
 	healthMu sync.RWMutex
 	health   map[string]bool // service name -> reachable; absent = not checked yet
@@ -101,9 +119,14 @@ func (r *Registry) Reload(db *storage.DB) error {
 	if err != nil {
 		return err
 	}
+	vcfg, err := db.GetVarnishConfig()
+	if err != nil {
+		return err
+	}
 
 	reg := r // avoid shadowing by the *http.Request param named "r" below
 	proxies := make(map[string]*httputil.ReverseProxy, len(list))
+	direct := make(map[string]*httputil.ReverseProxy, len(list))
 	for _, s := range list {
 		target, err := url.Parse(s.Backend)
 		if err != nil {
@@ -112,6 +135,34 @@ func (r *Registry) Reload(db *storage.DB) error {
 		}
 		name := s.Name
 		rp := httputil.NewSingleHostReverseProxy(target)
+		if vcfg.Enabled && s.CacheEnabled {
+			// Route this service's clean traffic through the local Varnish
+			// daemon instead of straight to the backend. The stock director
+			// runs first so the path/query are exactly what the backend
+			// expects; then the request is re-targeted at Varnish. Cache
+			// misses come back to the WAF's cache-return listener (see
+			// CacheReturnHandler), which routes to the real backend from
+			// this registry — the VCL never needs a per-service backend.
+			// Spoofable host headers are scrubbed here — after WAF
+			// inspection, before the cache — so no client-controlled host
+			// value can ever become part of a cached response.
+			// X-Cache-Service keys both the cache-hash partition in the VCL
+			// and the return listener's backend lookup; X-Waf-Backend is
+			// diagnostic (varnishlog shows where the miss will land).
+			stock := rp.Director
+			varnishAddr := vcfg.Addr
+			backendHost := target.Host
+			rp.Director = func(req *http.Request) {
+				stock(req)
+				for _, hn := range spoofableHostHeaders {
+					req.Header.Del(hn)
+				}
+				req.Header.Set("X-Cache-Service", name)
+				req.Header.Set("X-Waf-Backend", backendHost)
+				req.URL.Scheme = "http"
+				req.URL.Host = varnishAddr
+			}
+		}
 		rp.Transport = &timedTransport{rt: backendTransport, name: name}
 		// Passive health tracking: no separate probe traffic at all — a
 		// service is marked down the instant a real proxied request fails
@@ -145,6 +196,19 @@ func (r *Registry) Reload(db *storage.DB) error {
 			return nil
 		}
 		proxies[s.Name] = rp
+
+		// Straight-to-backend twin used by the cache-return listener when
+		// Varnish fetches a miss. The target deliberately drops any path
+		// component of the backend URL: the outer director already joined it
+		// before the request went to Varnish, so joining again here would
+		// double it (backend /base + /base/x). Health/response hooks are the
+		// same as the outer proxy — on the cache path this hop is the one
+		// that actually talks to the backend.
+		drp := httputil.NewSingleHostReverseProxy(&url.URL{Scheme: target.Scheme, Host: target.Host})
+		drp.Transport = &timedTransport{rt: backendTransport, name: name}
+		drp.ErrorHandler = rp.ErrorHandler
+		drp.ModifyResponse = rp.ModifyResponse
+		direct[s.Name] = drp
 	}
 
 	certs := make(map[string]*tls.Certificate)
@@ -202,6 +266,7 @@ func (r *Registry) Reload(db *storage.DB) error {
 	oldLimiters := r.limiters
 	r.list = list
 	r.proxies = proxies
+	r.direct = direct
 	r.limiters = newLimiters
 	r.certs = certs
 	r.autoHosts = autoHosts
@@ -287,6 +352,39 @@ func (r *Registry) Proxy(name string) (*httputil.ReverseProxy, bool) {
 	defer r.mu.RUnlock()
 	rp, ok := r.proxies[name]
 	return rp, ok
+}
+
+// CacheReturnHandler serves the loopback listener Varnish fetches cache
+// misses from (VarnishConfig.ReturnAddr). Requests arriving here already
+// passed the full WAF pipeline on the way in — the outer proxy tagged them
+// with X-Cache-Service before handing them to Varnish — so this hop only
+// looks up that service and proxies straight to its backend. It must never
+// be reachable from outside the host: the listener binds loopback, and the
+// peer check below is defense in depth against accidental rebinding.
+func (r *Registry) CacheReturnHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		host, _, err := net.SplitHostPort(req.RemoteAddr)
+		if err != nil {
+			host = req.RemoteAddr
+		}
+		if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		name := req.Header.Get("X-Cache-Service")
+		r.mu.RLock()
+		rp := r.direct[name]
+		r.mu.RUnlock()
+		if rp == nil {
+			// Unknown or missing service tag: either Varnish got traffic
+			// that didn't come from the WAF, or the service was removed
+			// between the outer hop and the miss fetch.
+			http.Error(w, "unknown service", http.StatusNotFound)
+			return
+		}
+		req.Header.Del("X-Waf-Backend")
+		rp.ServeHTTP(w, req)
+	})
 }
 
 // List returns a snapshot of all configured services.

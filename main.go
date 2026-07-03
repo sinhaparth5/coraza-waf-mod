@@ -167,6 +167,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("services registry: %v", err)
 	}
+
+	// Cache-return listener: the single static backend the Varnish VCL points
+	// at. Varnish fetches cache misses here and the registry routes them to
+	// the right backend, so adding/editing services never touches the VCL.
+	// Always started (even with the integration toggled off) so enabling
+	// Varnish from the Settings page needs no restart; it only ever binds
+	// loopback and serves nothing unless Varnish sends traffic.
+	go startCacheReturn(db, registry)
+
 	metrics.SetDB(db)
 	metrics.SetRegistry(registry)
 	metrics.SetLimiter(rl)
@@ -443,6 +452,35 @@ func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db 
 	log.Printf("coraza-waf TLS on %s (waf=%v, apps=%d)", cfg.ListenAddrTLS, cfg.WAF.Enabled, appCount)
 	shutdownOnSignal(e, redirectServer)
 	return e.StartServer(s)
+}
+
+// startCacheReturn binds the loopback listener Varnish fetches cache misses
+// from (services.Registry.CacheReturnHandler routes them to the right
+// backend). Refuses non-loopback addresses outright: this port proxies
+// straight to backends with no WAF pipeline in front, so it must never be
+// reachable off-host. Runs for the life of the process — in-flight miss
+// fetches are children of requests on the main listener, which graceful
+// shutdown already drains.
+func startCacheReturn(db *storage.DB, registry *services.Registry) {
+	vcfg, err := db.GetVarnishConfig()
+	if err != nil {
+		log.Printf("cache-return: read varnish config: %v", err)
+		return
+	}
+	host, _, err := net.SplitHostPort(vcfg.ReturnAddr)
+	if err != nil {
+		log.Printf("cache-return: invalid return address %q: %v", vcfg.ReturnAddr, err)
+		return
+	}
+	if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		log.Printf("cache-return: refusing to bind non-loopback address %q", vcfg.ReturnAddr)
+		return
+	}
+	srv := &http.Server{Addr: vcfg.ReturnAddr, Handler: registry.CacheReturnHandler()}
+	log.Printf("cache-return listener on %s (Varnish miss path)", vcfg.ReturnAddr)
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Printf("cache-return listener: %v", err)
+	}
 }
 
 func shutdownOnSignal(e *echo.Echo, extraServers ...*http.Server) {

@@ -323,6 +323,15 @@
     {{if ne .BotMode "inherit"}}
     <span class="text-[11px] font-semibold {{if eq .BotMode "always"}}bg-purple-100 text-purple-600{{else}}bg-slate-100 text-slate-500{{end}} px-2 py-[2px] rounded-full">Bot: {{.BotMode}}</span>
     {{end}}
+    {{if .CacheEnabled}}
+    <span class="text-[11px] font-semibold bg-sky-100 text-sky-600 px-2 py-[2px] rounded-full">Cached</span>
+    {{end}}
+    <button type="button" class="inline-flex items-center gap-[5px] text-[11px] font-medium {{if .CacheEnabled}}text-sky-500 border-sky-100{{else}}text-slate-500 border-line{{end}} bg-transparent border rounded-full px-3 py-[5px] cursor-pointer font-sans hover:border-slate-400 transition-colors duration-150"
+      hx-post="/admin/services/cache/{{.ID}}" hx-vals='{"enabled":"{{if .CacheEnabled}}0{{else}}1{{end}}"}' hx-target="#services-body" hx-swap="innerHTML"
+      title="{{if .CacheEnabled}}Stop routing this service through Varnish{{else}}Route this service through the local Varnish cache (needs Varnish enabled in Settings){{end}}">
+      <i class="hgi hgi-stroke hgi-rounded hgi-database-01 text-xs"></i>
+      Cache
+    </button>
     <button type="button" class="bot-manage-btn inline-flex items-center gap-[5px] text-[11px] font-medium text-slate-500 bg-transparent border border-line rounded-full px-3 py-[5px] cursor-pointer font-sans hover:border-slate-400 transition-colors duration-150"
       data-id="{{.ID}}" data-name="{{.Name}}" data-mode="{{.BotMode}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-bot text-xs"></i>
