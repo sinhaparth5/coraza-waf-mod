@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"coraza-waf-mod/blocklist"
+	"coraza-waf-mod/challenge"
 	"coraza-waf-mod/config"
 	"coraza-waf-mod/geo"
 	"coraza-waf-mod/proxy"
@@ -395,5 +396,41 @@ func TestRateLimitHeadersPresent(t *testing.T) {
 	}
 	if rec.Header().Get("CZ-RateLimit-Remaining") == "" {
 		t.Error("CZ-RateLimit-Remaining header missing")
+	}
+}
+
+// A /_cz/* request that reaches the catch-all (an unregistered method/path,
+// e.g. HEAD /_cz/challenge — only GET is routed to the challenge page) must
+// 404, never redirect back to the challenge: that 307 points at /_cz/challenge
+// itself, looping the client forever.
+func TestChallengeNamespaceNeverChallengedOrProxied(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK) // should never be reached
+	}))
+	defer backend.Close()
+
+	h := newTestHandler(t, backend)
+	// Threshold 0 = every non-trusted client is challenged, so without the
+	// /_cz/ guard this request would 307.
+	h.ReloadBotProtection(challenge.New("test-secret", 3600, 0))
+	e := echo.New()
+
+	req := httptest.NewRequest(http.MethodHead, "/_cz/challenge", nil)
+	req.Header.Set("X-Real-IP", "198.23.130.204")
+	rec := httptest.NewRecorder()
+	if err := h.Handle(e.NewContext(req, rec)); err != nil {
+		t.Fatalf("Handle returned error: %v", err)
+	}
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("HEAD /_cz/challenge: expected 404, got %d (Location: %q)", rec.Code, rec.Header().Get("Location"))
+	}
+
+	// Sanity check the challenger is actually live: a normal path still 307s.
+	req = httptest.NewRequest(http.MethodGet, "/index.html", nil)
+	req.Header.Set("X-Real-IP", "198.23.130.204")
+	rec = httptest.NewRecorder()
+	_ = h.Handle(e.NewContext(req, rec))
+	if rec.Code != http.StatusTemporaryRedirect {
+		t.Errorf("normal path with active challenger: expected 307, got %d", rec.Code)
 	}
 }
