@@ -35,27 +35,71 @@ func TestVarnishCardRenders(t *testing.T) {
 	}
 }
 
-// TestServicesRowsRenderCacheToggle renders the services table with one
-// cache-enabled and one plain service and checks the badge and per-row toggle.
-func TestServicesRowsRenderCacheToggle(t *testing.T) {
+// TestServicesRowsAreLabelsPlusEdit renders the services table and checks the
+// row layout contract: status badges only, one Edit button per row carrying
+// every data attribute the edit modal populates itself from, and none of the
+// old per-row manage/toggle controls.
+func TestServicesRowsAreLabelsPlusEdit(t *testing.T) {
 	h := &Handler{}
 	if err := h.parseTemplates(); err != nil {
 		t.Fatalf("parse templates: %v", err)
 	}
 
 	views := []ServiceView{
-		{Service: storage.Service{ID: 1, Name: "cdn", Host: "cdn.example.com", Backend: "http://127.0.0.1:3000", TLSMode: "none", BotMode: "inherit", CacheEnabled: true}},
-		{Service: storage.Service{ID: 2, Name: "app", Host: "app.example.com", Backend: "http://127.0.0.1:4000", TLSMode: "none", BotMode: "inherit"}},
+		{Service: storage.Service{ID: 1, Name: "cdn", Host: "cdn.example.com", Backend: "http://127.0.0.1:3000", TLSMode: "none", BotMode: "always", RateLimitRPS: 10, RateLimitBurst: 20, CacheEnabled: true}},
+		{Service: storage.Service{ID: 2, Name: "app", Prefix: "/api", Backend: "http://127.0.0.1:4000", TLSMode: "none", BotMode: "inherit"}},
 	}
 	var buf bytes.Buffer
 	if err := h.tmpls["services"].ExecuteTemplate(&buf, "services-rows", views); err != nil {
 		t.Fatalf("execute services-rows: %v", err)
 	}
 	out := buf.String()
-	if !strings.Contains(out, "Cached") {
-		t.Error("cache-enabled service row missing the Cached badge")
+
+	for _, want := range []string{"Cached", "10/s", "Bot: always", "svc-edit-btn",
+		`data-id="1"`, `data-has-host="1"`, `data-rps="10"`, `data-burst="20"`, `data-mode="always"`, `data-cache="1"`,
+		`data-id="2"`, `data-has-host="0"`, `data-cache="0"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("services-rows output missing %q", want)
+		}
 	}
-	if !strings.Contains(out, "/admin/services/cache/1") || !strings.Contains(out, "/admin/services/cache/2") {
-		t.Error("cache toggle buttons missing for one or both services")
+	for _, gone := range []string{"tls-manage-btn", "rl-manage-btn", "bot-manage-btn", "/admin/services/cache/"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("services-rows still contains removed per-row control %q", gone)
+		}
+	}
+}
+
+// TestServicesPageRendersEditModal executes the full services page and checks
+// the unified edit modal is present with all four setting tabs, their forms,
+// and the danger-zone delete button.
+func TestServicesPageRendersEditModal(t *testing.T) {
+	h := &Handler{}
+	if err := h.parseTemplates(); err != nil {
+		t.Fatalf("parse templates: %v", err)
+	}
+
+	data := map[string]any{
+		"Page":       "services",
+		"Heading":    "Services",
+		"AdminPath":  "/admin",
+		"AlertCount": 0,
+		"Services":   []ServiceView{},
+		"PoolCerts":  nil,
+	}
+	var buf bytes.Buffer
+	if err := h.tmpls["services"].ExecuteTemplate(&buf, "base", data); err != nil {
+		t.Fatalf("execute services template: %v", err)
+	}
+	out := buf.String()
+
+	for _, want := range []string{
+		"svc-modal-overlay", "svc-tabs",
+		`data-tab="ratelimit"`, `data-tab="bot"`, `data-tab="cache"`, `data-tab="tls"`,
+		"rl-form", "bot-form", "svc-cache-form", "tls-pool-form", "tls-upload-form", "tls-auto-form", "tls-clear-form",
+		"svc-delete-btn",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("services page missing edit-modal element %q", want)
+		}
 	}
 }
