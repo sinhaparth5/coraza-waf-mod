@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- `install.sh`: the Varnish systemd drop-in now passes `-F` to `varnishd`.
+  Without it, varnishd daemonized under the stock `Type=notify` unit and systemd
+  terminated the service (`SIGTERM`, exit 0) a fraction of a second after start,
+  so `systemctl start varnish` never stayed running.
 - Threat Intel page: Remove / Sync / Pause buttons no longer break after the
   rows are re-rendered as an HTMX partial (e.g. right after adding a feed). The
   partial now carries `AdminPath`, so the action URLs resolve correctly instead

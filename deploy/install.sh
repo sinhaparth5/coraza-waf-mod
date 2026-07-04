@@ -489,9 +489,12 @@ VCL
 	write_file "${VARNISH_OVERRIDE_DIR}/coraza.conf" <<UNIT
 # Installed by coraza-waf-mod install.sh: bind loopback only — Varnish sits
 # behind the WAF and must never be reachable from outside this host.
+# -F keeps varnishd in the foreground: the stock unit is Type=notify, so
+# without it varnishd daemonizes, the main process exits 0, and systemd tears
+# down the cgroup (SIGTERM) moments after start.
 [Service]
 ExecStart=
-ExecStart=${VARNISHD_BIN} -a 127.0.0.1:6081 -f ${VARNISH_VCL_PATH} -s malloc,256m
+ExecStart=${VARNISHD_BIN} -F -a 127.0.0.1:6081 -f ${VARNISH_VCL_PATH} -s malloc,256m
 UNIT
 
 	run systemctl daemon-reload
