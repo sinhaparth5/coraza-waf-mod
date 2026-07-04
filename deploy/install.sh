@@ -357,6 +357,159 @@ run systemctl enable "${BINARY_NAME}"
 run systemctl restart "${BINARY_NAME}"
 run systemctl enable --now "${BINARY_NAME}-prune.timer"
 
+# ── Varnish cache layer (optional accelerator) ───────────────────────────────
+# Installs and configures Varnish for the WAF's cache integration:
+# client → WAF → varnishd (127.0.0.1:6081) → WAF cache-return (127.0.0.1:6082)
+# → backend. The VCL is static (one fixed backend) and never needs editing
+# when services change — everything is driven from the admin UI. Best-effort:
+# a failure here never breaks the WAF install; caching just stays unavailable.
+
+VARNISH_VCL_PATH="/etc/varnish/default.vcl"
+VARNISH_OVERRIDE_DIR="/etc/systemd/system/varnish.service.d"
+
+echo "==> Setting up Varnish cache layer (optional)"
+
+if ! command -v varnishd >/dev/null 2>&1; then
+	echo "    Varnish not found — installing..."
+	if [ "$DRY_RUN" = "1" ]; then
+		echo "  + (apt-get|dnf|yum) install -y varnish"
+	elif command -v apt-get >/dev/null 2>&1; then
+		apt-get update -qq >/dev/null 2>&1 || true
+		DEBIAN_FRONTEND=noninteractive apt-get install -y varnish >/dev/null 2>&1 \
+			|| echo "    WARNING: apt-get install varnish failed — install it manually later (see deploy/varnish/README.md)"
+	elif command -v dnf >/dev/null 2>&1; then
+		dnf install -y varnish >/dev/null 2>&1 \
+			|| echo "    WARNING: dnf install varnish failed — install it manually later (see deploy/varnish/README.md)"
+	elif command -v yum >/dev/null 2>&1; then
+		yum install -y varnish >/dev/null 2>&1 \
+			|| echo "    WARNING: yum install varnish failed — install it manually later (see deploy/varnish/README.md)"
+	else
+		echo "    WARNING: no supported package manager found — install Varnish manually to use caching"
+	fi
+fi
+
+if [ "$DRY_RUN" = "1" ] || command -v varnishd >/dev/null 2>&1; then
+	VARNISHD_BIN="$(command -v varnishd 2>/dev/null || echo /usr/sbin/varnishd)"
+
+	# Never clobber a hand-written VCL silently: anything not created by this
+	# installer (including the stock package example) is backed up first.
+	if [ "$DRY_RUN" != "1" ] && [ -f "$VARNISH_VCL_PATH" ] && ! grep -q "coraza-waf-mod" "$VARNISH_VCL_PATH"; then
+		echo "    Backing up existing VCL to ${VARNISH_VCL_PATH}.pre-coraza"
+		run cp "$VARNISH_VCL_PATH" "${VARNISH_VCL_PATH}.pre-coraza"
+	fi
+	run mkdir -p /etc/varnish
+	write_file "$VARNISH_VCL_PATH" <<'VCL'
+vcl 4.1;
+
+# Installed by the coraza-waf-mod installer. This file is static — adding,
+# editing, or removing services in the WAF admin UI never requires touching
+# it. Cache misses go back to the WAF's cache-return listener, which routes
+# to the right backend from its database:
+#
+#   client -> coraza-waf-mod (:80/:443) -> varnishd (127.0.0.1:6081)
+#          -> coraza-waf-mod cache-return (127.0.0.1:6082) -> backend
+
+import std;
+
+acl local_only {
+    "127.0.0.1";
+    "::1";
+}
+
+backend waf_return {
+    .host = "127.0.0.1";
+    .port = "6082";
+    .connect_timeout        = 5s;
+    .first_byte_timeout     = 15s;
+    .between_bytes_timeout  = 10s;
+}
+
+sub vcl_recv {
+    if (client.ip !~ local_only) {
+        return (synth(403, "Forbidden"));
+    }
+    if (!req.http.X-Cache-Service) {
+        return (synth(400, "Missing service tag"));
+    }
+
+    set req.backend_hint = waf_return;
+
+    if (req.method != "GET" && req.method != "HEAD") {
+        return (pass);
+    }
+
+    # Drop the WAF's challenge-bypass cookie so it can't fragment the cache.
+    if (req.http.Cookie) {
+        set req.http.Cookie = regsuball(req.http.Cookie, "(^|;\s*)cz_bot_ok=[^;]*", "");
+        if (req.http.Cookie ~ "^\s*$") {
+            unset req.http.Cookie;
+        }
+    }
+
+    # Static assets: cache aggressively, ignore cookies.
+    if (req.url ~ "\.(png|jpg|jpeg|gif|webp|avif|css|js|mjs|ico|svg|woff2?|ttf|map)(\?.*)?$") {
+        unset req.http.Cookie;
+        return (hash);
+    }
+
+    # Authenticated / session traffic: never cache.
+    if (req.http.Authorization || req.http.Cookie) {
+        return (pass);
+    }
+
+    return (hash);
+}
+
+sub vcl_hash {
+    # Partition the cache per service.
+    hash_data(req.http.X-Cache-Service);
+}
+
+sub vcl_backend_response {
+    if (beresp.http.Set-Cookie) {
+        set beresp.uncacheable = true;
+        return (deliver);
+    }
+    if (beresp.ttl < 120s && bereq.url ~ "\.(png|jpg|jpeg|gif|webp|avif|css|js|mjs|ico|svg|woff2?|ttf)(\?.*)?$") {
+        set beresp.ttl = 1h;
+    }
+    set beresp.grace = 30s;
+}
+
+sub vcl_deliver {
+    if (obj.hits > 0) {
+        set resp.http.X-Cache = "HIT";
+    } else {
+        set resp.http.X-Cache = "MISS";
+    }
+}
+VCL
+
+	run mkdir -p "$VARNISH_OVERRIDE_DIR"
+	write_file "${VARNISH_OVERRIDE_DIR}/coraza.conf" <<UNIT
+# Installed by coraza-waf-mod install.sh: bind loopback only — Varnish sits
+# behind the WAF and must never be reachable from outside this host.
+[Service]
+ExecStart=
+ExecStart=${VARNISHD_BIN} -a 127.0.0.1:6081 -f ${VARNISH_VCL_PATH} -s malloc,256m
+UNIT
+
+	run systemctl daemon-reload
+	if [ "$DRY_RUN" = "1" ]; then
+		run systemctl enable --now varnish
+		run systemctl restart varnish
+	else
+		systemctl enable --now varnish >/dev/null 2>&1 || true
+		systemctl restart varnish \
+			|| echo "    WARNING: varnish failed to start — check: journalctl -u varnish"
+	fi
+	echo "    Varnish ready on 127.0.0.1:6081 — turn it on in the admin UI:"
+	echo "    Settings → Varnish Cache, then toggle Cache per service."
+else
+	echo "    Varnish unavailable — the WAF runs fine without it; caching stays off."
+fi
+echo
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 
 INSTALLED_VERSION="$("${INSTALL_PATH}" --version 2>/dev/null || echo "${CORAZA_VERSION}")"

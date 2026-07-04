@@ -108,27 +108,79 @@
   goToStep(1);
 })();
 
-// TLS modal — manage upload/auto-issue/clear for a single service row.
-// Self-contained so it works even on pages without the add-service wizard.
+// Edit-service modal — one popup for every per-service setting (rate limit,
+// bot mode, cache, TLS) plus removal. Rows carry labels only + an Edit button.
 (function () {
-  var overlay = document.getElementById('tls-modal-overlay');
+  var overlay = document.getElementById('svc-modal-overlay');
   if (!overlay) return;
 
-  var nameLabel = document.getElementById('tls-modal-service-name');
-  var closeBtn = document.getElementById('tls-modal-close');
-  var poolForm = document.getElementById('tls-pool-form');
-  var uploadForm = document.getElementById('tls-upload-form');
-  var autoForm = document.getElementById('tls-auto-form');
-  var clearForm = document.getElementById('tls-clear-form');
-  var actionRadios = overlay.querySelectorAll('input[name="tls_action"]');
-  var error = document.getElementById('tls-error');
+  var nameLabel = document.getElementById('svc-modal-service-name');
+  var closeBtn = document.getElementById('svc-modal-close');
+  var tabBtns = overlay.querySelectorAll('.svc-tab-btn');
+  var tabs = overlay.querySelectorAll('.svc-tab');
 
-  function openModal(id, name) {
-    document.querySelectorAll('.tls-service-id').forEach(function (input) {
-      input.value = id;
+  var rlIdInput = document.getElementById('rl-service-id');
+  var rpsInput = document.getElementById('rl-rps');
+  var burstInput = document.getElementById('rl-burst');
+  var botForm = document.getElementById('bot-form');
+  var botIdInput = document.getElementById('bot-service-id');
+  var cacheForm = document.getElementById('svc-cache-form');
+  var cacheToggle = document.getElementById('svc-cache-enabled');
+  var deleteBtn = document.getElementById('svc-delete-btn');
+
+  function showTab(name) {
+    tabs.forEach(function (tab) {
+      tab.classList.toggle('hidden', tab.dataset.tab !== name);
     });
-    nameLabel.textContent = name;
-    error.textContent = '';
+    tabBtns.forEach(function (btn) {
+      var active = btn.dataset.tab === name;
+      btn.classList.toggle('bg-white', active);
+      btn.classList.toggle('shadow', active);
+      btn.classList.toggle('text-slate-900', active);
+      btn.classList.toggle('bg-transparent', !active);
+      btn.classList.toggle('text-slate-500', !active);
+    });
+  }
+
+  tabBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () { showTab(btn.dataset.tab); });
+  });
+
+  function openModal(d) {
+    var adminPath = botForm.dataset.adminPath || '/admin';
+    nameLabel.textContent = d.name;
+
+    rlIdInput.value = d.id;
+    rpsInput.value = parseFloat(d.rps) > 0 ? d.rps : '';
+    burstInput.value = parseInt(d.burst) > 0 ? d.burst : '';
+
+    botIdInput.value = d.id;
+    botForm.setAttribute('hx-post', adminPath + '/services/bot/' + d.id);
+    htmx.process(botForm);
+    var radio = overlay.querySelector('input[name="bot_mode"][value="' + (d.mode || 'inherit') + '"]');
+    if (radio) radio.checked = true;
+
+    cacheForm.setAttribute('hx-post', adminPath + '/services/cache/' + d.id);
+    htmx.process(cacheForm);
+    cacheToggle.checked = d.cache === '1';
+
+    document.querySelectorAll('.tls-service-id').forEach(function (input) {
+      input.value = d.id;
+    });
+    // TLS termination resolves certs by SNI, which needs a domain — the tab
+    // only applies to host-matched services.
+    overlay.querySelector('.svc-tab-btn[data-tab="tls"]').classList.toggle('hidden', d.hasHost !== '1');
+
+    deleteBtn.setAttribute('hx-delete', '/admin/services/' + d.id);
+    deleteBtn.setAttribute('hx-confirm', 'Remove service ' + d.name + '?');
+    htmx.process(deleteBtn);
+
+    ['tls-error', 'rl-error', 'bot-error', 'svc-cache-error'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = '';
+    });
+
+    showTab('ratelimit');
     overlay.classList.remove('hidden');
   }
 
@@ -137,29 +189,44 @@
   }
 
   document.addEventListener('click', function (e) {
-    var btn = e.target.closest('.tls-manage-btn');
-    if (btn) openModal(btn.dataset.id, btn.dataset.name);
+    var btn = e.target.closest('.svc-edit-btn');
+    if (btn) openModal(btn.dataset);
   });
 
   closeBtn.addEventListener('click', closeModal);
   overlay.addEventListener('click', function (e) {
     if (e.target === overlay) closeModal();
   });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closeModal();
+  });
 
+  // TLS action radios switch between the pool / upload / auto forms.
+  var poolForm = document.getElementById('tls-pool-form');
+  var uploadForm = document.getElementById('tls-upload-form');
+  var autoForm = document.getElementById('tls-auto-form');
   function syncTLSForms() {
     var val = (overlay.querySelector('input[name="tls_action"]:checked') || {}).value;
     if (poolForm) poolForm.classList.toggle('hidden', val !== 'pool');
     uploadForm.classList.toggle('hidden', val !== 'upload');
     autoForm.classList.toggle('hidden', val !== 'auto');
   }
-
-  actionRadios.forEach(function (radio) {
+  overlay.querySelectorAll('input[name="tls_action"]').forEach(function (radio) {
     radio.addEventListener('change', syncTLSForms);
   });
   syncTLSForms();
 
-  // Server fires this (via HX-Trigger) after a successful save/clear.
+  // Close on success. The TLS and rate-limit handlers signal success with
+  // explicit HX-Trigger events — their error paths also return 200,
+  // retargeted into the in-modal error boxes, so a bare afterRequest can't
+  // be trusted for them. The bot/cache forms and the delete button return
+  // real error statuses, so afterRequest.successful is meaningful there.
   document.body.addEventListener('tls-saved', closeModal);
+  document.body.addEventListener('rl-saved', closeModal);
+  document.body.addEventListener('htmx:afterRequest', function (e) {
+    var elt = e.detail.elt;
+    if ((elt === botForm || elt === cacheForm || elt === deleteBtn) && e.detail.successful) closeModal();
+  });
 })();
 
 // ACME email modal — shown when auto-TLS is requested but no email is stored.
@@ -194,84 +261,7 @@
   // Server fires this after SaveAcmeEmail succeeds — close both modals.
   document.body.addEventListener('acme-email-saved', function () {
     closeModal();
-    var tlsOverlay = document.getElementById('tls-modal-overlay');
-    if (tlsOverlay) tlsOverlay.classList.add('hidden');
-  });
-})();
-
-// Rate Limit modal — set or clear per-service rate limiting.
-(function () {
-  var overlay = document.getElementById('rl-modal-overlay');
-  if (!overlay) return;
-
-  var nameLabel = document.getElementById('rl-modal-service-name');
-  var closeBtn  = document.getElementById('rl-modal-close');
-  var idInput   = document.getElementById('rl-service-id');
-  var rpsInput  = document.getElementById('rl-rps');
-  var burstInput = document.getElementById('rl-burst');
-
-  function openModal(id, name, rps, burst) {
-    idInput.value    = id;
-    nameLabel.textContent = name;
-    rpsInput.value   = rps > 0 ? rps : '';
-    burstInput.value = burst > 0 ? burst : '';
-    overlay.classList.remove('hidden');
-    rpsInput.focus();
-  }
-
-  function closeModal() { overlay.classList.add('hidden'); }
-
-  document.addEventListener('click', function (e) {
-    var btn = e.target.closest('.rl-manage-btn');
-    if (btn) openModal(btn.dataset.id, btn.dataset.name,
-                       parseFloat(btn.dataset.rps) || 0,
-                       parseInt(btn.dataset.burst) || 0);
-  });
-
-  closeBtn.addEventListener('click', closeModal);
-  overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closeModal();
-  });
-
-  document.body.addEventListener('rl-saved', closeModal);
-})();
-
-// Bot Protection modal — set per-service bot mode (inherit / always / off).
-(function () {
-  var overlay   = document.getElementById('bot-modal-overlay');
-  if (!overlay) return;
-
-  var nameLabel = document.getElementById('bot-modal-service-name');
-  var closeBtn  = document.getElementById('bot-modal-close');
-  var form      = document.getElementById('bot-form');
-  var idInput   = document.getElementById('bot-service-id');
-
-  function openModal(id, name, mode) {
-    idInput.value = id;
-    nameLabel.textContent = name;
-    var adminPath = form.dataset.adminPath || '/admin';
-    form.setAttribute('hx-post', adminPath + '/services/bot/' + id);
-    htmx.process(form);
-    var radio = overlay.querySelector('input[value="' + (mode || 'inherit') + '"]');
-    if (radio) radio.checked = true;
-    overlay.classList.remove('hidden');
-  }
-
-  function closeModal() { overlay.classList.add('hidden'); }
-
-  document.addEventListener('click', function (e) {
-    var btn = e.target.closest('.bot-manage-btn');
-    if (btn) openModal(btn.dataset.id, btn.dataset.name, btn.dataset.mode);
-  });
-
-  closeBtn.addEventListener('click', closeModal);
-  overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closeModal();
-  });
-
-  document.body.addEventListener('htmx:afterRequest', function (e) {
-    if (e.detail.elt === form && e.detail.successful) closeModal();
+    var svcOverlay = document.getElementById('svc-modal-overlay');
+    if (svcOverlay) svcOverlay.classList.add('hidden');
   });
 })();

@@ -251,6 +251,8 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.DELETE("/certificates/:id", h.DeleteCertificate)
 	g.POST("/services/ratelimit", h.SetServiceRateLimit)
 	g.POST("/services/bot/:id", h.SetServiceBotMode)
+	g.POST("/services/cache/:id", h.SetServiceCache)
+	g.POST("/settings/varnish", h.SaveVarnishConfig)
 	g.POST("/settings/acme-email", h.SaveAcmeEmail)
 	g.POST("/settings/bot", h.SaveBotSettings)
 	g.POST("/settings/ratelimit", h.SaveRateLimitConfig)
@@ -1591,6 +1593,7 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 	}
 	wh, _ := h.db.GetWebhookConfig()
 	ec, _ := h.db.GetEmailConfig()
+	vc, _ := h.db.GetVarnishConfig()
 	return h.render(c, "settings", map[string]any{
 		"AdminEmail":     email,
 		"BotEnabled":     botEnabled,
@@ -1606,6 +1609,8 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 		"EmailSender":    mailer.Sender,
 		"EmailTo":        ec.To,
 		"EmailTokenSet":  ec.Token != "",
+		"VarnishEnabled": vc.Enabled,
+		"VarnishAddr":    vc.Addr,
 	})
 }
 
@@ -1658,6 +1663,70 @@ func (h *Handler) SetServiceBotMode(c echo.Context) error {
 	w := c.Response().Writer
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	return h.tmpls["services"].ExecuteTemplate(w, "services-rows", h.serviceViews())
+}
+
+// SetServiceCache toggles routing one service's clean traffic through the
+// local Varnish cache and rebuilds the registry so it applies immediately.
+func (h *Handler) SetServiceCache(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
+	}
+	enabled := c.FormValue("enabled") == "1"
+	if err := h.db.SetServiceCache(id, enabled); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	if err := h.registry.Reload(h.db); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	w := c.Response().Writer
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return h.tmpls["services"].ExecuteTemplate(w, "services-rows", h.serviceViews())
+}
+
+// SaveVarnishConfig persists the global Varnish accelerator settings and
+// rebuilds the service registry so cache-enabled services are re-targeted
+// (or pointed back at their backends) without a restart. The listen address
+// must be loopback: Varnish sits behind the WAF, and a non-local address
+// would let clients hit the cache with unscrubbed traffic.
+func (h *Handler) SaveVarnishConfig(c echo.Context) error {
+	enabled := c.FormValue("varnish_enabled") == "1"
+	addr := strings.TrimSpace(c.FormValue("varnish_addr"))
+	if addr == "" {
+		addr = storage.DefaultVarnishAddr
+	}
+
+	vErr := ""
+	if host, _, err := net.SplitHostPort(addr); err != nil {
+		vErr = "Address must be host:port, e.g. 127.0.0.1:6081."
+	} else if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		vErr = "Varnish must listen on a loopback address — anything else would let clients bypass the WAF and reach the cache directly."
+	}
+	if vErr == "" {
+		// Preserve the stored cache-return address — it's not exposed on the
+		// form (it must match the installed VCL, and the listener binds it at
+		// startup), so a save must never reset it.
+		stored, _ := h.db.GetVarnishConfig()
+		if err := h.db.SetVarnishConfig(storage.VarnishConfig{Enabled: enabled, Addr: addr, ReturnAddr: stored.ReturnAddr}); err != nil {
+			vErr = "Failed to save: " + err.Error()
+		} else if err := h.registry.Reload(h.db); err != nil {
+			vErr = "Saved, but applying to services failed: " + err.Error()
+		}
+	}
+
+	if vErr != "" {
+		// Revert the displayed state to what is actually stored.
+		if stored, err := h.db.GetVarnishConfig(); err == nil {
+			enabled, addr = stored.Enabled, stored.Addr
+		}
+	}
+	return h.renderPartial(c, "settings", "varnish-card", map[string]any{
+		"AdminPath":      h.cfg.Admin.Path,
+		"VarnishEnabled": enabled,
+		"VarnishAddr":    addr,
+		"VarnishSaveOK":  vErr == "",
+		"VarnishError":   vErr,
+	})
 }
 
 // SaveRateLimitConfig persists the rate-limit backend choice (memory+SQLite or
