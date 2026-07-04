@@ -1075,8 +1075,9 @@ var threatIntelPresets = []struct {
 func (h *Handler) threatIntelData() map[string]any {
 	sources, _ := h.db.ListThreatIntelSources()
 	return map[string]any{
-		"Sources": sources,
-		"Presets": threatIntelPresets,
+		"Sources":   sources,
+		"Presets":   threatIntelPresets,
+		"AdminPath": h.cfg.Admin.Path,
 	}
 }
 
