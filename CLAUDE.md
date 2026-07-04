@@ -29,7 +29,7 @@ make checksums   # sha256sum dist/* -> dist/checksums.txt
 make tag VERSION=v1.0.0  # annotated git tag + push to origin, triggers the GitLab release pipeline
 ```
 
-Run a single test: `go test ./proxy/ -run TestName -v` (substitute the package). Existing tests live in `proxy/`, `ratelimit/`, `ja3/`, `ja4/`, `storage/`, `mailer/`, `autoban/`, `challenge/`, `services/`, and `ui/`.
+Run a single test: `go test ./proxy/ -run TestName -v` (substitute the package). Existing tests live in `proxy/`, `ratelimit/`, `ja3/`, `ja4/`, `storage/`, `mailer/`, `autoban/`, `challenge/`, `services/`, and `ui/`. Run `gofmt` on changed Go files; the existing tests are table-driven (e.g. `TestRegistryMatchPrefixPriority`), so add cases next to the package being changed in that style.
 
 **Runtime CLI flags** (passed directly to the binary, not config.yaml):
 
@@ -90,7 +90,7 @@ Request logs are not kept forever, but pruning is **not** automatic inside the r
 
 **Rate limiting** (`ratelimit/`): the `Backend` interface (`Allow`, `TrackedIPs`, `Stop`) is satisfied by both `*Limiter` (in-process token bucket) and `*RedisBackend` (Lua-script atomic token bucket in Redis). The active backend is stored in `proxy.Handler.ratelimit` behind a `ratelimitMu sync.RWMutex`. `Limiter` has `Snapshot`/`RestoreFrom`/`StartPersistence(StateStore)` for SQLite write-back (every 10s), so token-bucket state survives restarts. `RedisBackend` fails open on Redis unavailability. `PingRedis(addr, password)` tests connectivity without creating a persistent client. Per-service limiters in `services.Registry` always use `*Limiter` (distribution not needed at the service level). The active backend choice (memory vs. Redis) and Redis credentials are stored in the DB `meta` table — not config.yaml.
 
-**Metrics** (`metrics/metrics.go`): Prometheus exposition format, served at `{admin.path}/metrics`. `proxy/handler.go` increments `IPBlockedTotal`/`GeoBlockedTotal`/`WAFBlockedTotal`/`RateLimitedTotal`/`BotChallengedTotal` at the exact decision point. `coraza_log_queue_depth` and `coraza_services_total` are `GaugeFunc`s that read live state on every scrape rather than via a polling goroutine.
+**Metrics** (`metrics/metrics.go`): Prometheus exposition format, served at `{admin.path}/metrics`. The route is registered on the admin Echo group (`ui/handlers.go:Register`), so it sits behind the same **session-cookie auth + CSRF middleware** as every other admin page — it is *not* open and *not* HTTP Basic Auth, so a Prometheus scrape config cannot authenticate to it with a username/password alone (the README's "supports basic auth natively" note is inaccurate). `proxy/handler.go` increments `IPBlockedTotal`/`GeoBlockedTotal`/`WAFBlockedTotal`/`RateLimitedTotal`/`BotChallengedTotal` at the exact decision point. `coraza_log_queue_depth` and `coraza_services_total` are `GaugeFunc`s that read live state on every scrape rather than via a polling goroutine.
 
 **GeoIP database is bundled, not fetched.** `geo/GeoLite2-Country.mmdb` is `//go:embed`-ed via `geo/embedded.go` and used by `geo.New()` whenever `config.yaml`'s `geo.db_path` is empty, so the binary blocks by country out of the box with no MaxMind account or download step. Setting `geo.db_path` to a real file path overrides the bundled copy.
 
