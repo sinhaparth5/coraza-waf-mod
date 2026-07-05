@@ -167,6 +167,47 @@ type verifyRequest struct {
 	// library failed/was blocked. Optional: the PoW alone passes the
 	// challenge; the fingerprint only enriches logging.
 	VisitorID string `json:"visitor_id"`
+	// Automation is the list of automated-browser leakage signals the
+	// challenge page detected (navigator.webdriver, ChromeDriver cdc_ arrays,
+	// Selenium/Puppeteer/Playwright globals, HeadlessChrome UA, ...). A real
+	// browser reports none of these; any recognized signal means we refuse
+	// the bypass cookie so the client stays challenged. See knownAutomationSignals.
+	Automation []string `json:"automation"`
+}
+
+// knownAutomationSignals is the set of leakage tokens the challenge page can
+// report. Only tokens in this set count toward a block — a client can't stuff
+// arbitrary strings to influence the decision, and unknown tokens (from a
+// newer/older page) are ignored rather than trusted. These artifacts do not
+// exist in a genuine, human-driven browser, so any single one is decisive.
+//
+// This is client-side detection: a determined attacker who reads this JS can
+// strip the signals before POSTing. It is not meant to stop that — it stops
+// off-the-shelf browser-driven scanners (OWASP ZAP's Chrome mode, Selenium,
+// Puppeteer, Playwright) that leak these markers by default, and it composes
+// with the autoban scorer: a client we refuse loops the challenge and is
+// eventually IP-banned for the repeated unsolved bot_challenge redirects.
+var knownAutomationSignals = map[string]bool{
+	"webdriver":     true, // navigator.webdriver === true (WebDriver spec flag)
+	"cdc":           true, // ChromeDriver cdc_/$cdc_ injected arrays
+	"domautomation": true, // window.domAutomation(Controller) — ChromeDriver
+	"selenium":      true, // __selenium_*/__webdriver_* globals & attributes
+	"phantom":       true, // PhantomJS _phantom/callPhantom/__phantomas
+	"nightmare":     true, // Nightmare.js __nightmare
+	"puppeteer":     true, // Puppeteer markers
+	"playwright":    true, // Playwright __playwright/__pw_* globals
+	"headless":      true, // HeadlessChrome in the User-Agent
+}
+
+// firstAutomationSignal returns the first recognized automation-leakage token
+// in sigs, or "" if none are recognized. Unknown tokens are ignored.
+func firstAutomationSignal(sigs []string) string {
+	for _, s := range sigs {
+		if knownAutomationSignals[s] {
+			return s
+		}
+	}
+	return ""
 }
 
 // ServeVerify handles POST /_cz/verify: authenticates the token, checks the
@@ -187,6 +228,15 @@ func (c *Challenger) ServeVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	if !verifyPoW(req.Nonce, req.Solution) {
 		http.Error(w, "incorrect solution", http.StatusForbidden)
+		return
+	}
+	// Automated-browser gate: a valid PoW solution only proves the client can
+	// run JavaScript, which headless Chrome / Selenium / Puppeteer all do. If
+	// the page reported any automation-leakage signal, refuse the bypass cookie
+	// so the client keeps hitting the challenge (and accrues autoban points)
+	// instead of being trusted for high-velocity scraping.
+	if sig := firstAutomationSignal(req.Automation); sig != "" {
+		http.Error(w, "automation detected", http.StatusForbidden)
 		return
 	}
 	c.issueCookie(w, sanitizeVisitorID(req.VisitorID))

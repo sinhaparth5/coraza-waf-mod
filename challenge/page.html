@@ -180,6 +180,50 @@
     msg.textContent = text;
   }
 
+  // Automated-browser leakage detection. Real, human-driven browsers expose
+  // none of these; Selenium/Puppeteer/Playwright/PhantomJS and headless Chrome
+  // (OWASP ZAP's browser mode) leak at least one by default. The tokens must
+  // match knownAutomationSignals in challenge.go — the server refuses the
+  // bypass cookie if it receives any of them. Wrapped so a throwing probe on
+  // an exotic browser can never block a legitimate visitor (fail open per-check).
+  function detectAutomation() {
+    var hits = [];
+    function probe(token, fn) {
+      try { if (fn()) hits.push(token); } catch (e) { /* ignore */ }
+    }
+    probe('webdriver', function () { return navigator.webdriver === true; });
+    probe('headless', function () { return /headless/i.test(navigator.userAgent || ''); });
+    probe('domautomation', function () {
+      return 'domAutomation' in window || 'domAutomationController' in window;
+    });
+    probe('cdc', function () {
+      // ChromeDriver injects cdc_* array/promise/symbol shims on window and a
+      // $cdc_* property on document; the exact suffix varies by build.
+      for (var k in window) { if (k.indexOf('cdc_') === 0) return true; }
+      for (var d in document) { if (d.indexOf('$cdc_') === 0 || d.indexOf('cdc_') === 0) return true; }
+      return false;
+    });
+    probe('selenium', function () {
+      return '_selenium' in window || '__selenium_unwrapped' in window ||
+        '__webdriver_evaluate' in window || '__driver_evaluate' in window ||
+        '__webdriver_script_fn' in window || '__selenium_unwrapped' in document ||
+        '__webdriver_unwrapped' in document || '__fxdriver_unwrapped' in document ||
+        (document.documentElement && document.documentElement.getAttribute('webdriver') !== null) ||
+        (document.documentElement && document.documentElement.getAttribute('selenium') !== null);
+    });
+    probe('puppeteer', function () {
+      return '__puppeteer_evaluation_script__' in window;
+    });
+    probe('playwright', function () {
+      return '__playwright' in window || '__pw_manual' in window || '__PW_inspect' in window;
+    });
+    probe('phantom', function () {
+      return '_phantom' in window || 'callPhantom' in window || '__phantomas' in window;
+    });
+    probe('nightmare', function () { return '__nightmare' in window; });
+    return hits;
+  }
+
   // Browser fingerprint (FingerprintJS) — computed while the PoW runs.
   // Never blocks verification: any failure or a 3s timeout yields ''.
   function getVisitorId() {
@@ -209,7 +253,7 @@
       return fetch('/_cz/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nonce: cfg.nonce, exp: cfg.exp, sig: cfg.sig, solution: results[0], visitor_id: results[1] })
+        body: JSON.stringify({ nonce: cfg.nonce, exp: cfg.exp, sig: cfg.sig, solution: results[0], visitor_id: results[1], automation: detectAutomation() })
       });
     })
     .then(function (resp) {

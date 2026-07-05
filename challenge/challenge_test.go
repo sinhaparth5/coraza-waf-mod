@@ -131,6 +131,69 @@ func TestVerifyFlowEndToEnd(t *testing.T) {
 	}
 }
 
+func TestFirstAutomationSignal(t *testing.T) {
+	cases := []struct {
+		name string
+		in   []string
+		want string
+	}{
+		{"none", nil, ""},
+		{"empty slice", []string{}, ""},
+		{"single known", []string{"webdriver"}, "webdriver"},
+		{"unknown ignored", []string{"totally-legit", "chrome"}, ""},
+		{"known after unknown", []string{"junk", "cdc"}, "cdc"},
+		{"first known wins", []string{"selenium", "phantom"}, "selenium"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := firstAutomationSignal(tc.in); got != tc.want {
+				t.Errorf("firstAutomationSignal(%v) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestVerifyRefusesAutomation posts a fully valid, solved challenge that also
+// reports an automation-leakage signal, and checks the server refuses the
+// bypass cookie (so the client stays challenged and can't scrape).
+func TestVerifyRefusesAutomation(t *testing.T) {
+	c := New("secret", 3600, 5)
+	nonce := "6175746f6d6174"
+	exp := time.Now().Unix() + 120
+
+	post := func(automation []string) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(map[string]any{
+			"nonce":      nonce,
+			"exp":        exp,
+			"sig":        c.signNonce(nonce, exp),
+			"solution":   solvePoW(nonce),
+			"visitor_id": testVisitorID,
+			"automation": automation,
+		})
+		rec := httptest.NewRecorder()
+		c.ServeVerify(rec, httptest.NewRequest(http.MethodPost, "/_cz/verify", bytes.NewReader(body)))
+		return rec
+	}
+
+	// A leaked automation signal must be refused with no cookie issued.
+	rec := post([]string{"webdriver"})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("verify with webdriver signal returned %d, want 403", rec.Code)
+	}
+	if len(rec.Result().Cookies()) != 0 {
+		t.Fatal("no bypass cookie must be issued to an automated browser")
+	}
+
+	// An unrecognized token is ignored — a genuine solve still passes.
+	rec = post([]string{"just-a-normal-string"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("verify with unknown token returned %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if len(rec.Result().Cookies()) != 1 {
+		t.Fatal("valid solve with no real automation signal must issue a cookie")
+	}
+}
+
 // TestServePageRenders requests a real signed challenge URL and checks the
 // page renders with the visitor's host, the reference ID, and the logo.
 func TestServePageRenders(t *testing.T) {
@@ -150,6 +213,7 @@ func TestServePageRenders(t *testing.T) {
 		"Reference ID:",         // nonce-derived support reference
 		"/_cz/logo.svg",         // favicon + wordmark + footer logo
 		"/_cz/fp.js",            // fingerprint bundle still loaded
+		"detectAutomation",      // automated-browser leakage probe ships in the page
 		"Checking your browser", // headline copy
 	} {
 		if !strings.Contains(body, want) {
