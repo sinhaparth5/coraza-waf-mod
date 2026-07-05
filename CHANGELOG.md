@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Bot challenge now detects automated browsers. The challenge page probes for
+  automation-leakage markers (`navigator.webdriver`, ChromeDriver `cdc_`/`$cdc_`
+  arrays, `domAutomationController`, Selenium/Puppeteer/Playwright/PhantomJS/
+  Nightmare globals, `HeadlessChrome` UA) and reports them with the proof-of-work
+  solution; the server refuses the bypass cookie when any is present. Headless
+  scanners (e.g. OWASP ZAP's browser-driven mode) that previously solved the PoW
+  and earned a trusted session are now kept at the challenge — where the autoban
+  scorer eventually bans the IP for the repeated unsolved redirects.
+
 ### Fixed
 - `install.sh`: the Varnish systemd drop-in now passes `-F` to `varnishd`.
   Without it, varnishd daemonized under the stock `Type=notify` unit and systemd
