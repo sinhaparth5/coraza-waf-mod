@@ -1685,6 +1685,45 @@ func (db *DB) SetRedisConfig(addr, password string) error {
 	return db.setMeta("redis_password", password)
 }
 
+// GetRateLimitSettings reads the global per-client-IP rate limit from the
+// meta table. Returns defaults (disabled, 10 rps, burst 20) if never saved
+// from the Settings page — global limiting is opt-in like bot protection,
+// since a surprise default limit could 429 legitimate NAT'd traffic where
+// many users share one IP. Both the memory and Redis backends are built
+// from these values.
+func (db *DB) GetRateLimitSettings() (enabled bool, rps float64, burst int, err error) {
+	rps, burst = 10, 20
+	if v, e := db.getMeta("ratelimit_enabled"); e == nil {
+		enabled = v == "1"
+	}
+	if v, e := db.getMeta("ratelimit_rps"); e == nil && v != "" {
+		if f, e2 := strconv.ParseFloat(v, 64); e2 == nil && f > 0 {
+			rps = f
+		}
+	}
+	if v, e := db.getMeta("ratelimit_burst"); e == nil && v != "" {
+		if n, e2 := strconv.Atoi(v); e2 == nil && n > 0 {
+			burst = n
+		}
+	}
+	return
+}
+
+// SetRateLimitSettings persists the global rate limit to the meta table.
+func (db *DB) SetRateLimitSettings(enabled bool, rps float64, burst int) error {
+	v := "0"
+	if enabled {
+		v = "1"
+	}
+	if err := db.setMeta("ratelimit_enabled", v); err != nil {
+		return err
+	}
+	if err := db.setMeta("ratelimit_rps", strconv.FormatFloat(rps, 'f', -1, 64)); err != nil {
+		return err
+	}
+	return db.setMeta("ratelimit_burst", strconv.Itoa(burst))
+}
+
 // ── Threat intelligence ───────────────────────────────────────────────────────
 
 // ThreatIntelSource is one row from threat_intel_sources.
