@@ -1548,9 +1548,29 @@ func (db *DB) CheckAdminPassword(password string) (bool, error) {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil, nil
 }
 
+// PruneExpiredSessions deletes session rows past sessionTTL and returns how
+// many were removed. Expiry is otherwise only enforced at read time in
+// ValidateSession, so abandoned sessions (browser closed without logging
+// out) would accumulate forever. created_at is RFC3339 UTC, which compares
+// chronologically as a plain string — no SQLite date functions needed.
+func (db *DB) PruneExpiredSessions() (int64, error) {
+	cutoff := time.Now().UTC().Add(-sessionTTL).Format(time.RFC3339)
+	res, err := db.conn.Exec(`DELETE FROM sessions WHERE created_at < ?`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // CreateSession generates a random token, stores it, and returns it for use
 // as a session cookie value.
 func (db *DB) CreateSession() (string, error) {
+	// Opportunistically sweep expired rows — logins are the only way the
+	// table grows, so pruning here keeps it bounded without a background
+	// goroutine (the prune CLI covers deployments that never log in again).
+	if _, err := db.PruneExpiredSessions(); err != nil {
+		log.Printf("session prune: %v", err)
+	}
 	b := make([]byte, 32)
 	rand.Read(b) //nolint — never errors on modern platforms
 	token := hex.EncodeToString(b)
