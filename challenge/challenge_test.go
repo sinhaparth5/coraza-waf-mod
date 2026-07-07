@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -243,4 +244,45 @@ func newTestMAC(secret, input string) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	fmt.Fprint(mac, input)
 	return hex.EncodeToString(mac.Sum(nil)[:16])
+}
+
+// TestBypassCookieSecureFlag checks the bypass cookie carries the Secure flag
+// exactly when the solve arrived over TLS (directly or via a trusted
+// TLS-terminating proxy's X-Forwarded-Proto), and never on plain HTTP.
+func TestBypassCookieSecureFlag(t *testing.T) {
+	c := New("secret", 3600, 5)
+
+	solve := func(mutate func(*http.Request)) *http.Cookie {
+		t.Helper()
+		nonce := "74657374"
+		exp := time.Now().Unix() + 120
+		body, _ := json.Marshal(map[string]any{
+			"nonce":    nonce,
+			"exp":      exp,
+			"sig":      c.signNonce(nonce, exp),
+			"solution": solvePoW(nonce),
+		})
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/_cz/verify", bytes.NewReader(body))
+		mutate(req)
+		c.ServeVerify(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("verify returned %d: %s", rec.Code, rec.Body.String())
+		}
+		cookies := rec.Result().Cookies()
+		if len(cookies) != 1 {
+			t.Fatalf("expected 1 cookie, got %d", len(cookies))
+		}
+		return cookies[0]
+	}
+
+	if ck := solve(func(r *http.Request) {}); ck.Secure {
+		t.Error("plain-HTTP solve issued a Secure cookie — browsers would drop it")
+	}
+	if ck := solve(func(r *http.Request) { r.TLS = &tls.ConnectionState{} }); !ck.Secure {
+		t.Error("TLS solve issued a cookie without the Secure flag")
+	}
+	if ck := solve(func(r *http.Request) { r.Header.Set("X-Forwarded-Proto", "https") }); !ck.Secure {
+		t.Error("X-Forwarded-Proto https solve issued a cookie without the Secure flag")
+	}
 }
