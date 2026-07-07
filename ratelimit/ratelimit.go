@@ -63,7 +63,8 @@ type Limiter struct {
 	mu      sync.Mutex
 	buckets map[string]*bucket
 
-	stop chan struct{}
+	stop     chan struct{}
+	stopOnce sync.Once
 }
 
 // NewWithParams builds an always-enabled Limiter directly from RPS and burst
@@ -150,10 +151,12 @@ func (l *Limiter) TrackedIPs() int {
 	return len(l.buckets)
 }
 
-// Stop terminates the janitor goroutine. Safe to call on a disabled Limiter.
+// Stop terminates the janitor goroutine. Safe to call on a disabled Limiter,
+// and safe to call more than once — a backend can be stopped by a hot reload
+// and again during shutdown, so double-stopping must not panic.
 func (l *Limiter) Stop() {
 	if l.stop != nil {
-		close(l.stop)
+		l.stopOnce.Do(func() { close(l.stop) })
 	}
 }
 

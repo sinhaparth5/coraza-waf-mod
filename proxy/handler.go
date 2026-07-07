@@ -124,6 +124,20 @@ func (h *Handler) ReloadRateLimit(backend ratelimit.Backend) {
 	log.Printf("rate limit backend reloaded")
 }
 
+// StopRateLimit stops whichever rate-limit backend is currently active. Call
+// this once during process shutdown instead of holding onto the backend
+// passed to NewHandler — ReloadRateLimit may have swapped it out any number
+// of times since startup, and stopping a stale reference would both panic on
+// a backend already stopped by a reload and leak the actually-active one.
+func (h *Handler) StopRateLimit() {
+	h.ratelimitMu.RLock()
+	rl := h.ratelimit
+	h.ratelimitMu.RUnlock()
+	if rl != nil {
+		rl.Stop()
+	}
+}
+
 // NewHandler builds the proxy pipeline. Pass nil for ch to disable bot
 // protection / JS challenge (the default when bot_protection.enabled = false).
 func NewHandler(registry *services.Registry, engine *waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, rl ratelimit.Backend, asnLookup *asn.Lookup, ch *challenge.Challenger, trustedProxyCIDRs ...string) *Handler {
