@@ -252,9 +252,12 @@ func newTestMAC(secret, input string) string {
 func TestBypassCookieSecureFlag(t *testing.T) {
 	c := New("secret", 3600, 5)
 
+	solveN := 0
 	solve := func(mutate func(*http.Request)) *http.Cookie {
 		t.Helper()
-		nonce := "74657374"
+		// Distinct nonce per solve — each one is single-use.
+		solveN++
+		nonce := fmt.Sprintf("securetest%02d", solveN)
 		exp := time.Now().Unix() + 120
 		body, _ := json.Marshal(map[string]any{
 			"nonce":    nonce,
@@ -284,5 +287,48 @@ func TestBypassCookieSecureFlag(t *testing.T) {
 	}
 	if ck := solve(func(r *http.Request) { r.Header.Set("X-Forwarded-Proto", "https") }); !ck.Secure {
 		t.Error("X-Forwarded-Proto https solve issued a cookie without the Secure flag")
+	}
+}
+
+// TestVerifyReplayRejected solves a challenge once, then replays the exact
+// same (nonce, exp, sig, solution) tuple within its validity window: the
+// first POST mints a cookie, the replay must get 403 and no cookie.
+func TestVerifyReplayRejected(t *testing.T) {
+	c := New("secret", 3600, 5)
+
+	nonce := "7265706c6179"
+	exp := time.Now().Unix() + 120
+	body, _ := json.Marshal(map[string]any{
+		"nonce":    nonce,
+		"exp":      exp,
+		"sig":      c.signNonce(nonce, exp),
+		"solution": solvePoW(nonce),
+	})
+
+	rec := httptest.NewRecorder()
+	c.ServeVerify(rec, httptest.NewRequest(http.MethodPost, "/_cz/verify", bytes.NewReader(body)))
+	if rec.Code != http.StatusOK || len(rec.Result().Cookies()) != 1 {
+		t.Fatalf("first solve: code=%d cookies=%d, want 200 with 1 cookie", rec.Code, len(rec.Result().Cookies()))
+	}
+
+	rec = httptest.NewRecorder()
+	c.ServeVerify(rec, httptest.NewRequest(http.MethodPost, "/_cz/verify", bytes.NewReader(body)))
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("replayed solve returned %d, want 403", rec.Code)
+	}
+	if len(rec.Result().Cookies()) != 0 {
+		t.Error("replayed solve must not mint a second bypass cookie")
+	}
+}
+
+// TestVerifyBodyCapped posts an oversized JSON body and checks the decoder
+// stops at the MaxBytesReader cap instead of buffering it.
+func TestVerifyBodyCapped(t *testing.T) {
+	c := New("secret", 3600, 5)
+	huge := `{"nonce":"` + strings.Repeat("a", 1<<20) + `"}`
+	rec := httptest.NewRecorder()
+	c.ServeVerify(rec, httptest.NewRequest(http.MethodPost, "/_cz/verify", strings.NewReader(huge)))
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("oversized verify body returned %d, want 400", rec.Code)
 	}
 }

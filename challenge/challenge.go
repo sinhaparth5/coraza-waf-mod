@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -51,11 +52,20 @@ func sanitizeVisitorID(id string) string {
 	return ""
 }
 
+// usedNonceSweepAt is the map size past which redeemed-nonce bookkeeping is
+// swept of expired entries on insert. Entries only enter the map on a
+// signature-valid solve and expire within the 2-minute challenge window, so
+// this is a tidiness bound, not a hard cap.
+const usedNonceSweepAt = 4096
+
 // Challenger generates, verifies, and cookie-guards JS PoW challenges.
 type Challenger struct {
 	secret    string
 	ttl       int // cookie lifetime in seconds
 	threshold int // anomaly score that triggers a challenge
+
+	mu   sync.Mutex
+	used map[string]int64 // redeemed nonce → its exp; enforces single use
 }
 
 // New creates a Challenger.
@@ -63,7 +73,30 @@ type Challenger struct {
 //   - ttlSeconds: how long the bypass cookie is valid (default 3600 = 1h).
 //   - threshold: bot anomaly score at which a challenge is issued.
 func New(secret string, ttlSeconds, threshold int) *Challenger {
-	return &Challenger{secret: secret, ttl: ttlSeconds, threshold: threshold}
+	return &Challenger{secret: secret, ttl: ttlSeconds, threshold: threshold, used: make(map[string]int64)}
+}
+
+// markNonceUsed records a fully validated solve, returning false when the
+// nonce was already redeemed — a captured (nonce, exp, sig, solution) tuple
+// must not mint more than one bypass cookie within its 2-minute window.
+// Only signature-valid nonces ever reach this map, so it grows at the rate
+// of genuine solves and is swept of expired entries once it gets large.
+func (c *Challenger) markNonceUsed(nonce string, exp int64) bool {
+	now := time.Now().Unix()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.used) >= usedNonceSweepAt {
+		for n, e := range c.used {
+			if now > e {
+				delete(c.used, n)
+			}
+		}
+	}
+	if _, dup := c.used[nonce]; dup {
+		return false
+	}
+	c.used[nonce] = exp
+	return true
 }
 
 // Threshold returns the anomaly score at which a challenge is triggered.
@@ -213,6 +246,9 @@ func firstAutomationSignal(sigs []string) string {
 // ServeVerify handles POST /_cz/verify: authenticates the token, checks the
 // PoW solution, and issues a bypass cookie on success.
 func (c *Challenger) ServeVerify(w http.ResponseWriter, r *http.Request) {
+	// This endpoint is reachable unauthenticated — cap the body so a giant
+	// JSON string can't balloon memory. A real verify payload is <1 KiB.
+	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
 	var req verifyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
@@ -237,6 +273,13 @@ func (c *Challenger) ServeVerify(w http.ResponseWriter, r *http.Request) {
 	// instead of being trusted for high-velocity scraping.
 	if sig := firstAutomationSignal(req.Automation); sig != "" {
 		http.Error(w, "automation detected", http.StatusForbidden)
+		return
+	}
+	// Last check, so a solve rejected above doesn't burn its nonce: each
+	// nonce redeems exactly one cookie — replaying a captured solution
+	// within its 2-minute validity gets a 403 instead of a second cookie.
+	if !c.markNonceUsed(req.Nonce, req.Exp) {
+		http.Error(w, "challenge already used", http.StatusForbidden)
 		return
 	}
 	c.issueCookie(w, r, sanitizeVisitorID(req.VisitorID))
