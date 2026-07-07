@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -1085,6 +1086,24 @@ func (h *Handler) ThreatIntelPage(c echo.Context) error {
 	return h.render(c, "threat_intel", h.threatIntelData())
 }
 
+// validateOutboundURL checks an admin-supplied URL that the server itself
+// will fetch (webhook endpoint, threat-intel source): absolute, http or
+// https only — never a scheme like file: or gopher:. Private/loopback hosts
+// are deliberately allowed: SIEM webhooks and intel mirrors commonly live on
+// the LAN, and the admin can already reach any internal address by pointing
+// a service backend at it, so blocking them here would only break legitimate
+// configs without removing any capability.
+func validateOutboundURL(raw string) error {
+	u, err := neturl.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %v", err)
+	}
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Errorf("URL must be absolute http(s)://host[:port]/…")
+	}
+	return nil
+}
+
 func (h *Handler) AddThreatIntelSource(c echo.Context) error {
 	label := strings.TrimSpace(c.FormValue("label"))
 	url := strings.TrimSpace(c.FormValue("url"))
@@ -1094,6 +1113,9 @@ func (h *Handler) AddThreatIntelSource(c echo.Context) error {
 	}
 	if label == "" || url == "" {
 		return c.String(http.StatusBadRequest, "label and url required")
+	}
+	if err := validateOutboundURL(url); err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
 	}
 	if err := h.db.AddThreatIntelSource(label, url, hours); err != nil {
 		return c.String(http.StatusConflict, "source already exists")
@@ -1820,8 +1842,15 @@ func (h *Handler) SaveWebhookConfig(c echo.Context) error {
 	}
 	cfg := storage.WebhookConfig{URL: url, Secret: secret, Enabled: enabled && url != "", Events: events}
 	saveErr := ""
-	if err := h.db.SetWebhookConfig(cfg); err != nil {
-		saveErr = err.Error()
+	if url != "" {
+		if err := validateOutboundURL(url); err != nil {
+			saveErr = err.Error()
+		}
+	}
+	if saveErr == "" {
+		if err := h.db.SetWebhookConfig(cfg); err != nil {
+			saveErr = err.Error()
+		}
 	}
 	return h.renderPartial(c, "settings", "webhook-card", map[string]any{
 		"AdminPath":      h.cfg.Admin.Path,
