@@ -337,11 +337,8 @@ func (h *Handler) Handle(c echo.Context) error {
 	// untouched for those. Restore the original path before logging so the
 	// admin UI shows what the client actually requested.
 	originalPath := r.URL.Path
-	if app.Prefix != "" && strings.HasPrefix(r.URL.Path, app.Prefix) {
-		r.URL.Path = strings.TrimPrefix(r.URL.Path, app.Prefix)
-		if r.URL.Path == "" {
-			r.URL.Path = "/"
-		}
+	if app.Prefix != "" && services.PrefixMatch(r.URL.Path, app.Prefix) {
+		r.URL.Path = services.StripPrefix(r.URL.Path, app.Prefix)
 		r.URL.RawPath = ""
 	}
 
