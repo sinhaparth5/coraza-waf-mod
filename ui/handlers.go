@@ -27,6 +27,7 @@ import (
 	"coraza-waf-mod/storage"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/text/language"
 	"golang.org/x/text/language/display"
 )
@@ -208,15 +209,23 @@ func (h *Handler) sessionAuth(next echo.HandlerFunc) echo.HandlerFunc {
 func (h *Handler) Register(e *echo.Echo) {
 	base := h.cfg.Admin.Path
 
+	// Cap request bodies before anything reads them: the WAF's
+	// SecRequestBodyLimit only covers proxied traffic, never these routes,
+	// and LoginPost is reachable unauthenticated. 1 MiB is far above any
+	// admin form or PEM chain upload, and Echo returns 413 without buffering
+	// past the cap.
+	bodyLimit := middleware.BodyLimit("1M")
+
 	// Public routes — no session required.
 	e.GET(base+"/login", h.LoginPage)
-	e.POST(base+"/login", h.LoginPost)
+	e.POST(base+"/login", h.LoginPost, bodyLimit)
 	// Static assets are public so the login page can load spirals/JS before auth.
 	e.StaticFS(base+"/static/js", h.staticJS)
 	e.StaticFS(base+"/static/imgs", h.staticImgs)
 
 	g := e.Group(base)
-	g.Use(h.sessionAuth, h.csrfProtect)
+	// bodyLimit must run ahead of csrfProtect, which parses the form body.
+	g.Use(bodyLimit, h.sessionAuth, h.csrfProtect)
 	g.POST("/logout", h.Logout)
 
 	g.GET("/metrics", echo.WrapHandler(metrics.Handler()))

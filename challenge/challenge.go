@@ -213,6 +213,9 @@ func firstAutomationSignal(sigs []string) string {
 // ServeVerify handles POST /_cz/verify: authenticates the token, checks the
 // PoW solution, and issues a bypass cookie on success.
 func (c *Challenger) ServeVerify(w http.ResponseWriter, r *http.Request) {
+	// This endpoint is reachable unauthenticated — cap the body so a giant
+	// JSON string can't balloon memory. A real verify payload is <1 KiB.
+	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
 	var req verifyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
