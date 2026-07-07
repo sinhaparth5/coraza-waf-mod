@@ -26,6 +26,19 @@ type Result struct {
 	Action  string
 }
 
+// requestBodyLimit is the SecRequestBodyLimit value passed to Coraza and the
+// most Check ever buffers of a request body in memory (13107200 = the
+// coraza.conf-recommended default, ~12.5 MiB).
+const requestBodyLimit = 13107200
+
+// bodyReplay lets the proxy forward a body Check only partially buffered:
+// it replays the inspected head from memory, then streams the unread
+// remainder straight from the original request body.
+type bodyReplay struct {
+	io.Reader
+	io.Closer
+}
+
 // New builds a WAF engine with the OWASP CRS loaded.
 // disabledRuleIDs lists CRS rule IDs to suppress via SecRuleRemoveById — used
 // to handle false positives without editing config files or restarting.
@@ -42,17 +55,17 @@ func New(cfg config.WAFConfig, disabledRuleIDs []int) (*Engine, error) {
 	// anything we set before the includes gets silently clobbered back to
 	// those defaults — every rule still matches and scores, but nothing is
 	// ever actually blocked.
-	directives := `
+	directives := fmt.Sprintf(`
 Include @coraza.conf-recommended
 Include @crs-setup.conf.example
 Include @owasp_crs/*.conf
 SecRuleEngine On
 SecRequestBodyAccess On
 SecResponseBodyAccess Off
-SecRequestBodyLimit 13107200
+SecRequestBodyLimit %d
 SecRequestBodyNoFilesLimit 131072
 SecDebugLogLevel 0
-`
+`, requestBodyLimit)
 	if len(disabledRuleIDs) > 0 {
 		ids := make([]string, len(disabledRuleIDs))
 		for i, id := range disabledRuleIDs {
@@ -106,13 +119,29 @@ func (e *Engine) Check(r *http.Request, clientIP string) (*Result, error) {
 		return &Result{Blocked: true, Status: it.Status, RuleID: it.RuleID, Action: it.Action}, nil
 	}
 
-	// Buffer body so Coraza can inspect it and the proxy can still forward it.
+	// Buffer body so Coraza can inspect it and the proxy can still forward
+	// it — but never more than the WAF's own body limit plus one byte: an
+	// uncapped io.ReadAll would allocate a whole multi-GB (or chunked,
+	// no-Content-Length) upload in RAM before SecRequestBodyLimit was ever
+	// consulted, so a handful of concurrent large POSTs could exhaust
+	// memory. The extra byte lets Coraza see that the body exceeds its
+	// limit and apply SecRequestBodyLimitAction itself (Reject → 413 with
+	// the recommended config), keeping the limit logic in one place.
 	if r.Body != nil && r.Body != http.NoBody {
-		body, err := io.ReadAll(r.Body)
+		orig := r.Body
+		body, err := io.ReadAll(io.LimitReader(orig, requestBodyLimit+1))
 		if err != nil {
 			return nil, fmt.Errorf("reading request body: %w", err)
 		}
-		r.Body = io.NopCloser(bytes.NewReader(body))
+		if len(body) > requestBodyLimit {
+			// Over-limit body with more bytes still on the wire: chain the
+			// buffered head with the unread tail so the proxy can forward
+			// the full upload if the configured action is ProcessPartial
+			// rather than Reject.
+			r.Body = &bodyReplay{Reader: io.MultiReader(bytes.NewReader(body), orig), Closer: orig}
+		} else {
+			r.Body = io.NopCloser(bytes.NewReader(body))
+		}
 
 		if it, _, err := tx.WriteRequestBody(body); err != nil {
 			return nil, fmt.Errorf("waf body write: %w", err)
