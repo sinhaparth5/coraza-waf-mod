@@ -239,7 +239,7 @@ func (c *Challenger) ServeVerify(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "automation detected", http.StatusForbidden)
 		return
 	}
-	c.issueCookie(w, sanitizeVisitorID(req.VisitorID))
+	c.issueCookie(w, r, sanitizeVisitorID(req.VisitorID))
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -251,7 +251,16 @@ func verifyPoW(nonce string, solution uint64) bool {
 	return h[0] == 0x00
 }
 
-func (c *Challenger) issueCookie(w http.ResponseWriter, visitorID string) {
+// secureRequest reports whether the bypass cookie should carry the Secure
+// flag: the request arrived over TLS directly or, behind a TLS-terminating
+// proxy, via X-Forwarded-Proto (spoofing that header can only *add* the
+// flag, which locks the spoofer out of plain HTTP — never the reverse).
+// Same rule as the admin UI's secureCookie.
+func secureRequest(r *http.Request) bool {
+	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+func (c *Challenger) issueCookie(w http.ResponseWriter, r *http.Request, visitorID string) {
 	expiry := time.Now().Unix() + int64(c.ttl)
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
@@ -260,6 +269,7 @@ func (c *Challenger) issueCookie(w http.ResponseWriter, visitorID string) {
 		Expires:  time.Unix(expiry, 0),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
+		Secure:   secureRequest(r),
 	})
 }
 
