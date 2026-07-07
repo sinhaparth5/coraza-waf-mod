@@ -806,7 +806,9 @@ func (h *Handler) LogDetail(c echo.Context) error {
 	// Parse headers_json into a plain map for the response.
 	var headers map[string]string
 	if d.HeadersJSON != "" {
-		_ = json.Unmarshal([]byte(d.HeadersJSON), &headers)
+		if err := json.Unmarshal([]byte(d.HeadersJSON), &headers); err != nil {
+			log.Printf("ui: log detail %d: unmarshal headers_json: %v", d.ID, err)
+		}
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
@@ -1260,8 +1262,20 @@ func (h *Handler) AddService(c echo.Context) error {
 		prefix = matchValue
 	}
 
-	rps, _ := strconv.ParseFloat(c.FormValue("rps"), 64)
-	burst, _ := strconv.Atoi(c.FormValue("burst"))
+	var rps float64
+	if v := strings.TrimSpace(c.FormValue("rps")); v != "" {
+		var err error
+		if rps, err = strconv.ParseFloat(v, 64); err != nil {
+			return h.wizardError(c, "Requests/second must be a number.")
+		}
+	}
+	var burst int
+	if v := strings.TrimSpace(c.FormValue("burst")); v != "" {
+		var err error
+		if burst, err = strconv.Atoi(v); err != nil {
+			return h.wizardError(c, "Burst must be a whole number.")
+		}
+	}
 	if rps < 0 {
 		rps = 0
 	}
@@ -1404,7 +1418,9 @@ func (h *Handler) DeleteCertificate(c echo.Context) error {
 		return err
 	}
 	services.DeletePoolCert(id)
-	h.registry.Reload(h.db) //nolint
+	if err := h.registry.Reload(h.db); err != nil {
+		return err
+	}
 	return h.renderCertRows(c)
 }
 
@@ -1585,13 +1601,30 @@ func (h *Handler) ClearServiceTLS(c echo.Context) error {
 	return h.tlsSaved(c)
 }
 
+// rlError mirrors tlsModalError but targets the Rate Limit tab's own error box.
+func (h *Handler) rlError(c echo.Context, msg string) error {
+	c.Response().Header().Set("HX-Retarget", "#rl-error")
+	c.Response().Header().Set("HX-Reswap", "innerHTML")
+	return c.String(http.StatusOK, msg)
+}
+
 func (h *Handler) SetServiceRateLimit(c echo.Context) error {
 	id, err := strconv.Atoi(c.FormValue("service_id"))
 	if err != nil {
 		return c.String(http.StatusBadRequest, "invalid service")
 	}
-	rps, _ := strconv.ParseFloat(c.FormValue("rps"), 64)
-	burst, _ := strconv.Atoi(c.FormValue("burst"))
+	var rps float64
+	if v := strings.TrimSpace(c.FormValue("rps")); v != "" {
+		if rps, err = strconv.ParseFloat(v, 64); err != nil {
+			return h.rlError(c, "Requests/second must be a number.")
+		}
+	}
+	var burst int
+	if v := strings.TrimSpace(c.FormValue("burst")); v != "" {
+		if burst, err = strconv.Atoi(v); err != nil {
+			return h.rlError(c, "Burst must be a whole number.")
+		}
+	}
 	if rps < 0 {
 		rps = 0
 	}
