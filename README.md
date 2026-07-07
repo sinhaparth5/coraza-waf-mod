@@ -1,6 +1,6 @@
 # Coraza WAF Mod
 
-A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraza](https://github.com/corazawaf/coraza) (OWASP CRS) with a built-in admin dashboard. No Docker, no external database, no Node toolchain — one binary, one SQLite file.
+A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraza](https://github.com/corazawaf/coraza) (OWASP CRS) with a built-in admin dashboard. No config file, no external database, no Node toolchain — one binary, one SQLite file, CLI flags for bootstrap settings, everything else from the dashboard. Docker is available for local development but isn't required.
 
 ```
 [Client] → [Coraza WAF + Proxy] → [Backend App(s)]
@@ -17,7 +17,7 @@ A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraz
 - **IP & country blocking** — manual IP allow/block rules plus GeoIP2-based country blocking (MaxMind GeoLite2), with Cloudflare-aware real-IP extraction and opt-in trusted proxy CIDRs for `X-Forwarded-For` / `X-Real-IP`.
 - **TLS** — plain HTTP, automatic Let's Encrypt certificates, or your own cert/key — globally and/or per individual service (upload a cert or enable auto-issue per backend from the dashboard).
 - **Admin dashboard** — HTMX/Tailwind UI for live traffic & threat charts, filterable request logs with live tail, IP/geo rule management, and service (backend app) management — all changes apply immediately, no restart required.
-- **Prometheus metrics** — `/admin/metrics` exposes request volume, latency, and per-cause block counters (IP/geo/WAF) alongside Go runtime metrics, ready to scrape (uses the same admin credentials, since Prometheus scrape configs support basic auth natively).
+- **Prometheus metrics** — `/admin/metrics` exposes request volume, latency, and per-cause block counters (IP/geo/WAF) alongside Go runtime metrics. It sits behind the same session-cookie admin auth as the rest of the dashboard (not HTTP Basic Auth), so a scrape job needs a way to carry a logged-in session cookie rather than a plain username/password.
 - **Everything in SQLite** — request logs, IP/geo rules, services, and TLS state all live in one `waf.db` file. No Postgres/Redis/MySQL to stand up.
 
 ## Installing
@@ -28,7 +28,7 @@ A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraz
 curl -fsSL https://<wherever-this-is-published>/install.sh | sudo bash
 ```
 
-This downloads the release binary for your architecture (amd64/arm64), verifies its SHA256 checksum, creates a dedicated non-root system user (`coraza-waf-mod`, granted only `CAP_NET_BIND_SERVICE` so it can bind ports 80/443 without running as root), writes a config to `/etc/coraza-waf-mod/config.yaml` with a freshly generated admin password (printed once), installs a systemd unit, and starts the service.
+This downloads the release binary for your architecture (amd64/arm64), verifies its SHA256 checksum, creates a dedicated non-root system user (`coraza-waf-mod`, granted only `CAP_NET_BIND_SERVICE` so it can bind ports 80/443 without running as root), interactively prompts for an admin email and password (or generates one) and seeds it into the database via `coraza-waf-mod setup`, installs a systemd unit that starts the binary with CLI flags, and starts the service.
 
 Check it's running:
 
@@ -37,7 +37,7 @@ sudo systemctl status coraza-waf-mod
 sudo journalctl -u coraza-waf-mod -f
 ```
 
-Config lives at `/etc/coraza-waf-mod/config.yaml` (see `deploy/config.yaml.example` for the annotated template) and data/certs at `/var/lib/coraza-waf-mod/`. Edit the config and `sudo systemctl restart coraza-waf-mod` to apply changes that aren't managed from the dashboard.
+There is no config file to edit — everything the installer set up is either a flag baked into the systemd unit (`sudo systemctl cat coraza-waf-mod` to see it) or a setting stored in the database and managed from the dashboard. Data, certs, and `waf.db` live under `/var/lib/coraza-waf-mod/`.
 
 ### Option B — build from source
 
@@ -47,10 +47,14 @@ Requires Go 1.25+.
 git clone https://gitlab.com/sinhaparth5/coraza-waf-mod.git
 cd coraza-waf-mod
 make build      # go generate (minifies JS) + go build -> ./coraza-waf-mod
-./coraza-waf-mod config.yaml
+
+# Seed an admin account (password is read from stdin, not a flag):
+echo "your-password" | ./coraza-waf-mod setup --admin-email you@example.com
+
+./coraza-waf-mod   # defaults: --listen :8080 --db waf.db --certs ./certs
 ```
 
-`make run` builds and runs in one step. Pure Go all the way through (the SQLite driver is `modernc.org/sqlite`, no CGO), so this builds cleanly with nothing but a Go toolchain.
+`make run` builds and runs in one step (run `setup` first, at least once, so you can log in). Pure Go all the way through (the SQLite driver is `modernc.org/sqlite`, no CGO), so this builds cleanly with nothing but a Go toolchain. See `./coraza-waf-mod --help`-equivalent flags in `main.go`, or the flag table in `CLAUDE.md`, for every bootstrap option (`--listen-tls`, `--waf-rules`, `--geo-db`, `--retention`, `--tls-cert`/`--tls-key`, `--trusted-proxies`).
 
 ### Option C — cross-compiled release binaries
 
@@ -59,16 +63,23 @@ make dist        # cross-compiles Linux amd64/arm64 and Windows amd64 binaries, 
 make checksums   # writes dist/checksums.txt
 ```
 
+### Option D — Docker (local development)
+
+```bash
+docker compose run --rm waf setup --db /data/waf.db --admin-email you@example.com
+docker compose up --build
+```
+
+`Dockerfile` (multi-stage, `scratch` final image) and `docker-compose.yml` are for local container development only — not the recommended production path (see Option A).
+
 ## Usage
 
-1. Edit `config.yaml` (see the comments inline) — set the listen address, TLS mode, GeoIP database path, and admin credentials.
-2. Start the server: `./coraza-waf-mod config.yaml` (defaults to `config.yaml` in the working directory if no path is given).
-3. Open the admin dashboard at `http://<host>:<port>/admin` (path is configurable via `admin.path`) and log in with the username/password from your config.
-4. Add backend apps from **Services**: give it a name, a match rule (Host or path Prefix), and a backend URL. The wizard checks the backend is reachable before saving.
+1. Start the server (see Installing above) — there is no config file, only CLI flags for bootstrap settings.
+2. Before first login, seed an admin account with `coraza-waf-mod setup --admin-email you@example.com` (password read from stdin). `install.sh` does this for you interactively.
+3. Open the admin dashboard at `http://<host>:<port>/admin` (the path is currently fixed at `/admin`) and log in with that email and password.
+4. Add backend apps from **Services**: give it a name, a match rule (Host or path Prefix), and a backend URL. The wizard checks the backend is reachable before saving. Services live entirely in the database — there's no config-file seeding step.
 5. Manage IP rules, country blocking, and request logs from their respective dashboard pages — everything takes effect immediately.
-6. Optionally enable TLS per service from the **Manage** button on its row (upload a cert, or turn on auto-issue if `tls.auto.email` is set in config).
-
-The `apps:` list in `config.yaml` is only used to seed the database on first-ever startup — after that, **Services** in the dashboard is the source of truth for routing.
+6. Optionally enable TLS per service from the **Manage** button on its row (upload a cert, or turn on auto-issue — set an ACME contact email from the Settings page, or pass `--domain`/`--acme-email` to `coraza-waf-mod setup`).
 
 ### GeoIP setup (optional)
 
@@ -86,14 +97,15 @@ sudo mkdir -p /var/lib/coraza-waf-mod
 sudo cp GeoLite2-Country.mmdb /var/lib/coraza-waf-mod/
 ```
 
-5. Set the path in `config.yaml`:
+5. Point the binary at it with `--geo-db`:
 
-```yaml
-geo:
-  db_path: "/var/lib/coraza-waf-mod/GeoLite2-Country.mmdb"
+```bash
+./coraza-waf-mod --geo-db /var/lib/coraza-waf-mod/GeoLite2-Country.mmdb
 ```
 
-Leave `geo.db_path` empty to use the bundled database. GeoLite users must keep the database updated; MaxMind requires old database versions to be replaced or destroyed within 30 days of a new release, so release builds should refresh the bundled `.mmdb` regularly.
+(For a systemd install, add `--geo-db ...` to the `ExecStart=` line in the unit and `sudo systemctl daemon-reload && sudo systemctl restart coraza-waf-mod`.)
+
+Leave `--geo-db` unset to use the bundled database. GeoLite users must keep the database updated; MaxMind requires old database versions to be replaced or destroyed within 30 days of a new release, so release builds should refresh the bundled `.mmdb` regularly.
 
 ## Development
 

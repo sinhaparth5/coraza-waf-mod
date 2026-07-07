@@ -1,3 +1,6 @@
+# Reference template for a manual/hand-rolled install. `deploy/install.sh`
+# does NOT copy this file — it generates its own unit directly on the target
+# host. Edit this file only if you're deploying without install.sh.
 [Unit]
 Description=Coraza WAF Mod log retention prune (one-shot)
 
@@ -6,4 +9,4 @@ Type=oneshot
 User=coraza-waf-mod
 Group=coraza-waf-mod
 WorkingDirectory=/var/lib/coraza-waf-mod
-ExecStart=/usr/local/bin/coraza-waf-mod prune /etc/coraza-waf-mod/config.yaml
+ExecStart=/usr/local/bin/coraza-waf-mod prune --db /var/lib/coraza-waf-mod/waf.db --retention 30

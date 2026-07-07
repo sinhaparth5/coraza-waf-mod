@@ -31,7 +31,7 @@ Recent commits use short, imperative or descriptive summaries such as `ci: run g
 
 ## Security & Configuration Tips
 
-Do not commit real admin credentials, TLS private keys, GeoIP databases, or production `waf.db` files. Use `deploy/config.yaml.example` for documented defaults and keep local secrets in `config.yaml`.
+Do not commit real admin credentials, TLS private keys, GeoIP databases, or production `waf.db` files. There is no config file — bootstrap settings are CLI flags and admin credentials are seeded via `coraza-waf-mod setup` (password on stdin); runtime knobs live in the SQLite `meta` table, managed from the admin UI.
 
 ## Agent-Specific Instructions
 

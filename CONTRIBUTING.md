@@ -57,11 +57,12 @@ Tests live alongside the code they cover — `proxy/`, `ratelimit/`, `ja3/`,
   express, and toggle visibility with `classList`, not `element.style.*`.
 - **Templates:** Go `html/template` content outside a `{{define}}` block is never
   rendered — keep modal/partial markup inside the right block.
-- **Config direction:** `config.yaml` is for deployment-level settings only
-  (listen addresses, TLS binding, WAF rules dir, DB path). All runtime knobs
-  (bot protection, Redis, ACME email, per-service overrides, etc.) are stored in
-  the SQLite `meta` table / per-service columns and managed from the admin UI —
-  `config.yaml` values for those are read only as first-boot defaults.
+- **Config direction:** there is no config file. Bootstrap settings (listen
+  addresses, TLS binding, WAF rules dir, DB path, retention) are CLI flags —
+  see `coraza-waf-mod --help`-equivalent flag list in `main.go`'s `main()`. All
+  runtime knobs (bot protection, Redis, ACME email, per-service overrides,
+  etc.) are stored in the SQLite `meta` table / per-service columns and
+  managed from the admin UI.
 
 See [`CLAUDE.md`](CLAUDE.md) for a deep architecture tour (request pipeline,
 hot-reload pattern, SQLite concurrency and date/time gotchas, cache sandwich,
@@ -75,11 +76,11 @@ Never commit any of the following:
 - A production `waf.db`, or bundled GeoIP/ASN databases beyond what the repo
   already ships.
 
-`deploy/config.yaml.example` is the documented, secret-free template. The repo's
-own `config.yaml` is for local dev only — keep real secrets out of git. When
-adding a new configurable secret, follow the existing pattern: store it in the
-`meta` table, enter it from the Settings page, and never echo it back to the UI
-or ship it in the binary/installer.
+Admin credentials are seeded via `coraza-waf-mod setup` (password read from
+stdin, never a flag or file — see `--help`). When adding a new configurable
+secret, follow the existing pattern: store it in the `meta` table, enter it
+from the Settings page, and never echo it back to the UI or ship it in the
+binary/installer.
 
 Found a security vulnerability? Please **do not** open a public issue — report it
 privately to the maintainer (see `git log` for the contact address) so it can be

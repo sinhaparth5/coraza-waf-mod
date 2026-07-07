@@ -18,6 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scorer eventually bans the IP for the repeated unsolved redirects.
 
 ### Fixed
+- Removed the unused `config.yaml` / `deploy/config.yaml.example` files and
+  every doc/UI reference to a config-file-driven setup. The server has taken
+  CLI flags only for some time (`main.go` never parsed YAML), but `README.md`,
+  `CONTRIBUTING.md`, `AGENTS.md`, `docker-compose.yml`, the two static
+  `deploy/coraza-waf-mod*.service` reference units, and two labels on the
+  Services page still described the old config.yaml/`admin.path`/`apps:`
+  seeding flow. All now match actual behavior: bootstrap settings are CLI
+  flags, admin credentials are seeded via `coraza-waf-mod setup`, and
+  `docker-compose.yml` passes flags via `command:` instead of a mounted
+  config file.
 - `install.sh`: the Varnish systemd drop-in now passes `-F` to `varnishd`.
   Without it, varnishd daemonized under the stock `Type=notify` unit and systemd
   terminated the service (`SIGTERM`, exit 0) a fraction of a second after start,

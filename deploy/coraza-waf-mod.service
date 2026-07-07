@@ -1,3 +1,7 @@
+# Reference template for a manual/hand-rolled install. `deploy/install.sh`
+# does NOT copy this file — it generates its own unit (with flags chosen
+# interactively, e.g. TLS on/off) directly on the target host. Edit this file
+# only if you're deploying without install.sh.
 [Unit]
 Description=Coraza WAF Mod (WAF + reverse proxy)
 After=network.target
@@ -7,7 +11,7 @@ Type=simple
 User=coraza-waf-mod
 Group=coraza-waf-mod
 WorkingDirectory=/var/lib/coraza-waf-mod
-ExecStart=/usr/local/bin/coraza-waf-mod /etc/coraza-waf-mod/config.yaml
+ExecStart=/usr/local/bin/coraza-waf-mod --listen :80 --listen-tls :443 --db /var/lib/coraza-waf-mod/waf.db --certs /var/lib/coraza-waf-mod/certs --retention 30
 Restart=on-failure
 RestartSec=5s
 
