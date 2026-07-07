@@ -159,3 +159,70 @@ func TestCacheReturnHandler(t *testing.T) {
 		t.Errorf("non-loopback peer = %d, want 403", rec.Code)
 	}
 }
+
+// TestPrefixMatch pins the path-segment boundary contract: "/api" must not
+// match "/apiary" or "/api-v2", trailing slashes on the configured prefix
+// are tolerated, and stripping returns a rooted path.
+func TestPrefixMatch(t *testing.T) {
+	cases := []struct {
+		path, prefix string
+		match        bool
+		stripped     string
+	}{
+		{"/api", "/api", true, "/"},
+		{"/api/", "/api", true, "/"},
+		{"/api/users", "/api", true, "/users"},
+		{"/apiary", "/api", false, "/apiary"},
+		{"/api-v2/users", "/api", false, "/api-v2/users"},
+		{"/api/users", "/api/", true, "/users"},
+		{"/apiary", "/api/", false, "/apiary"},
+		{"/anything", "/", true, "/anything"},
+		{"/", "/", true, "/"},
+	}
+	for _, tc := range cases {
+		if got := PrefixMatch(tc.path, tc.prefix); got != tc.match {
+			t.Errorf("PrefixMatch(%q, %q) = %v, want %v", tc.path, tc.prefix, got, tc.match)
+		}
+		if got := StripPrefix(tc.path, tc.prefix); got != tc.stripped {
+			t.Errorf("StripPrefix(%q, %q) = %q, want %q", tc.path, tc.prefix, got, tc.stripped)
+		}
+	}
+}
+
+// TestRegistryMatchPrefixBoundary routes through a real registry: a path
+// that merely shares leading bytes with a prefix service must fall through
+// to the host service instead of being misrouted to the prefix backend.
+func TestRegistryMatchPrefixBoundary(t *testing.T) {
+	db := openTestDB(t)
+	if err := db.AddService("site", "www.example.com", "", "http://10.0.0.5:3000", 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddService("api", "", "/api", "http://10.0.0.6:4000", 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	reg, err := New(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		path string
+		want string
+	}{
+		{"/api", "api"},
+		{"/api/users", "api"},
+		{"/apiary", "site"},
+		{"/api-v2/users", "site"},
+		{"/", "site"},
+	}
+	for _, tc := range cases {
+		got := reg.Match("www.example.com", tc.path)
+		if got == nil || got.Name != tc.want {
+			name := "<nil>"
+			if got != nil {
+				name = got.Name
+			}
+			t.Errorf("Match(%q) = %s, want %s", tc.path, name, tc.want)
+		}
+	}
+}

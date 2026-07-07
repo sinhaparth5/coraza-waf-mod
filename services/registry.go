@@ -308,11 +308,39 @@ func (r *Registry) AllowService(name, ip string) ratelimit.Result {
 	return l.Allow(ip)
 }
 
+// PrefixMatch reports whether path falls under prefix at a path-segment
+// boundary: prefix "/api" matches "/api" and "/api/users" but not "/apiary"
+// or "/api-v2" — a raw HasPrefix would misroute those to the API backend. A
+// trailing slash on the configured prefix is ignored, and a bare "/"
+// matches every path.
+func PrefixMatch(path, prefix string) bool {
+	prefix = strings.TrimSuffix(prefix, "/")
+	if prefix == "" {
+		return true
+	}
+	return path == prefix || strings.HasPrefix(path, prefix+"/")
+}
+
+// StripPrefix removes a PrefixMatch-ed prefix from path, returning "/" for
+// an exact match so the backend always sees a rooted path. Paths that don't
+// fall under prefix are returned unchanged.
+func StripPrefix(path, prefix string) string {
+	if !PrefixMatch(path, prefix) {
+		return path
+	}
+	rest := strings.TrimPrefix(path, strings.TrimSuffix(prefix, "/"))
+	if rest == "" {
+		return "/"
+	}
+	return rest
+}
+
 // Match picks the service for a request. Path-prefix rules are more
 // specific than a host-wide rule, so the longest matching Prefix wins first
 // (mirrors nginx: location blocks beat a bare server_name default) — this
 // lets a host-wide catch-all service and path-scoped services coexist on
-// the same host. Only if no Prefix matches does an exact Host match apply,
+// the same host. Prefixes only match at path-segment boundaries (see
+// PrefixMatch). Only if no Prefix matches does an exact Host match apply,
 // falling back to the first configured service if nothing matches at all.
 // Returns nil if no services are configured.
 func (r *Registry) Match(host, path string) *storage.Service {
@@ -324,7 +352,7 @@ func (r *Registry) Match(host, path string) *storage.Service {
 	var best *storage.Service
 	for i := range r.list {
 		s := &r.list[i]
-		if s.Prefix != "" && strings.HasPrefix(path, s.Prefix) {
+		if s.Prefix != "" && PrefixMatch(path, s.Prefix) {
 			if best == nil || len(s.Prefix) > len(best.Prefix) {
 				best = s
 			}
