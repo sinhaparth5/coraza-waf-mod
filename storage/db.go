@@ -1494,24 +1494,6 @@ func (db *DB) SeedAdmin(email, password string) error {
 	return db.setMeta("admin_password_hash", string(hash))
 }
 
-// SeedTestAdmin creates a default admin account (admin@localhost / admin123)
-// if no admin credentials exist in the DB yet. Called once on startup during
-// development; production installs replace this via the install script.
-func (db *DB) SeedTestAdmin() error {
-	email, _ := db.getMeta("admin_email")
-	if email != "" {
-		return nil
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-	if err != nil {
-		return fmt.Errorf("seed admin: %w", err)
-	}
-	if err := db.setMeta("admin_email", "admin@localhost"); err != nil {
-		return err
-	}
-	return db.setMeta("admin_password_hash", string(hash))
-}
-
 func (db *DB) GetAdminEmail() (string, error) { return db.getMeta("admin_email") }
 
 // UpdateAdminCredentials replaces the stored email and/or password hash.
