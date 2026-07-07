@@ -151,7 +151,6 @@ func main() {
 	// with SQLite write-back persistence (single-node, survives restarts).
 	redisAddr, redisPwd, _ := db.GetRedisConfig()
 	rl := buildRateLimit(db, redisAddr, redisPwd)
-	defer rl.Stop()
 
 	asnLookup, err := asn.New()
 	if err != nil {
@@ -252,6 +251,10 @@ func main() {
 	}))
 
 	h := proxy.NewHandler(registry, engine, db, ipbl, geoBl, rl, asnLookup, ch, cfg.TrustedProxies...)
+	// Stops whichever rate-limit backend is active at shutdown — not
+	// necessarily rl, since ReloadRateLimit (Settings page) may have hot-
+	// swapped it any number of times since startup.
+	defer h.StopRateLimit()
 
 	// reloadWAF rebuilds the WAF engine from the current DB disabled-rule list.
 	// Called from the WAF Rules page when a rule is toggled.
