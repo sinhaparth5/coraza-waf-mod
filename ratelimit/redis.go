@@ -101,8 +101,9 @@ func (r *RedisBackend) Allow(ip string) Result {
 
 	vals, err := r.script.Run(ctx, r.client, []string{key},
 		r.rate, r.burst, nowMs).Int64Slice()
-	if err != nil {
-		// Redis unavailable — fail open to avoid blocking legitimate traffic.
+	if err != nil || len(vals) < 3 {
+		// Redis unavailable or a malformed script reply — fail open to avoid
+		// blocking legitimate traffic (indexing a short reply would panic).
 		return Result{Allowed: true, Limit: r.rate, Burst: r.burst}
 	}
 
