@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -183,11 +184,13 @@ func (c *Challenger) ServePage(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	pageTmpl.Execute(w, map[string]any{ //nolint:errcheck
+	if err := pageTmpl.Execute(w, map[string]any{
 		"ConfigJSON": template.JS(cfg),
 		"Host":       r.Host,
 		"RefID":      refID,
-	})
+	}); err != nil {
+		log.Printf("challenge: render page: %v", err)
+	}
 }
 
 // verifyRequest is the JSON body expected by POST /_cz/verify.
