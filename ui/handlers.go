@@ -1592,6 +1592,7 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 	if redisAddr != "" {
 		rlBackend = "redis"
 	}
+	rlEnabled, rlRPS, rlBurst, _ := h.db.GetRateLimitSettings()
 	wh, _ := h.db.GetWebhookConfig()
 	ec, _ := h.db.GetEmailConfig()
 	vc, _ := h.db.GetVarnishConfig()
@@ -1602,6 +1603,9 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 		"BotTTL":         botTTL,
 		"RLBackend":      rlBackend,
 		"RLRedisAddr":    redisAddr,
+		"RLEnabled":      rlEnabled,
+		"RLRPS":          rlRPS,
+		"RLBurst":        rlBurst,
 		"WebhookURL":     wh.URL,
 		"WebhookSecret":  wh.Secret,
 		"WebhookEnabled": wh.Enabled,
@@ -1730,25 +1734,50 @@ func (h *Handler) SaveVarnishConfig(c echo.Context) error {
 	})
 }
 
-// SaveRateLimitConfig persists the rate-limit backend choice (memory+SQLite or
-// Redis) and hot-reloads the active backend in the proxy handler.
+// SaveRateLimitConfig persists the global rate-limit settings (enabled/rps/
+// burst) and the backend choice (memory+SQLite or Redis), then hot-reloads
+// the active backend in the proxy handler.
 func (h *Handler) SaveRateLimitConfig(c echo.Context) error {
 	backend := c.FormValue("rl_backend")
 	addr := strings.TrimSpace(c.FormValue("rl_redis_addr"))
 	password := c.FormValue("rl_redis_password")
+	enabled := c.FormValue("rl_enabled") == "1"
+	rps, _ := strconv.ParseFloat(strings.TrimSpace(c.FormValue("rl_rps")), 64)
+	burst, _ := strconv.Atoi(strings.TrimSpace(c.FormValue("rl_burst")))
 
 	rlErr := ""
-	if backend == "redis" {
-		if addr == "" {
-			rlErr = "Redis address must not be empty."
-		} else if err := ratelimit.PingRedis(addr, password); err != nil {
-			rlErr = "Redis connection failed: " + err.Error()
-		} else if err := h.db.SetRedisConfig(addr, password); err != nil {
+	if enabled && (rps <= 0 || burst < 1) {
+		rlErr = "Requests per second and burst must be positive numbers."
+	}
+	if rlErr == "" {
+		// Limiter off with blank/invalid numbers: keep the stored values
+		// instead of persisting zeros that would fall back to defaults.
+		if rps <= 0 || burst < 1 {
+			_, storedRPS, storedBurst, _ := h.db.GetRateLimitSettings()
+			if rps <= 0 {
+				rps = storedRPS
+			}
+			if burst < 1 {
+				burst = storedBurst
+			}
+		}
+		if err := h.db.SetRateLimitSettings(enabled, rps, burst); err != nil {
 			rlErr = "Failed to save: " + err.Error()
 		}
-	} else {
-		if err := h.db.SetRedisConfig("", ""); err != nil {
-			rlErr = "Failed to save: " + err.Error()
+	}
+	if rlErr == "" {
+		if backend == "redis" {
+			if addr == "" {
+				rlErr = "Redis address must not be empty."
+			} else if err := ratelimit.PingRedis(addr, password); err != nil {
+				rlErr = "Redis connection failed: " + err.Error()
+			} else if err := h.db.SetRedisConfig(addr, password); err != nil {
+				rlErr = "Failed to save: " + err.Error()
+			}
+		} else {
+			if err := h.db.SetRedisConfig("", ""); err != nil {
+				rlErr = "Failed to save: " + err.Error()
+			}
 		}
 	}
 
@@ -1756,21 +1785,23 @@ func (h *Handler) SaveRateLimitConfig(c echo.Context) error {
 		h.reloadRateLimit()
 	}
 
-	rlBackend := backend
-	rlAddr := addr
-	if rlErr != "" && backend != "redis" {
-		// Revert display to stored config on error.
+	rlBackend, rlAddr, rlEnabled, rlRPS, rlBurst := backend, addr, enabled, rps, burst
+	if rlErr != "" {
+		// Revert display to the stored config on error.
+		rlEnabled, rlRPS, rlBurst, _ = h.db.GetRateLimitSettings()
 		if storedAddr, _, _ := h.db.GetRedisConfig(); storedAddr != "" {
-			rlBackend = "redis"
-			rlAddr = storedAddr
+			rlBackend, rlAddr = "redis", storedAddr
 		} else {
-			rlBackend = "memory"
+			rlBackend, rlAddr = "memory", ""
 		}
 	}
 	return h.renderPartial(c, "settings", "ratelimit-card", map[string]any{
 		"AdminPath":   h.cfg.Admin.Path,
 		"RLBackend":   rlBackend,
 		"RLRedisAddr": rlAddr,
+		"RLEnabled":   rlEnabled,
+		"RLRPS":       rlRPS,
+		"RLBurst":     rlBurst,
 		"RLSaveOK":    rlErr == "",
 		"RLError":     rlErr,
 	})
