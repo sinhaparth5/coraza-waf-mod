@@ -45,7 +45,7 @@ Run a single test: `go test ./proxy/ -run TestName -v` (substitute the package).
 
 ```bash
 coraza-waf-mod prune [config.yaml]
-  # Delete request log rows older than db.log_retention_days; see main.go:runPruneOnly
+  # Delete request log rows older than db.log_retention_days + expired admin sessions; see main.go:runPruneOnly
 
 coraza-waf-mod setup --db waf.db --admin-email e@x.com [--domain d] [--acme-email e]
   # Seed admin credentials and optional ACME config into the DB (reads password from stdin).

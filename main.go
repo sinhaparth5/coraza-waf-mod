@@ -530,8 +530,9 @@ func splitCSV(s string) []string {
 }
 
 // runPruneOnly opens the DB, deletes request logs older than the configured
-// retention window, logs the result, and returns — it does not start the WAF,
-// proxy, or admin UI. retention <= 0 disables pruning (logs kept forever).
+// retention window plus expired admin sessions, logs the result, and returns
+// — it does not start the WAF, proxy, or admin UI. retention <= 0 disables
+// request-log pruning (logs kept forever); expired sessions are always swept.
 // Invoked as: coraza-waf-mod prune [--db path] [--retention days]
 func runPruneOnly(args []string) {
 	fs := flag.NewFlagSet("prune", flag.ExitOnError)
@@ -539,16 +540,22 @@ func runPruneOnly(args []string) {
 	retention := fs.Int("retention", 30, "log retention in days (0 = keep forever)")
 	fs.Parse(args)
 
-	if *retention <= 0 {
-		log.Printf("log retention: disabled (retention <= 0), nothing to prune")
-		return
-	}
-
 	db, err := storage.Open(*dbPath)
 	if err != nil {
 		log.Fatalf("db: %v", err)
 	}
 	defer db.Close()
+
+	if n, err := db.PruneExpiredSessions(); err != nil {
+		log.Printf("session prune failed: %v", err)
+	} else {
+		log.Printf("session prune: deleted %d expired sessions", n)
+	}
+
+	if *retention <= 0 {
+		log.Printf("log retention: disabled (retention <= 0), nothing to prune")
+		return
+	}
 
 	start := time.Now()
 	n, err := db.PruneOldRequests(*retention)
