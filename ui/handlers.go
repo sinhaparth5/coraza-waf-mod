@@ -6,6 +6,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"html"
 	"html/template"
 	"io/fs"
 	"log"
@@ -263,6 +264,8 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/services/bot/:id", h.SetServiceBotMode)
 	g.POST("/services/cache/:id", h.SetServiceCache)
 	g.POST("/services/cache-session/:id", h.SetServiceCacheSession)
+	g.POST("/services/cache-tuning/:id", h.SetServiceCacheTuning)
+	g.POST("/services/cache-purge/:id", h.PurgeServiceCache)
 	g.POST("/settings/varnish", h.SaveVarnishConfig)
 	g.POST("/settings/acme-email", h.SaveAcmeEmail)
 	g.POST("/settings/bot", h.SaveBotSettings)
@@ -1777,6 +1780,82 @@ func (h *Handler) SetServiceCacheSession(c echo.Context) error {
 	w := c.Response().Writer
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	return h.tmpls["services"].ExecuteTemplate(w, "services-rows", h.serviceViews())
+}
+
+// parseOptionalSeconds parses a form field as a non-negative whole number of
+// seconds, treating a blank value as 0 ("unset" for cache-tuning fields).
+func parseOptionalSeconds(raw string) (int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("must be a non-negative whole number of seconds")
+	}
+	return n, nil
+}
+
+// SetServiceCacheTuning configures per-service Varnish TTL floor/ceiling and
+// grace/keep overrides. Each field is optional seconds; blank means "use the
+// VCL's own default" (see deploy/varnish/default.vcl's vcl_backend_response).
+func (h *Handler) SetServiceCacheTuning(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
+	}
+	ttlFloor, err := parseOptionalSeconds(c.FormValue("ttl_floor"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "TTL floor " + err.Error()})
+	}
+	ttlCeiling, err := parseOptionalSeconds(c.FormValue("ttl_ceiling"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "TTL ceiling " + err.Error()})
+	}
+	grace, err := parseOptionalSeconds(c.FormValue("grace"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "grace " + err.Error()})
+	}
+	keep, err := parseOptionalSeconds(c.FormValue("keep"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "keep " + err.Error()})
+	}
+	if ttlCeiling > 0 && ttlFloor > ttlCeiling {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "TTL floor cannot be greater than the ceiling"})
+	}
+	if err := h.db.SetServiceCacheTuning(id, ttlFloor, ttlCeiling, grace, keep); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	if err := h.registry.Reload(h.db); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	w := c.Response().Writer
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return h.tmpls["services"].ExecuteTemplate(w, "services-rows", h.serviceViews())
+}
+
+// PurgeServiceCache invalidates every object Varnish holds for one service,
+// e.g. right after deploying new content to its backend. Returns a small
+// status fragment rather than the services list — purging doesn't change any
+// row's displayed state, only what's asked for by name is stripped out of
+// Varnish's cache.
+func (h *Handler) PurgeServiceCache(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		return c.HTML(http.StatusOK, `<span class="text-red-500">invalid service id</span>`)
+	}
+	svc, err := h.db.GetService(id)
+	if err != nil {
+		return c.HTML(http.StatusOK, `<span class="text-red-500">service not found</span>`)
+	}
+	vcfg, err := h.db.GetVarnishConfig()
+	if err != nil {
+		return c.HTML(http.StatusOK, `<span class="text-red-500">`+html.EscapeString(err.Error())+`</span>`)
+	}
+	if err := services.Purge(vcfg, svc.Name); err != nil {
+		return c.HTML(http.StatusOK, `<span class="text-red-500">`+html.EscapeString(err.Error())+`</span>`)
+	}
+	return c.HTML(http.StatusOK, `<span class="text-brand-dark">Purged.</span>`)
 }
 
 // SaveVarnishConfig persists the global Varnish accelerator settings and

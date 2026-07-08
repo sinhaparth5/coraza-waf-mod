@@ -129,6 +129,13 @@
   var cacheSessionForm = document.getElementById('svc-cache-session-form');
   var cacheSessionToggle = document.getElementById('svc-cache-session-enabled');
   var cacheSessionCookie = document.getElementById('svc-cache-session-cookie');
+  var cacheTuningForm = document.getElementById('svc-cache-tuning-form');
+  var ttlFloorInput = document.getElementById('svc-cache-ttl-floor');
+  var ttlCeilingInput = document.getElementById('svc-cache-ttl-ceiling');
+  var graceInput = document.getElementById('svc-cache-grace');
+  var keepInput = document.getElementById('svc-cache-keep');
+  var cachePurgeForm = document.getElementById('svc-cache-purge-form');
+  var cachePurgeStatus = document.getElementById('svc-cache-purge-status');
   var deleteBtn = document.getElementById('svc-delete-btn');
 
   function showTab(name) {
@@ -172,6 +179,17 @@
     cacheSessionToggle.checked = d.sessionCache === '1';
     cacheSessionCookie.value = d.sessionCookie || '';
 
+    cacheTuningForm.setAttribute('hx-post', adminPath + '/services/cache-tuning/' + d.id);
+    htmx.process(cacheTuningForm);
+    ttlFloorInput.value = parseInt(d.ttlFloor) > 0 ? d.ttlFloor : '';
+    ttlCeilingInput.value = parseInt(d.ttlCeiling) > 0 ? d.ttlCeiling : '';
+    graceInput.value = parseInt(d.grace) > 0 ? d.grace : '';
+    keepInput.value = parseInt(d.keep) > 0 ? d.keep : '';
+
+    cachePurgeForm.setAttribute('hx-post', adminPath + '/services/cache-purge/' + d.id);
+    htmx.process(cachePurgeForm);
+    cachePurgeStatus.textContent = '';
+
     document.querySelectorAll('.tls-service-id').forEach(function (input) {
       input.value = d.id;
     });
@@ -183,7 +201,7 @@
     deleteBtn.setAttribute('hx-confirm', 'Remove service ' + d.name + '?');
     htmx.process(deleteBtn);
 
-    ['tls-error', 'rl-error', 'bot-error', 'svc-cache-error', 'svc-cache-session-error'].forEach(function (id) {
+    ['tls-error', 'rl-error', 'bot-error', 'svc-cache-error', 'svc-cache-session-error', 'svc-cache-tuning-error'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.textContent = '';
     });
@@ -233,7 +251,9 @@
   document.body.addEventListener('rl-saved', closeModal);
   document.body.addEventListener('htmx:afterRequest', function (e) {
     var elt = e.detail.elt;
-    if ((elt === botForm || elt === cacheForm || elt === cacheSessionForm || elt === deleteBtn) && e.detail.successful) closeModal();
+    if ((elt === botForm || elt === cacheForm || elt === cacheSessionForm || elt === cacheTuningForm || elt === deleteBtn) && e.detail.successful) closeModal();
+    // Purge intentionally does not close the modal — its status fragment
+    // (success or error) renders inline so the admin sees the outcome.
   });
 })();
 

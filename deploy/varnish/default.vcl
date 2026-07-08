@@ -48,6 +48,17 @@ sub vcl_recv {
         return (synth(400, "Missing service tag"));
     }
 
+    # Cache purge: the WAF sends this directly (never client traffic) when an
+    # admin clicks "Purge" for a service on /admin/services, e.g. right after
+    # a deploy. Already past the local_only ACL check above. Bans every
+    # object tagged with this service by vcl_backend_response below — objects
+    # cached before that tagging existed simply won't match and age out on
+    # their own TTL instead.
+    if (req.method == "PURGE") {
+        ban("obj.http.X-Cache-Service == " + req.http.X-Cache-Service);
+        return (synth(200, "Purged"));
+    }
+
     set req.backend_hint = waf_return;
 
     # Only safe, idempotent methods are cacheable; everything else goes
@@ -148,8 +159,39 @@ sub vcl_backend_response {
         set beresp.ttl = 10s;
     }
 
-    # Serve stale content for a short window while a fresh copy is fetched.
+    # Per-service TTL floor/ceiling — admin-configurable on /admin/services
+    # ("Cache tuning"), sent as X-Cache-TTL-Floor/-Ceiling by the Director in
+    # services/registry.go. Absent for a service that hasn't set one, in
+    # which case these are no-ops (the guarding if already requires the
+    # header to be present before either branch runs).
+    if (bereq.http.X-Cache-TTL-Floor && beresp.ttl < std.duration(bereq.http.X-Cache-TTL-Floor + "s", beresp.ttl)) {
+        set beresp.ttl = std.duration(bereq.http.X-Cache-TTL-Floor + "s", beresp.ttl);
+    }
+    if (bereq.http.X-Cache-TTL-Ceiling && beresp.ttl > std.duration(bereq.http.X-Cache-TTL-Ceiling + "s", beresp.ttl)) {
+        set beresp.ttl = std.duration(bereq.http.X-Cache-TTL-Ceiling + "s", beresp.ttl);
+    }
+
+    # Tag the object with its service so a purge's ban() expression
+    # (vcl_recv) can target it without affecting other services' entries.
+    # Stripped from the client-visible response in vcl_deliver.
+    set beresp.http.X-Cache-Service = bereq.http.X-Cache-Service;
+
+    # Grace: how long a stale object may still be served (e.g. while a fresh
+    # copy is being fetched, or if the backend is briefly unreachable). Keep:
+    # how much longer after that a stale object is kept around for
+    # conditional revalidation instead of being evicted outright. Both are
+    # admin-configurable per service (X-Cache-Grace/-Keep) and default to the
+    # previous flat 30s otherwise. Note this widens Varnish's existing
+    # stale-tolerance window — it is not proactive background revalidation
+    # ahead of expiry, which Varnish has no simple built-in primitive for.
     set beresp.grace = 30s;
+    set beresp.keep = 30s;
+    if (bereq.http.X-Cache-Grace) {
+        set beresp.grace = std.duration(bereq.http.X-Cache-Grace + "s", 30s);
+    }
+    if (bereq.http.X-Cache-Keep) {
+        set beresp.keep = std.duration(bereq.http.X-Cache-Keep + "s", 30s);
+    }
 }
 
 sub vcl_deliver {
@@ -159,4 +201,6 @@ sub vcl_deliver {
     } else {
         set resp.http.X-Cache = "MISS";
     }
+    # Internal partition marker (see vcl_backend_response) — not for clients.
+    unset resp.http.X-Cache-Service;
 }
