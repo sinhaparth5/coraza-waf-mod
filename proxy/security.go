@@ -27,7 +27,6 @@ func SecurityMiddleware() echo.MiddlewareFunc {
 			}
 
 			// ── Coraza WAF identification ─────────────────────────────────────────
-			h.Set("X-Protected-By", "Coraza WAF Mod")
 			h.Set("X-WAF-Engine", "Coraza v3 / OWASP CRS")
 
 			return next(c)
