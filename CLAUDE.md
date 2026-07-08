@@ -29,7 +29,7 @@ make checksums   # sha256sum dist/* -> dist/checksums.txt
 make tag VERSION=v1.0.0  # annotated git tag + push to origin, triggers the GitHub Actions release workflow
 ```
 
-Run a single test: `go test ./proxy/ -run TestName -v` (substitute the package). Existing tests live in `proxy/`, `ratelimit/`, `ja3/`, `ja4/`, `storage/`, `mailer/`, `autoban/`, `challenge/`, `services/`, and `ui/`. Run `gofmt` on changed Go files; the existing tests are table-driven (e.g. `TestRegistryMatchPrefixPriority`), so add cases next to the package being changed in that style.
+Run a single test: `go test ./proxy/ -run TestName -v` (substitute the package). Existing tests live in `proxy/`, `ratelimit/`, `ja3/`, `ja4/`, `storage/`, `mailer/`, `autoban/`, `challenge/`, `services/`, `waf/`, and `ui/`. Run `gofmt` on changed Go files; the existing tests are table-driven (e.g. `TestRegistryMatchPrefixPriority`), so add cases next to the package being changed in that style.
 
 **Runtime CLI flags** (there is no config file — every bootstrap setting is a flag; see `main.go`'s `main()`):
 

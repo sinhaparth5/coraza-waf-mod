@@ -17,6 +17,31 @@
 # the service. Admin credentials and certificates are never overwritten on upgrade.
 set -euo pipefail
 
+# ── Terminal colors ─────────────────────────────────────────────────────────
+# Off when stdout isn't a terminal (e.g. redirected to a log) or NO_COLOR is
+# set (https://no-color.org). Every message goes through one of the helpers
+# below so the whole script reads with one consistent voice: cyan steps,
+# dim supporting detail, bold for values the script discovered or generated,
+# yellow/red for things that need attention.
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+	C_RESET=$'\033[0m'
+	C_BOLD=$'\033[1m'
+	C_DIM=$'\033[2m'
+	C_CYAN=$'\033[36m'
+	C_GREEN=$'\033[32m'
+	C_YELLOW=$'\033[33m'
+	C_RED=$'\033[31m'
+else
+	C_RESET='' C_BOLD='' C_DIM='' C_CYAN='' C_GREEN='' C_YELLOW='' C_RED=''
+fi
+
+step()   { printf '%s%s==>%s %s\n' "$C_BOLD" "$C_CYAN" "$C_RESET" "$*"; }
+detail() { printf '    %s%s%s\n' "$C_DIM" "$*" "$C_RESET"; }
+value()  { printf '    %s%s%s\n' "$C_BOLD" "$*" "$C_RESET"; }
+ok()     { printf '    %s✓%s %s\n' "$C_GREEN" "$C_RESET" "$*"; }
+warn()   { printf '    %s%sWARNING:%s %s\n' "$C_BOLD" "$C_YELLOW" "$C_RESET" "$*"; }
+err()    { printf '%s%sERROR:%s %s\n' "$C_BOLD" "$C_RED" "$C_RESET" "$*" >&2; }
+
 # ── Project config ────────────────────────────────────────────────────────────
 GITHUB_API="https://api.github.com"
 GITHUB_REPO="sinhaparth5/coraza-waf-mod"
@@ -37,24 +62,24 @@ CERT_FILE="${VAR_DIR}/certs/self-signed.crt"
 KEY_FILE="${VAR_DIR}/certs/self-signed.key"
 
 if [ "$DRY_RUN" = "1" ]; then
-	echo "DRY RUN MODE — no files will be written and no commands executed."
+	printf '%s%sDRY RUN%s — no files will be written and no commands executed.\n' "$C_BOLD" "$C_YELLOW" "$C_RESET"
 	echo
 fi
 
 if [ "$DRY_RUN" != "1" ] && [ "$(id -u)" -ne 0 ]; then
-	echo "Run as root (e.g. with sudo)." >&2
+	err "Run as root (e.g. with sudo)."
 	exit 1
 fi
 
 case "$(uname -s)" in
 	Linux) ;;
-	*) echo "Only Linux is supported by this installer." >&2; exit 1 ;;
+	*) err "Only Linux is supported by this installer."; exit 1 ;;
 esac
 
 case "$(uname -m)" in
 	x86_64 | amd64)  ARCH="amd64" ;;
 	aarch64 | arm64) ARCH="arm64" ;;
-	*) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+	*) err "Unsupported architecture: $(uname -m)"; exit 1 ;;
 esac
 
 API_BASE="${GITHUB_API}/repos/${GITHUB_REPO}"
@@ -71,7 +96,7 @@ curl_get() {
 
 run() {
 	if [ "$DRY_RUN" = "1" ]; then
-		echo "  + $*"
+		printf '  %s+%s %s\n' "$C_DIM" "$C_RESET" "$*"
 	else
 		"$@"
 	fi
@@ -82,9 +107,7 @@ write_file() {
 	local content
 	content="$(cat)"
 	if [ "$DRY_RUN" = "1" ]; then
-		echo "  + write ${dest}:"
-		printf '%s\n' "$content" | sed 's/^/      /'
-		echo
+		printf '  %s+ write %s%s\n' "$C_DIM" "$dest" "$C_RESET"
 	else
 		printf '%s\n' "$content" >"${dest}"
 	fi
@@ -112,7 +135,7 @@ fi
 # ── Detect latest release version ────────────────────────────────────────────
 
 if [ -z "$CORAZA_VERSION" ]; then
-	echo "==> Detecting latest release..."
+	step "Detecting latest release..."
 	CORAZA_VERSION=$(
 		curl_get "${API_BASE}/releases/latest" \
 		| grep -o '"tag_name":[[:space:]]*"[^"]*"' \
@@ -120,20 +143,20 @@ if [ -z "$CORAZA_VERSION" ]; then
 		| sed 's/"tag_name":[[:space:]]*"\([^"]*\)"/\1/'
 	)
 	if [ -z "$CORAZA_VERSION" ]; then
-		echo "ERROR: Could not detect the latest release from GitHub." >&2
-		echo "  Set CORAZA_VERSION manually: CORAZA_VERSION=v1.0.0 bash install.sh" >&2
+		err "Could not detect the latest release from GitHub."
+		printf '  Set CORAZA_VERSION manually: CORAZA_VERSION=v1.0.0 bash install.sh\n' >&2
 		exit 1
 	fi
-	echo "    Latest: ${CORAZA_VERSION}"
+	printf '    Latest: %s%s%s\n' "$C_BOLD" "$CORAZA_VERSION" "$C_RESET"
 fi
 
 ASSET="${BINARY_NAME}-linux-${ARCH}"
 DOWNLOAD_BASE="https://github.com/${GITHUB_REPO}/releases/download/${CORAZA_VERSION}"
 
 if [ "$IS_UPGRADE" = "1" ]; then
-	echo "==> Upgrading ${BINARY_NAME} to ${CORAZA_VERSION} (linux/${ARCH})"
+	step "Upgrading ${BINARY_NAME} to ${CORAZA_VERSION} (linux/${ARCH})"
 else
-	echo "==> Installing ${BINARY_NAME} ${CORAZA_VERSION} (linux/${ARCH})"
+	step "Installing ${BINARY_NAME} ${CORAZA_VERSION} (linux/${ARCH})"
 fi
 echo
 
@@ -151,45 +174,45 @@ if [ "$IS_UPGRADE" = "0" ] && [ "$DRY_RUN" != "1" ]; then
 	fi
 
 	# ── Admin credentials ───────────────────────────────────────────────────
-	echo "==> Admin account setup"
+	step "Admin account setup"
 	echo
 
 	while true; do
-		read -rp "  Admin email: " ADMIN_EMAIL
+		read -rp "${C_CYAN}  Admin email:${C_RESET} " ADMIN_EMAIL
 		[ -n "$ADMIN_EMAIL" ] && break
-		echo "  Email cannot be empty."
+		printf '  %sEmail cannot be empty.%s\n' "$C_RED" "$C_RESET"
 	done
 
 	while true; do
-		read -rsp "  Password: " ADMIN_PASSWORD
+		read -rsp "${C_CYAN}  Password:${C_RESET} " ADMIN_PASSWORD
 		echo
-		read -rsp "  Confirm:  " ADMIN_PASSWORD_CONFIRM
+		read -rsp "${C_CYAN}  Confirm: ${C_RESET} " ADMIN_PASSWORD_CONFIRM
 		echo
 		if [ "$ADMIN_PASSWORD" = "$ADMIN_PASSWORD_CONFIRM" ] && [ -n "$ADMIN_PASSWORD" ]; then
 			break
 		elif [ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]; then
-			echo "  Passwords don't match — try again."
+			printf "  %sPasswords don't match — try again.%s\n" "$C_RED" "$C_RESET"
 		else
-			echo "  Password cannot be empty."
+			printf '  %sPassword cannot be empty.%s\n' "$C_RED" "$C_RESET"
 		fi
 	done
 
 	echo
 
 	# ── HTTPS setup ─────────────────────────────────────────────────────────
-	echo "==> HTTPS setup"
-	echo "    A self-signed certificate will be generated for your server IP."
-	echo "    If you have a domain name, Let's Encrypt can issue a trusted cert instead."
+	step "HTTPS setup"
+	detail "A self-signed certificate will be generated for your server IP."
+	detail "If you have a domain name, Let's Encrypt can issue a trusted cert instead."
 	echo
-	read -rp "  Domain name (leave empty to use self-signed for IP): " DOMAIN
+	read -rp "${C_CYAN}  Domain name (leave empty to use self-signed for IP):${C_RESET} " DOMAIN
 
 	if [ -n "$DOMAIN" ]; then
 		USE_ACME=1
-		echo "    Let's Encrypt will provision a certificate for ${DOMAIN}."
-		echo "    Make sure DNS for ${DOMAIN} points to this server before starting."
+		detail "Let's Encrypt will provision a certificate for ${DOMAIN}."
+		detail "Make sure DNS for ${DOMAIN} points to this server before starting."
 	else
-		echo "    A self-signed certificate will be generated for your server IP."
-		echo "    Browsers will show a security warning — you can add an exception."
+		detail "A self-signed certificate will be generated for your server IP."
+		detail "Browsers will show a security warning — you can add an exception."
 	fi
 	echo
 elif [ "$DRY_RUN" = "1" ]; then
@@ -200,43 +223,43 @@ fi
 
 # ── Detect server IP ──────────────────────────────────────────────────────────
 
-echo "==> Detecting server IP address..."
+step "Detecting server IP address..."
 SERVER_IP="$(detect_public_ip)"
-echo "    ${SERVER_IP}"
+value "${SERVER_IP}"
 echo
 
 # ── Download & verify binary ──────────────────────────────────────────────────
 
 if [ "$DRY_RUN" = "1" ]; then
-	echo "==> [DRY RUN] Would download and verify ${DOWNLOAD_BASE}/${ASSET}"
+	step "[DRY RUN] Would download and verify ${DOWNLOAD_BASE}/${ASSET}"
 	echo
 else
 	WORKDIR="$(mktemp -d)"
 	trap 'rm -rf "$WORKDIR"' EXIT
 
-	echo "==> Downloading ${ASSET}"
+	step "Downloading ${ASSET}"
 	curl_get "${DOWNLOAD_BASE}/${ASSET}" -o "${WORKDIR}/${ASSET}"
 	curl_get "${DOWNLOAD_BASE}/checksums.txt" -o "${WORKDIR}/checksums.txt"
 
-	echo "==> Verifying SHA256"
+	step "Verifying SHA256"
 	(cd "$WORKDIR" && sha256sum --check --ignore-missing checksums.txt)
 
-	echo "==> Installing to ${INSTALL_PATH}"
+	step "Installing to ${INSTALL_PATH}"
 	install -m 0755 "${WORKDIR}/${ASSET}" "${INSTALL_PATH}"
 fi
 
 # ── System user ───────────────────────────────────────────────────────────────
 
-echo "==> Creating system user '${SERVICE_USER}'"
+step "Creating system user '${SERVICE_USER}'"
 if [ "$DRY_RUN" = "1" ] || ! id "${SERVICE_USER}" >/dev/null 2>&1; then
 	run useradd --system --no-create-home --shell /usr/sbin/nologin "${SERVICE_USER}"
 else
-	echo "    User already exists — skipping"
+	detail "User already exists — skipping"
 fi
 
 # ── Directories ───────────────────────────────────────────────────────────────
 
-echo "==> Creating directories"
+step "Creating directories"
 run mkdir -p "${VAR_DIR}/certs"
 run chown -R "${SERVICE_USER}:${SERVICE_USER}" "${VAR_DIR}"
 
@@ -249,7 +272,7 @@ if [ "$IS_UPGRADE" = "0" ] && [ "$DRY_RUN" != "1" ]; then
 		# Self-signed cert keyed to the server's public IP address.
 		# The binary's gencert subcommand generates it using the Go stdlib —
 		# no openssl dependency needed.
-		echo "==> Generating self-signed certificate for ${SERVER_IP}"
+		step "Generating self-signed certificate for ${SERVER_IP}"
 		"${INSTALL_PATH}" gencert \
 			--cert "${CERT_FILE}" \
 			--key  "${KEY_FILE}"  \
@@ -270,20 +293,20 @@ if [ "$IS_UPGRADE" = "0" ] && [ "$DRY_RUN" != "1" ]; then
 		# (No --tls-cert flags — ACME handles it)
 	fi
 elif [ "$DRY_RUN" = "1" ]; then
-	echo "==> [DRY RUN] Would generate self-signed cert at ${CERT_FILE}"
+	step "[DRY RUN] Would generate self-signed cert at ${CERT_FILE}"
 	TLS_FLAGS="--listen :80 --listen-tls :443 --tls-cert ${CERT_FILE} --tls-key ${KEY_FILE}"
 elif [ "$IS_UPGRADE" = "1" ] && [ -f "${CERT_FILE}" ] && [ -f "${KEY_FILE}" ]; then
 	# Upgrade of a self-signed install: the cert files only exist on the
 	# non-ACME path, so keep passing them — otherwise the rewritten unit
 	# would drop the fallback cert and break HTTPS-by-IP after restart.
-	echo "==> Keeping existing self-signed certificate"
+	step "Keeping existing self-signed certificate"
 	TLS_FLAGS="--listen :80 --listen-tls :443 --tls-cert ${CERT_FILE} --tls-key ${KEY_FILE}"
 fi
 
 # ── Seed admin credentials (non-ACME path / fresh install) ───────────────────
 
 if [ "$IS_UPGRADE" = "0" ] && [ "$USE_ACME" = "0" ] && [ "$DRY_RUN" != "1" ]; then
-	echo "==> Seeding admin credentials"
+	step "Seeding admin credentials"
 	printf '%s\n' "${ADMIN_PASSWORD}" \
 		| "${INSTALL_PATH}" setup \
 			--db "${VAR_DIR}/waf.db" \
@@ -293,7 +316,7 @@ fi
 
 # ── Systemd units ─────────────────────────────────────────────────────────────
 
-echo "==> Installing systemd units"
+step "Installing systemd units"
 
 write_file "${UNIT_PATH}" <<UNIT
 [Unit]
@@ -349,7 +372,7 @@ UNIT
 
 # ── Enable & (re)start ────────────────────────────────────────────────────────
 
-echo "==> Enabling and starting ${BINARY_NAME}"
+step "Enabling and starting ${BINARY_NAME}"
 run systemctl daemon-reload
 run systemctl enable "${BINARY_NAME}"
 run systemctl restart "${BINARY_NAME}"
@@ -365,24 +388,24 @@ run systemctl enable --now "${BINARY_NAME}-prune.timer"
 VARNISH_VCL_PATH="/etc/varnish/default.vcl"
 VARNISH_OVERRIDE_DIR="/etc/systemd/system/varnish.service.d"
 
-echo "==> Setting up Varnish cache layer (optional)"
+step "Setting up Varnish cache layer (optional)"
 
 if ! command -v varnishd >/dev/null 2>&1; then
-	echo "    Varnish not found — installing..."
+	detail "Varnish not found — installing..."
 	if [ "$DRY_RUN" = "1" ]; then
-		echo "  + (apt-get|dnf|yum) install -y varnish"
+		printf '  %s+%s (apt-get|dnf|yum) install -y varnish\n' "$C_DIM" "$C_RESET"
 	elif command -v apt-get >/dev/null 2>&1; then
 		apt-get update -qq >/dev/null 2>&1 || true
 		DEBIAN_FRONTEND=noninteractive apt-get install -y varnish >/dev/null 2>&1 \
-			|| echo "    WARNING: apt-get install varnish failed — install it manually later (see deploy/varnish/README.md)"
+			|| warn "apt-get install varnish failed — install it manually later (see deploy/varnish/README.md)"
 	elif command -v dnf >/dev/null 2>&1; then
 		dnf install -y varnish >/dev/null 2>&1 \
-			|| echo "    WARNING: dnf install varnish failed — install it manually later (see deploy/varnish/README.md)"
+			|| warn "dnf install varnish failed — install it manually later (see deploy/varnish/README.md)"
 	elif command -v yum >/dev/null 2>&1; then
 		yum install -y varnish >/dev/null 2>&1 \
-			|| echo "    WARNING: yum install varnish failed — install it manually later (see deploy/varnish/README.md)"
+			|| warn "yum install varnish failed — install it manually later (see deploy/varnish/README.md)"
 	else
-		echo "    WARNING: no supported package manager found — install Varnish manually to use caching"
+		warn "no supported package manager found — install Varnish manually to use caching"
 	fi
 fi
 
@@ -392,7 +415,7 @@ if [ "$DRY_RUN" = "1" ] || command -v varnishd >/dev/null 2>&1; then
 	# Never clobber a hand-written VCL silently: anything not created by this
 	# installer (including the stock package example) is backed up first.
 	if [ "$DRY_RUN" != "1" ] && [ -f "$VARNISH_VCL_PATH" ] && ! grep -q "coraza-waf-mod" "$VARNISH_VCL_PATH"; then
-		echo "    Backing up existing VCL to ${VARNISH_VCL_PATH}.pre-coraza"
+		detail "Backing up existing VCL to ${VARNISH_VCL_PATH}.pre-coraza"
 		run cp "$VARNISH_VCL_PATH" "${VARNISH_VCL_PATH}.pre-coraza"
 	fi
 	run mkdir -p /etc/varnish
@@ -502,12 +525,12 @@ UNIT
 	else
 		systemctl enable --now varnish >/dev/null 2>&1 || true
 		systemctl restart varnish \
-			|| echo "    WARNING: varnish failed to start — check: journalctl -u varnish"
+			|| warn "varnish failed to start — check: journalctl -u varnish"
 	fi
-	echo "    Varnish ready on 127.0.0.1:6081 — turn it on in the admin UI:"
-	echo "    Settings → Varnish Cache, then toggle Cache per service."
+	ok "Varnish ready on 127.0.0.1:6081 — turn it on in the admin UI:"
+	detail "Settings → Varnish Cache, then toggle Cache per service."
 else
-	echo "    Varnish unavailable — the WAF runs fine without it; caching stays off."
+	detail "Varnish unavailable — the WAF runs fine without it; caching stays off."
 fi
 echo
 
@@ -517,41 +540,95 @@ INSTALLED_VERSION="$("${INSTALL_PATH}" --version 2>/dev/null || echo "${CORAZA_V
 
 if [ "$USE_ACME" = "1" ]; then
 	DASHBOARD_URL="https://${DOMAIN}/admin"
-	CERT_NOTE="Let's Encrypt — cert auto-provisioned on first request"
+	CERT_NOTE="Let's Encrypt — issued automatically on first visit"
 else
 	DASHBOARD_URL="https://${SERVER_IP}/admin"
-	CERT_NOTE="Self-signed — accept the browser warning, or add an exception"
+	CERT_NOTE="Self-signed — browser will warn once, add an exception"
 fi
 
-echo
-echo "  ┌──────────────────────────────────────────────────────────────────────┐"
-if [ "$IS_UPGRADE" = "1" ]; then
-echo "  │  Upgrade complete                                                    │"
-printf "  │  Version:    %-55s │\n" "${INSTALLED_VERSION}"
-else
-echo "  │  Installation complete                                               │"
-echo "  │                                                                      │"
-printf "  │  Version:    %-55s │\n" "${INSTALLED_VERSION}"
-printf "  │  Admin UI:   %-55s │\n" "${DASHBOARD_URL}"
-printf "  │  Email:      %-55s │\n" "${ADMIN_EMAIL}"
-echo "  │  Password:   (as entered above)                                     │"
-printf "  │  TLS:        %-55s │\n" "${CERT_NOTE}"
-fi
-echo "  │                                                                      │"
-echo "  │  Service:    sudo systemctl status ${BINARY_NAME}               │"
-echo "  │  Logs:       sudo journalctl -u ${BINARY_NAME} -f                  │"
-echo "  └──────────────────────────────────────────────────────────────────────┘"
-echo
+BOX_TITLE="✓ Installation complete"
+[ "$IS_UPGRADE" = "1" ] && BOX_TITLE="✓ Upgrade complete"
+
+# Label/value rows, built as plain strings first so the box can size itself
+# to whatever this run actually produced (IP/domain length, custom binary
+# name, a long email, ...) instead of a hand-counted fixed width that
+# silently breaks alignment the moment a value runs long.
+LABEL_FIELD_W=12
+row() { printf '%-*s%s' "$LABEL_FIELD_W" "$1:" "$2"; }
+
+ROWS=()
+[ "$IS_UPGRADE" = "0" ] && ROWS+=("")
+ROWS+=("$(row 'Version' "$INSTALLED_VERSION")")
 if [ "$IS_UPGRADE" = "0" ]; then
-echo "  Next steps:"
-echo "    1. Open ${DASHBOARD_URL}"
-if [ "$USE_ACME" = "0" ]; then
-echo "    2. Accept the browser security warning (self-signed cert)"
-echo "    3. Add a backend service under Services"
-echo "    4. Switch to a trusted cert: Settings → TLS → enter your domain"
-else
-echo "    2. The TLS certificate will be issued automatically on first visit"
-echo "    3. Add a backend service under Services"
+	ROWS+=(
+		"$(row 'Admin UI' "$DASHBOARD_URL")"
+		"$(row 'Email' "$ADMIN_EMAIL")"
+		"$(row 'Password' '(as entered above)')"
+		"$(row 'TLS' "$CERT_NOTE")"
+	)
 fi
+ROWS+=(
+	""
+	"$(row 'Service' "sudo systemctl status ${BINARY_NAME}")"
+	"$(row 'Logs' "sudo journalctl -u ${BINARY_NAME} -f")"
+)
+
+CONTENT_W=${#BOX_TITLE}
+for r in "${ROWS[@]}"; do
+	[ "${#r}" -gt "$CONTENT_W" ] && CONTENT_W=${#r}
+done
+[ "$CONTENT_W" -lt 66 ] && CONTENT_W=66
+
+printf -v BORDER '%*s' "$((CONTENT_W + 4))" ''
+BORDER=${BORDER// /─}
+
+# printf '%-*s' pads to a *byte* count, not a character count — it comes up
+# short whenever the string holds a multi-byte UTF-8 glyph (✓, the — in
+# CERT_NOTE), which silently broke this box's right border before. Padding
+# by hand against ${#text} (bash's char count, correct even for multi-byte
+# glyphs) is what actually keeps every row's border aligned.
+pad_to() {
+	local width="$1" text="$2" n
+	n=$(( width - ${#text} ))
+	[ "$n" -lt 0 ] && n=0
+	printf '%s%*s' "$text" "$n" ''
+}
+
+# Colors only the fixed-width label field of each row. Padding is always
+# computed on the plain (uncolored) string first, so splicing ANSI codes in
+# afterwards never throws off the column count that keeps the box aligned.
+box_row() {
+	local plain="$1" padded label rest
+	padded="$(pad_to "$CONTENT_W" "$plain")"
+	if [ -z "$plain" ]; then
+		printf '  %s│%s  %s  %s│%s\n' "$C_GREEN" "$C_RESET" "$padded" "$C_GREEN" "$C_RESET"
+	else
+		label="${padded:0:LABEL_FIELD_W}"
+		rest="${padded:LABEL_FIELD_W}"
+		printf '  %s│%s  %s%s%s%s  %s│%s\n' "$C_GREEN" "$C_RESET" "$C_CYAN" "$label" "$C_RESET" "$rest" "$C_GREEN" "$C_RESET"
+	fi
+}
+
 echo
+printf '  %s┌%s┐%s\n' "$C_GREEN" "$BORDER" "$C_RESET"
+TITLE_PADDED="$(pad_to "$CONTENT_W" "$BOX_TITLE")"
+printf '  %s│%s  %s%s%s%s  %s│%s\n' "$C_GREEN" "$C_RESET" "$C_BOLD" "$C_GREEN" "$TITLE_PADDED" "$C_RESET" "$C_GREEN" "$C_RESET"
+for r in "${ROWS[@]}"; do
+	box_row "$r"
+done
+printf '  %s└%s┘%s\n' "$C_GREEN" "$BORDER" "$C_RESET"
+echo
+
+if [ "$IS_UPGRADE" = "0" ]; then
+	printf '  %sNext steps:%s\n' "$C_BOLD" "$C_RESET"
+	printf '    %s1.%s Open %s\n' "$C_CYAN" "$C_RESET" "$DASHBOARD_URL"
+	if [ "$USE_ACME" = "0" ]; then
+		printf '    %s2.%s Accept the browser security warning (self-signed cert)\n' "$C_CYAN" "$C_RESET"
+		printf '    %s3.%s Add a backend service under Services\n' "$C_CYAN" "$C_RESET"
+		printf '    %s4.%s Switch to a trusted cert: Settings → TLS → enter your domain\n' "$C_CYAN" "$C_RESET"
+	else
+		printf '    %s2.%s The TLS certificate will be issued automatically on first visit\n' "$C_CYAN" "$C_RESET"
+		printf '    %s3.%s Add a backend service under Services\n' "$C_CYAN" "$C_RESET"
+	fi
+	echo
 fi
