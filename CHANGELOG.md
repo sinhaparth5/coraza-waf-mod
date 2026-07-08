@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-07-08
+
+### Fixed
+- **Caching**: Varnish always reported `X-Cache: MISS`, even on repeated requests
+  for static assets on a service with caching enabled. Varnish's built-in
+  `vcl_backend_response` (appended after the custom one in `deploy/varnish/default.vcl`)
+  independently marks a response uncacheable when it sees `Cache-Control:
+  no-store`/`no-cache`/`private` or `Vary: *` — regardless of any ttl already
+  set — and many backend frameworks attach exactly that to every response,
+  including static files. Asset responses now have `Cache-Control` rewritten
+  to a cacheable value (and a literal `Vary: *` stripped) so the admin's
+  explicit per-service Cache toggle wins over a backend's default no-cache
+  headers.
+
 ## [1.4.2] - 2026-07-08
 
 ### Added
