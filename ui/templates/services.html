@@ -196,6 +196,25 @@
         <button type="submit" class="btn-primary w-full">Save</button>
       </form>
       <div id="svc-cache-error" class="text-[12px] text-red-500 mt-[10px]"></div>
+
+      <div class="border-t border-canvas mt-5 pt-4">
+        <form id="svc-cache-session-form" hx-post="{{.AdminPath}}/services/cache-session/0" hx-target="#services-body" hx-swap="innerHTML" data-admin-path="{{.AdminPath}}">
+          <p class="text-[12px] text-slate-500 mb-4 leading-[1.5]">Also cache logged-in traffic, partitioned per session — each session gets its own cached copy instead of Varnish refusing to cache any request that carries a cookie. Off by default; short TTL (10s) once enabled.</p>
+          <label class="flex items-center justify-between cursor-pointer py-2 mb-3">
+            <span class="text-[13px] font-semibold text-slate-700">Cache by session</span>
+            <span class="relative inline-block">
+              <input type="checkbox" name="session_enabled" value="1" id="svc-cache-session-enabled" class="peer sr-only"/>
+              <span class="block w-10 h-6 bg-slate-200 peer-checked:bg-brand rounded-full transition-colors duration-200 peer-focus:outline-none"></span>
+              <span class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-4"></span>
+            </span>
+          </label>
+          <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Session cookie name</label>
+          <input id="svc-cache-session-cookie" name="session_cookie_name" type="text" placeholder="e.g. session_id, connect.sid"
+            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white mb-4"/>
+          <button type="submit" class="btn-primary w-full">Save</button>
+        </form>
+        <div id="svc-cache-session-error" class="text-[12px] text-red-500 mt-[10px]"></div>
+      </div>
     </div>
 
     <!-- ── TLS tab (host-matched services only) ── -->
@@ -339,10 +358,14 @@
     {{if .CacheEnabled}}
     <span class="text-[11px] font-semibold bg-sky-100 text-sky-600 px-2 py-[2px] rounded-full">Cached</span>
     {{end}}
+    {{if .CacheBySession}}
+    <span class="text-[11px] font-semibold bg-sky-100 text-sky-600 px-2 py-[2px] rounded-full">Cached (session)</span>
+    {{end}}
     <span class="text-[12px] text-slate-400 whitespace-nowrap ml-1">{{fmtTime .CreatedAt}}</span>
     <button type="button" class="svc-edit-btn inline-flex items-center gap-[5px] text-[12px] font-medium text-slate-600 bg-white border border-line rounded-full px-4 py-[6px] cursor-pointer font-sans hover:border-slate-400 transition-colors duration-150 ml-1"
       data-id="{{.ID}}" data-name="{{.Name}}" data-has-host="{{if .Host}}1{{else}}0{{end}}"
-      data-rps="{{.RateLimitRPS}}" data-burst="{{.RateLimitBurst}}" data-mode="{{.BotMode}}" data-cache="{{if .CacheEnabled}}1{{else}}0{{end}}">
+      data-rps="{{.RateLimitRPS}}" data-burst="{{.RateLimitBurst}}" data-mode="{{.BotMode}}" data-cache="{{if .CacheEnabled}}1{{else}}0{{end}}"
+      data-session-cache="{{if .CacheBySession}}1{{else}}0{{end}}" data-session-cookie="{{.SessionCookieName}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-settings-01 text-xs"></i>
       Edit
     </button>

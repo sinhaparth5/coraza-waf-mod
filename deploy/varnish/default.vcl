@@ -72,8 +72,22 @@ sub vcl_recv {
         return (hash);
     }
 
-    # Rule B: authenticated / session traffic — never cache.
-    if (req.http.Authorization || req.http.Cookie) {
+    # Rule B: authenticated / session traffic — never cache, with one opt-in
+    # exception. Bearer-token APIs always pass straight through.
+    if (req.http.Authorization) {
+        return (pass);
+    }
+    if (req.http.Cookie) {
+        # X-Cache-Session is only set by the WAF when a service has opted
+        # into session-aware caching (admin toggle, off by default) AND this
+        # request actually carries that service's session cookie — it's a
+        # hash of the cookie value, computed after the request already
+        # passed the full WAF pipeline. Partition the cache per session
+        # instead of refusing to cache at all; vcl_hash folds this value in
+        # below, so different sessions never share a cache entry.
+        if (req.http.X-Cache-Session) {
+            return (hash);
+        }
         return (pass);
     }
 
@@ -87,6 +101,13 @@ sub vcl_hash {
     # routing) or serve the same path from different backends — the default
     # host+url hash alone would mix their entries.
     hash_data(req.http.X-Cache-Service);
+
+    # Session-aware caching (opt-in, see vcl_recv Rule B): further partition
+    # by session so two different logged-in users never share a cached
+    # response for the same URL.
+    if (req.http.X-Cache-Session) {
+        hash_data(req.http.X-Cache-Session);
+    }
 }
 
 sub vcl_backend_response {
@@ -115,6 +136,16 @@ sub vcl_backend_response {
         if (beresp.http.Vary == "*") {
             unset beresp.http.Vary;
         }
+    }
+
+    # Session-aware caching (opt-in): a per-session cache entry should go
+    # stale fast regardless of what TTL the backend's Cache-Control claims —
+    # this is live, personalized content, not a static asset. Responses that
+    # rotate the session token still hit the Set-Cookie branch above and stay
+    # fully uncacheable, which only busts *this* session's hash bucket, not
+    # the whole service's cache (see vcl_hash).
+    if (bereq.http.X-Cache-Session && beresp.ttl > 10s) {
+        set beresp.ttl = 10s;
     }
 
     # Serve stale content for a short window while a fresh copy is fetched.

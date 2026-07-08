@@ -180,31 +180,33 @@ func (db *DB) Close() error {
 
 func (db *DB) migrate() error {
 	// Idempotent column migration for existing databases.
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN country TEXT NOT NULL DEFAULT ''`)            //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN proxy_ip TEXT NOT NULL DEFAULT ''`)           //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN headers_json TEXT NOT NULL DEFAULT ''`)       //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN request_id TEXT NOT NULL DEFAULT ''`)         //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN proto TEXT NOT NULL DEFAULT ''`)              //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_version TEXT NOT NULL DEFAULT ''`)        //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_cipher TEXT NOT NULL DEFAULT ''`)         //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_sni TEXT NOT NULL DEFAULT ''`)            //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN asn_num INTEGER NOT NULL DEFAULT 0`)          //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN org TEXT NOT NULL DEFAULT ''`)                //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN query TEXT NOT NULL DEFAULT ''`)              //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN ja3_hash TEXT NOT NULL DEFAULT ''`)           //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN ja4 TEXT NOT NULL DEFAULT ''`)                //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN visitor_id TEXT NOT NULL DEFAULT ''`)         //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN bot_score INTEGER NOT NULL DEFAULT 0`)        //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_mode TEXT NOT NULL DEFAULT 'none'`)       //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_cert_path TEXT NOT NULL DEFAULT ''`)      //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_key_path TEXT NOT NULL DEFAULT ''`)       //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_expires_at TEXT NOT NULL DEFAULT ''`)     //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_rps REAL NOT NULL DEFAULT 0`)      //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_burst INTEGER NOT NULL DEFAULT 0`) //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN bot_mode TEXT NOT NULL DEFAULT 'inherit'`)    //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cert_id INTEGER NOT NULL DEFAULT 0`)          //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_enabled INTEGER NOT NULL DEFAULT 0`)    //nolint
-	db.conn.Exec(`ALTER TABLE ip_rules ADD COLUMN note TEXT NOT NULL DEFAULT ''`)               //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN country TEXT NOT NULL DEFAULT ''`)             //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN proxy_ip TEXT NOT NULL DEFAULT ''`)            //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN headers_json TEXT NOT NULL DEFAULT ''`)        //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN request_id TEXT NOT NULL DEFAULT ''`)          //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN proto TEXT NOT NULL DEFAULT ''`)               //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_version TEXT NOT NULL DEFAULT ''`)         //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_cipher TEXT NOT NULL DEFAULT ''`)          //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_sni TEXT NOT NULL DEFAULT ''`)             //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN asn_num INTEGER NOT NULL DEFAULT 0`)           //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN org TEXT NOT NULL DEFAULT ''`)                 //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN query TEXT NOT NULL DEFAULT ''`)               //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN ja3_hash TEXT NOT NULL DEFAULT ''`)            //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN ja4 TEXT NOT NULL DEFAULT ''`)                 //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN visitor_id TEXT NOT NULL DEFAULT ''`)          //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN bot_score INTEGER NOT NULL DEFAULT 0`)         //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_mode TEXT NOT NULL DEFAULT 'none'`)        //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_cert_path TEXT NOT NULL DEFAULT ''`)       //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_key_path TEXT NOT NULL DEFAULT ''`)        //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_expires_at TEXT NOT NULL DEFAULT ''`)      //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_rps REAL NOT NULL DEFAULT 0`)       //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_burst INTEGER NOT NULL DEFAULT 0`)  //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN bot_mode TEXT NOT NULL DEFAULT 'inherit'`)     //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cert_id INTEGER NOT NULL DEFAULT 0`)           //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_enabled INTEGER NOT NULL DEFAULT 0`)     //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_by_session INTEGER NOT NULL DEFAULT 0`)  //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN session_cookie_name TEXT NOT NULL DEFAULT ''`) //nolint
+	db.conn.Exec(`ALTER TABLE ip_rules ADD COLUMN note TEXT NOT NULL DEFAULT ''`)                //nolint
 
 	_, err := db.conn.Exec(`
 	CREATE TABLE IF NOT EXISTS requests (
@@ -282,7 +284,9 @@ func (db *DB) migrate() error {
 		rate_limit_burst INTEGER NOT NULL DEFAULT 0,
 		bot_mode         TEXT NOT NULL DEFAULT 'inherit',
 		cert_id          INTEGER NOT NULL DEFAULT 0,
-		cache_enabled    INTEGER NOT NULL DEFAULT 0
+		cache_enabled    INTEGER NOT NULL DEFAULT 0,
+		cache_by_session INTEGER NOT NULL DEFAULT 0,
+		session_cookie_name TEXT NOT NULL DEFAULT ''
 	);
 
 	CREATE TABLE IF NOT EXISTS certificates (
@@ -590,21 +594,23 @@ func (db *DB) ListGeoRules() ([]GeoRule, error) {
 // on-demand via Let's Encrypt/autocert). TLSExpiresAt is RFC3339, "" if
 // unknown or not yet issued.
 type Service struct {
-	ID             int
-	Name           string
-	Host           string
-	Prefix         string
-	Backend        string
-	CreatedAt      time.Time
-	TLSMode        string
-	TLSCertPath    string
-	TLSKeyPath     string
-	TLSExpiresAt   string
-	RateLimitRPS   float64
-	RateLimitBurst int
-	BotMode        string // "inherit" | "always" | "off"
-	CertID         int64  // >0 when TLS cert comes from the shared cert pool
-	CacheEnabled   bool   // route clean traffic through the local Varnish cache
+	ID                int
+	Name              string
+	Host              string
+	Prefix            string
+	Backend           string
+	CreatedAt         time.Time
+	TLSMode           string
+	TLSCertPath       string
+	TLSKeyPath        string
+	TLSExpiresAt      string
+	RateLimitRPS      float64
+	RateLimitBurst    int
+	BotMode           string // "inherit" | "always" | "off"
+	CertID            int64  // >0 when TLS cert comes from the shared cert pool
+	CacheEnabled      bool   // route clean traffic through the local Varnish cache
+	CacheBySession    bool   // partition cached objects by SessionCookieName's value instead of refusing to cache any cookie-bearing request
+	SessionCookieName string // name of this service's session cookie; required for CacheBySession to take effect
 }
 
 func (db *DB) AddService(name, host, prefix, backend string, rps float64, burst int) error {
@@ -685,6 +691,17 @@ func (db *DB) SetServiceBotMode(id int, mode string) error {
 // choices survive the cache layer being switched off and on.
 func (db *DB) SetServiceCache(id int, enabled bool) error {
 	_, err := db.conn.Exec(`UPDATE services SET cache_enabled = ? WHERE id = ?`, enabled, id)
+	return err
+}
+
+// SetServiceCacheSession configures opt-in session-aware caching for a
+// service: when enabled, cached objects are partitioned per session-cookie
+// value (see services.Registry's Director and deploy/varnish/default.vcl)
+// instead of Varnish refusing to cache any request that carries a cookie.
+// cookieName is the name of this service's session cookie; enabled has no
+// effect until it's set to a non-empty value.
+func (db *DB) SetServiceCacheSession(id int, enabled bool, cookieName string) error {
+	_, err := db.conn.Exec(`UPDATE services SET cache_by_session = ?, session_cookie_name = ? WHERE id = ?`, enabled, cookieName, id)
 	return err
 }
 
@@ -802,7 +819,7 @@ func (db *DB) SetBotSettings(enabled bool, threshold, ttl int) error {
 
 func (db *DB) ListServices() ([]Service, error) {
 	rows, err := db.conn.Query(
-		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled FROM services ORDER BY created_at ASC`,
+		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled, cache_by_session, session_cookie_name FROM services ORDER BY created_at ASC`,
 	)
 	if err != nil {
 		return nil, err
@@ -812,7 +829,7 @@ func (db *DB) ListServices() ([]Service, error) {
 	var out []Service
 	for rows.Next() {
 		var s Service
-		if err := rows.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled, &s.CacheBySession, &s.SessionCookieName); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -824,9 +841,9 @@ func (db *DB) ListServices() ([]Service, error) {
 func (db *DB) GetService(id int) (Service, error) {
 	var s Service
 	err := db.conn.QueryRow(
-		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled FROM services WHERE id = ?`,
+		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled, cache_by_session, session_cookie_name FROM services WHERE id = ?`,
 		id,
-	).Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled)
+	).Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled, &s.CacheBySession, &s.SessionCookieName)
 	return s, err
 }
 

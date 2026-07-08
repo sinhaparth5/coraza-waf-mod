@@ -126,6 +126,9 @@
   var botIdInput = document.getElementById('bot-service-id');
   var cacheForm = document.getElementById('svc-cache-form');
   var cacheToggle = document.getElementById('svc-cache-enabled');
+  var cacheSessionForm = document.getElementById('svc-cache-session-form');
+  var cacheSessionToggle = document.getElementById('svc-cache-session-enabled');
+  var cacheSessionCookie = document.getElementById('svc-cache-session-cookie');
   var deleteBtn = document.getElementById('svc-delete-btn');
 
   function showTab(name) {
@@ -164,6 +167,11 @@
     htmx.process(cacheForm);
     cacheToggle.checked = d.cache === '1';
 
+    cacheSessionForm.setAttribute('hx-post', adminPath + '/services/cache-session/' + d.id);
+    htmx.process(cacheSessionForm);
+    cacheSessionToggle.checked = d.sessionCache === '1';
+    cacheSessionCookie.value = d.sessionCookie || '';
+
     document.querySelectorAll('.tls-service-id').forEach(function (input) {
       input.value = d.id;
     });
@@ -175,7 +183,7 @@
     deleteBtn.setAttribute('hx-confirm', 'Remove service ' + d.name + '?');
     htmx.process(deleteBtn);
 
-    ['tls-error', 'rl-error', 'bot-error', 'svc-cache-error'].forEach(function (id) {
+    ['tls-error', 'rl-error', 'bot-error', 'svc-cache-error', 'svc-cache-session-error'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.textContent = '';
     });
@@ -225,7 +233,7 @@
   document.body.addEventListener('rl-saved', closeModal);
   document.body.addEventListener('htmx:afterRequest', function (e) {
     var elt = e.detail.elt;
-    if ((elt === botForm || elt === cacheForm || elt === deleteBtn) && e.detail.successful) closeModal();
+    if ((elt === botForm || elt === cacheForm || elt === cacheSessionForm || elt === deleteBtn) && e.detail.successful) closeModal();
   });
 })();
 
