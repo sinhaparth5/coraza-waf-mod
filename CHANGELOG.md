@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.5] - 2026-07-08
+
+### Added
+- **Caching**: Opt-in per-service session-aware Varnish caching. Previously
+  any request carrying a Cookie was refused caching outright; a service can
+  now name its session cookie and have Varnish partition the cache per
+  session instead — the WAF hashes the cookie's value (SHA-256, never the
+  raw token) into `X-Cache-Session` before handing the request to Varnish,
+  which folds it into the cache-hash key. Capped at a 10s TTL and off by
+  default; services that don't opt in keep the original all-or-nothing
+  Cookie behavior.
+- **Caching**: Per-service TTL floor/ceiling and grace/keep tuning, replacing
+  the previous hardcoded 1h asset floor and flat 30s grace. Configurable from
+  the Services page; sent as headers by the WAF's Director and applied in the
+  VCL via `std.duration()` — the VCL itself still never changes per service.
+- **Caching**: A purge action (button + API) that immediately evicts
+  everything Varnish has cached for one service — useful right after
+  deploying new content to its backend. The WAF sends a `PURGE` request
+  directly to Varnish over loopback (same trust model as the existing
+  cache-return listener), which `ban()`s every object tagged with that
+  service.
+
+### Security
+- Removed the `X-Protected-By` response header. `X-WAF-Engine` is kept, but
+  advertising a dedicated "protected by" banner on every response made WAF
+  fingerprinting by reconnaissance tools unnecessarily easy.
+
 ## [1.4.3] - 2026-07-08
 
 ### Fixed
