@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-07-08
+
 ### Added
+- First release published from GitHub after migrating the repository from
+  GitLab.
+- GitHub Actions now runs tests on pushes and pull requests, then builds and
+  publishes release binaries automatically when a `v*` tag is pushed.
+- GitHub Release notes are now generated from the matching `CHANGELOG.md`
+  version section, with install and checksum instructions appended
+  automatically.
 - Bot challenge now detects automated browsers. The challenge page probes for
   automation-leakage markers (`navigator.webdriver`, ChromeDriver `cdc_`/`$cdc_`
   arrays, `domAutomationController`, Selenium/Puppeteer/Playwright/PhantomJS/
@@ -16,6 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scanners (e.g. OWASP ZAP's browser-driven mode) that previously solved the PoW
   and earned a trusted session are now kept at the challenge — where the autoban
   scorer eventually bans the IP for the repeated unsolved redirects.
+
+### Changed
+- Replaced the GitLab CI/CD pipeline with GitHub Actions.
+- Updated the installer to discover releases through the GitHub API and download
+  binaries plus checksums from GitHub Release assets instead of GitLab's package
+  registry.
+- Updated contributor and release documentation for GitHub pull requests,
+  Actions, release downloads, and compare links.
 
 ### Fixed
 - Removed the unused `config.yaml` / `deploy/config.yaml.example` files and
@@ -125,9 +142,10 @@ Initial release — a single-binary Go WAF + reverse proxy.
 - **All storage in SQLite** (`modernc.org/sqlite`, pure Go, no CGO) — one
   `waf.db` file for logs, rules, services, and TLS state.
 
-[Unreleased]: https://gitlab.com/sinhaparth5/coraza-waf-mod/-/compare/v1.3.0...main
-[1.3.0]: https://gitlab.com/sinhaparth5/coraza-waf-mod/-/compare/v1.2.0...v1.3.0
-[1.2.0]: https://gitlab.com/sinhaparth5/coraza-waf-mod/-/compare/v1.1.0...v1.2.0
-[1.1.0]: https://gitlab.com/sinhaparth5/coraza-waf-mod/-/compare/v1.0.1...v1.1.0
-[1.0.1]: https://gitlab.com/sinhaparth5/coraza-waf-mod/-/compare/v1.0.0...v1.0.1
-[1.0.0]: https://gitlab.com/sinhaparth5/coraza-waf-mod/-/tags/v1.0.0
+[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.4.2...main
+[1.4.2]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.3.0...v1.4.2
+[1.3.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.0.1...v1.1.0
+[1.0.1]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/sinhaparth5/coraza-waf-mod/releases/tag/v1.0.0

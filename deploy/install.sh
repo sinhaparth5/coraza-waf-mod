@@ -2,13 +2,13 @@
 # Coraza WAF Mod — single-line installer
 #
 # Usage (always installs the latest release):
-#   curl -fsSL https://gitlab.com/sinhaparth5/coraza-waf-mod/-/raw/main/deploy/install.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/sinhaparth5/coraza-waf-mod/main/deploy/install.sh | sudo bash
 #
 # Pin to a specific version:
 #   curl -fsSL ... | sudo CORAZA_VERSION=v1.0.0 bash
 #
 # Private project — pass a personal access token:
-#   curl -fsSL ... | sudo GITLAB_TOKEN=glpat-xxxx bash
+#   curl -fsSL ... | sudo GITHUB_TOKEN=ghp_xxxx bash
 #
 # Dry-run (prints every action, writes nothing):
 #   DRY_RUN=1 bash install.sh
@@ -18,13 +18,12 @@
 set -euo pipefail
 
 # ── Project config ────────────────────────────────────────────────────────────
-GITLAB_HOST="https://gitlab.com"
-PROJECT_PATH="sinhaparth5/coraza-waf-mod"
-PACKAGE_NAME="coraza-waf-mod"
+GITHUB_API="https://api.github.com"
+GITHUB_REPO="sinhaparth5/coraza-waf-mod"
 # ─────────────────────────────────────────────────────────────────────────────
 
 DRY_RUN="${DRY_RUN:-0}"
-GITLAB_TOKEN="${GITLAB_TOKEN:-}"
+GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 CORAZA_VERSION="${CORAZA_VERSION:-}"
 
 BINARY_NAME="coraza-waf-mod"
@@ -58,14 +57,13 @@ case "$(uname -m)" in
 	*) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
 esac
 
-ENCODED_PATH="${PROJECT_PATH//\//%2F}"
-API_BASE="${GITLAB_HOST}/api/v4/projects/${ENCODED_PATH}"
+API_BASE="${GITHUB_API}/repos/${GITHUB_REPO}"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 curl_get() {
-	if [ -n "$GITLAB_TOKEN" ]; then
-		curl -fsSL -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "$@"
+	if [ -n "$GITHUB_TOKEN" ]; then
+		curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" "$@"
 	else
 		curl -fsSL "$@"
 	fi
@@ -116,13 +114,13 @@ fi
 if [ -z "$CORAZA_VERSION" ]; then
 	echo "==> Detecting latest release..."
 	CORAZA_VERSION=$(
-		curl_get "${API_BASE}/releases?order_by=released_at&sort=desc&per_page=1" \
-		| grep -o '"tag_name":"[^"]*"' \
+		curl_get "${API_BASE}/releases/latest" \
+		| grep -o '"tag_name":[[:space:]]*"[^"]*"' \
 		| head -1 \
-		| sed 's/"tag_name":"\([^"]*\)"/\1/'
+		| sed 's/"tag_name":[[:space:]]*"\([^"]*\)"/\1/'
 	)
 	if [ -z "$CORAZA_VERSION" ]; then
-		echo "ERROR: Could not detect the latest release from GitLab." >&2
+		echo "ERROR: Could not detect the latest release from GitHub." >&2
 		echo "  Set CORAZA_VERSION manually: CORAZA_VERSION=v1.0.0 bash install.sh" >&2
 		exit 1
 	fi
@@ -130,7 +128,7 @@ if [ -z "$CORAZA_VERSION" ]; then
 fi
 
 ASSET="${BINARY_NAME}-linux-${ARCH}"
-PKGS_BASE="${API_BASE}/packages/generic/${PACKAGE_NAME}/${CORAZA_VERSION}"
+DOWNLOAD_BASE="https://github.com/${GITHUB_REPO}/releases/download/${CORAZA_VERSION}"
 
 if [ "$IS_UPGRADE" = "1" ]; then
 	echo "==> Upgrading ${BINARY_NAME} to ${CORAZA_VERSION} (linux/${ARCH})"
@@ -210,15 +208,15 @@ echo
 # ── Download & verify binary ──────────────────────────────────────────────────
 
 if [ "$DRY_RUN" = "1" ]; then
-	echo "==> [DRY RUN] Would download and verify ${PKGS_BASE}/${ASSET}"
+	echo "==> [DRY RUN] Would download and verify ${DOWNLOAD_BASE}/${ASSET}"
 	echo
 else
 	WORKDIR="$(mktemp -d)"
 	trap 'rm -rf "$WORKDIR"' EXIT
 
 	echo "==> Downloading ${ASSET}"
-	curl_get "${PKGS_BASE}/${ASSET}" -o "${WORKDIR}/${ASSET}"
-	curl_get "${PKGS_BASE}/checksums.txt" -o "${WORKDIR}/checksums.txt"
+	curl_get "${DOWNLOAD_BASE}/${ASSET}" -o "${WORKDIR}/${ASSET}"
+	curl_get "${DOWNLOAD_BASE}/checksums.txt" -o "${WORKDIR}/checksums.txt"
 
 	echo "==> Verifying SHA256"
 	(cd "$WORKDIR" && sha256sum --check --ignore-missing checksums.txt)
@@ -300,7 +298,7 @@ echo "==> Installing systemd units"
 write_file "${UNIT_PATH}" <<UNIT
 [Unit]
 Description=Coraza WAF Mod (WAF + reverse proxy)
-Documentation=https://gitlab.com/sinhaparth5/coraza-waf-mod
+Documentation=https://github.com/sinhaparth5/coraza-waf-mod
 After=network.target
 
 [Service]

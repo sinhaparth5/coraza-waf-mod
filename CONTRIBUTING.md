@@ -18,7 +18,7 @@ project's [Apache License 2.0](LICENSE).
 ## Getting started
 
 ```bash
-git clone https://gitlab.com/sinhaparth5/coraza-waf-mod.git
+git clone https://github.com/sinhaparth5/coraza-waf-mod.git
 cd coraza-waf-mod
 make build      # go generate (minifies JS) + go build -> ./coraza-waf-mod
 make test       # go test ./...
@@ -88,14 +88,14 @@ fixed before disclosure.
 
 ## Submitting changes
 
-This project is hosted on **GitLab**; changes are proposed as **merge requests**.
+This project is hosted on **GitHub**; changes are proposed as **pull requests**.
 
 1. Branch off `main` (e.g. `git checkout -b 42-fix-threat-intel-delete`).
 2. Make focused commits with short, imperative or descriptive summaries — match
    the existing history (e.g. `ci: run go generate before go test to produce
    embedded JS assets`). Mention the affected area when useful.
 3. Run `make test` (and `gofmt`) before pushing.
-4. Open a merge request that includes:
+4. Open a pull request that includes:
    - a brief description of the change and its motivation;
    - test results, plus any config or migration notes;
    - screenshots for dashboard/UI changes;
@@ -104,12 +104,16 @@ This project is hosted on **GitLab**; changes are proposed as **merge requests**
 5. Add a `## [Unreleased]` entry to [`CHANGELOG.md`](CHANGELOG.md) for anything
    user-visible.
 
-Preserve unrelated changes in the working tree, and keep each MR scoped to one
+Preserve unrelated changes in the working tree, and keep each PR scoped to one
 logical change.
 
 ## Releases
 
 Releases are cut by the maintainer with `make tag VERSION=vX.Y.Z`, which pushes
-an annotated tag and triggers the GitLab release pipeline. The project follows
-[Semantic Versioning](https://semver.org/). Contributors don't need to tag —
-just land your `Unreleased` changelog entry and it will roll into the next tag.
+an annotated tag and triggers the GitHub Actions release workflow. The project follows
+[Semantic Versioning](https://semver.org/). Before tagging, move the relevant
+`CHANGELOG.md` entries from `## [Unreleased]` into a version section such as
+`## [1.4.0] - 2026-07-08`; the workflow uses that section as the GitHub Release
+description and appends install/checksum instructions automatically. Contributors
+don't need to tag — just land your `Unreleased` changelog entry and it will roll
+into the next release.

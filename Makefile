@@ -46,5 +46,5 @@ tag:
 	@echo "==> Tagging $(VERSION)"
 	git tag -a $(VERSION) -m "Release $(VERSION)"
 	git push origin $(VERSION)
-	@echo "==> Pipeline started — watch it at:"
-	@echo "    https://gitlab.com/sinhaparth5/coraza-waf-mod/-/pipelines"
+	@echo "==> GitHub Actions release workflow started — watch it at:"
+	@echo "    https://github.com/sinhaparth5/coraza-waf-mod/actions"

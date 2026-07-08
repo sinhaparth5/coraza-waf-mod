@@ -25,7 +25,7 @@ A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraz
 ### Option A — native binary (recommended)
 
 ```bash
-curl -fsSL https://<wherever-this-is-published>/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/sinhaparth5/coraza-waf-mod/main/deploy/install.sh | sudo bash
 ```
 
 This downloads the release binary for your architecture (amd64/arm64), verifies its SHA256 checksum, creates a dedicated non-root system user (`coraza-waf-mod`, granted only `CAP_NET_BIND_SERVICE` so it can bind ports 80/443 without running as root), interactively prompts for an admin email and password (or generates one) and seeds it into the database via `coraza-waf-mod setup`, installs a systemd unit that starts the binary with CLI flags, and starts the service.
@@ -44,7 +44,7 @@ There is no config file to edit — everything the installer set up is either a 
 Requires Go 1.25+.
 
 ```bash
-git clone https://gitlab.com/sinhaparth5/coraza-waf-mod.git
+git clone https://github.com/sinhaparth5/coraza-waf-mod.git
 cd coraza-waf-mod
 make build      # go generate (minifies JS) + go build -> ./coraza-waf-mod
 
