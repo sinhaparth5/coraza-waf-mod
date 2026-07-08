@@ -97,10 +97,24 @@ sub vcl_backend_response {
         return (deliver);
     }
 
-    # Static assets with no/short caching headers get a sensible floor so a
-    # backend that forgets Cache-Control still benefits from the cache.
-    if (beresp.ttl < 120s && bereq.url ~ "\.(png|jpg|jpeg|gif|webp|avif|css|js|mjs|ico|svg|woff2?|ttf)(\?.*)?$") {
-        set beresp.ttl = 1h;
+    # Static assets: cache aggressively regardless of what the backend sends.
+    # This sub is appended to Varnish's built-in vcl_backend_response (we
+    # never return() past this point), and that built-in independently marks
+    # an object uncacheable when it sees Cache-Control: no-store/no-cache/
+    # private or Vary: * — regardless of any ttl we set here. Many app
+    # frameworks/security middleware attach exactly that to every response,
+    # including static files, which silently turns every hit into a
+    # permanent MISS (see #11). Since caching was an explicit admin choice
+    # (the Cache toggle in /admin/services), it should win over a backend
+    # default aimed at dynamic routes — so rewrite the header, not just ttl.
+    if (bereq.url ~ "\.(png|jpg|jpeg|gif|webp|avif|css|js|mjs|ico|svg|woff2?|ttf|map)(\?.*)?$") {
+        if (beresp.http.Cache-Control ~ "no-store|no-cache|private" || beresp.ttl < 120s) {
+            set beresp.http.Cache-Control = "public, max-age=3600";
+            set beresp.ttl = 1h;
+        }
+        if (beresp.http.Vary == "*") {
+            unset beresp.http.Vary;
+        }
     }
 
     # Serve stale content for a short window while a fresh copy is fetched.
