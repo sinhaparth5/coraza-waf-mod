@@ -262,6 +262,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/services/ratelimit", h.SetServiceRateLimit)
 	g.POST("/services/bot/:id", h.SetServiceBotMode)
 	g.POST("/services/cache/:id", h.SetServiceCache)
+	g.POST("/services/cache-session/:id", h.SetServiceCacheSession)
 	g.POST("/settings/varnish", h.SaveVarnishConfig)
 	g.POST("/settings/acme-email", h.SaveAcmeEmail)
 	g.POST("/settings/bot", h.SaveBotSettings)
@@ -1743,6 +1744,31 @@ func (h *Handler) SetServiceCache(c echo.Context) error {
 	}
 	enabled := c.FormValue("enabled") == "1"
 	if err := h.db.SetServiceCache(id, enabled); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	if err := h.registry.Reload(h.db); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	w := c.Response().Writer
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return h.tmpls["services"].ExecuteTemplate(w, "services-rows", h.serviceViews())
+}
+
+// SetServiceCacheSession configures opt-in session-aware Varnish caching for
+// one service: cached objects are partitioned by the named session cookie's
+// value instead of Varnish refusing to cache any cookie-bearing request.
+// Requires both the checkbox and a non-empty cookie name to take effect.
+func (h *Handler) SetServiceCacheSession(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
+	}
+	enabled := c.FormValue("session_enabled") == "1"
+	cookieName := strings.TrimSpace(c.FormValue("session_cookie_name"))
+	if enabled && cookieName == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "session cookie name is required"})
+	}
+	if err := h.db.SetServiceCacheSession(id, enabled, cookieName); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	if err := h.registry.Reload(h.db); err != nil {

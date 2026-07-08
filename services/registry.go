@@ -5,7 +5,9 @@ package services
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net"
@@ -152,6 +154,8 @@ func (r *Registry) Reload(db *storage.DB) error {
 			stock := rp.Director
 			varnishAddr := vcfg.Addr
 			backendHost := target.Host
+			cacheBySession := s.CacheBySession
+			sessionCookieName := s.SessionCookieName
 			rp.Director = func(req *http.Request) {
 				stock(req)
 				for _, hn := range spoofableHostHeaders {
@@ -159,6 +163,24 @@ func (r *Registry) Reload(db *storage.DB) error {
 				}
 				req.Header.Set("X-Cache-Service", name)
 				req.Header.Set("X-Waf-Backend", backendHost)
+				// Opt-in session-aware caching (admin toggle, off by default):
+				// partition the cache by this service's session cookie value
+				// instead of Varnish refusing to cache any cookie-bearing
+				// request. The value is hashed rather than forwarded raw —
+				// keeps the header short regardless of cookie size, avoids
+				// putting a live session token into Varnish's own logs, and
+				// sidesteps any header-injection concern from an arbitrary
+				// client-controlled cookie value. This request has already
+				// passed the full WAF pipeline (challenge gate, WAF
+				// inspection) before reaching here, so nothing client-
+				// controlled that wasn't already validated is entering the
+				// cache key.
+				if cacheBySession && sessionCookieName != "" {
+					if ck, err := req.Cookie(sessionCookieName); err == nil && ck.Value != "" {
+						sum := sha256.Sum256([]byte(ck.Value))
+						req.Header.Set("X-Cache-Session", hex.EncodeToString(sum[:16]))
+					}
+				}
 				req.URL.Scheme = "http"
 				req.URL.Host = varnishAddr
 			}
