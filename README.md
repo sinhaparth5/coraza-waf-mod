@@ -25,7 +25,7 @@ A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraz
 ### Option A — native binary (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sinhaparth5/coraza-waf-mod/main/deploy/install.sh | sudo bash
+curl -fsSL https://waf-install.astrareconslabs.com/coraza-waf-mod/install.sh | sudo bash
 ```
 
 This downloads the release binary for your architecture (amd64/arm64), verifies its SHA256 checksum, creates a dedicated non-root system user (`coraza-waf-mod`, granted only `CAP_NET_BIND_SERVICE` so it can bind ports 80/443 without running as root), interactively prompts for an admin email and password (or generates one) and seeds it into the database via `coraza-waf-mod setup`, installs a systemd unit that starts the binary with CLI flags, and starts the service.
@@ -38,6 +38,16 @@ sudo journalctl -u coraza-waf-mod -f
 ```
 
 There is no config file to edit — everything the installer set up is either a flag baked into the systemd unit (`sudo systemctl cat coraza-waf-mod` to see it) or a setting stored in the database and managed from the dashboard. Data, certs, and `waf.db` live under `/var/lib/coraza-waf-mod/`.
+
+#### Upgrading
+
+Re-run the same command:
+
+```bash
+curl -fsSL https://waf-install.astrareconslabs.com/coraza-waf-mod/install.sh | sudo bash
+```
+
+The installer detects the existing binary at `/usr/local/bin/coraza-waf-mod` and switches to upgrade mode: it downloads and verifies the latest release, replaces the binary, rewrites the systemd units, and restarts the service — skipping the interactive prompts entirely. Admin credentials and TLS certificates are never touched on upgrade. Pin a specific version instead of always taking latest with `curl -fsSL ... | sudo CORAZA_VERSION=v1.2.3 bash`.
 
 ### Option B — build from source
 

@@ -2,7 +2,7 @@
 # Coraza WAF Mod — single-line installer
 #
 # Usage (always installs the latest release):
-#   curl -fsSL https://raw.githubusercontent.com/sinhaparth5/coraza-waf-mod/main/deploy/install.sh | sudo bash
+#   curl -fsSL https://waf-install.astrareconslabs.com/coraza-waf-mod/install.sh | sudo bash
 #
 # Pin to a specific version:
 #   curl -fsSL ... | sudo CORAZA_VERSION=v1.0.0 bash
