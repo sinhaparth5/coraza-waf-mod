@@ -215,6 +215,48 @@
         </form>
         <div id="svc-cache-session-error" class="text-[12px] text-red-500 mt-[10px]"></div>
       </div>
+
+      <div class="border-t border-canvas mt-5 pt-4">
+        <form id="svc-cache-tuning-form" hx-post="{{.AdminPath}}/services/cache-tuning/0" hx-target="#services-body" hx-swap="innerHTML" data-admin-path="{{.AdminPath}}">
+          <p class="text-[12px] text-slate-500 mb-4 leading-[1.5]">Override Varnish's defaults for this service. Leave blank to use the built-in behavior (1h floor for static assets, no ceiling, 30s grace/keep).</p>
+          <div class="flex gap-3 mb-3">
+            <div class="flex-1">
+              <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">TTL floor (s)</label>
+              <input id="svc-cache-ttl-floor" name="ttl_floor" type="number" min="0" placeholder="e.g. 3600"
+                class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+            </div>
+            <div class="flex-1">
+              <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">TTL ceiling (s)</label>
+              <input id="svc-cache-ttl-ceiling" name="ttl_ceiling" type="number" min="0" placeholder="e.g. 86400"
+                class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+            </div>
+          </div>
+          <div class="flex gap-3 mb-4">
+            <div class="flex-1">
+              <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Grace (s)</label>
+              <input id="svc-cache-grace" name="grace" type="number" min="0" placeholder="30"
+                class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+            </div>
+            <div class="flex-1">
+              <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Keep (s)</label>
+              <input id="svc-cache-keep" name="keep" type="number" min="0" placeholder="30"
+                class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+            </div>
+          </div>
+          <button type="submit" class="btn-primary w-full">Save</button>
+        </form>
+        <div id="svc-cache-tuning-error" class="text-[12px] text-red-500 mt-[10px]"></div>
+      </div>
+
+      <div class="border-t border-canvas mt-5 pt-4">
+        <p class="text-[12px] text-slate-500 mb-3 leading-[1.5]">Immediately evict everything Varnish has cached for this service — useful right after deploying new content to its backend.</p>
+        <form id="svc-cache-purge-form" hx-post="{{.AdminPath}}/services/cache-purge/0" hx-target="#svc-cache-purge-status" hx-swap="innerHTML" data-admin-path="{{.AdminPath}}">
+          <button type="submit" class="w-full py-[10px] rounded-full border border-line bg-white text-slate-700 text-[13px] font-medium cursor-pointer font-sans hover:border-slate-400 transition-colors duration-150">
+            Purge cached content
+          </button>
+        </form>
+        <div id="svc-cache-purge-status" class="text-[12px] mt-[10px]"></div>
+      </div>
     </div>
 
     <!-- ── TLS tab (host-matched services only) ── -->
@@ -365,7 +407,8 @@
     <button type="button" class="svc-edit-btn inline-flex items-center gap-[5px] text-[12px] font-medium text-slate-600 bg-white border border-line rounded-full px-4 py-[6px] cursor-pointer font-sans hover:border-slate-400 transition-colors duration-150 ml-1"
       data-id="{{.ID}}" data-name="{{.Name}}" data-has-host="{{if .Host}}1{{else}}0{{end}}"
       data-rps="{{.RateLimitRPS}}" data-burst="{{.RateLimitBurst}}" data-mode="{{.BotMode}}" data-cache="{{if .CacheEnabled}}1{{else}}0{{end}}"
-      data-session-cache="{{if .CacheBySession}}1{{else}}0{{end}}" data-session-cookie="{{.SessionCookieName}}">
+      data-session-cache="{{if .CacheBySession}}1{{else}}0{{end}}" data-session-cookie="{{.SessionCookieName}}"
+      data-ttl-floor="{{.CacheTTLFloor}}" data-ttl-ceiling="{{.CacheTTLCeiling}}" data-grace="{{.CacheGrace}}" data-keep="{{.CacheKeep}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-settings-01 text-xs"></i>
       Edit
     </button>

@@ -206,6 +206,10 @@ func (db *DB) migrate() error {
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_enabled INTEGER NOT NULL DEFAULT 0`)     //nolint
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_by_session INTEGER NOT NULL DEFAULT 0`)  //nolint
 	db.conn.Exec(`ALTER TABLE services ADD COLUMN session_cookie_name TEXT NOT NULL DEFAULT ''`) //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_ttl_floor INTEGER NOT NULL DEFAULT 0`)   //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_ttl_ceiling INTEGER NOT NULL DEFAULT 0`) //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_grace INTEGER NOT NULL DEFAULT 0`)       //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_keep INTEGER NOT NULL DEFAULT 0`)        //nolint
 	db.conn.Exec(`ALTER TABLE ip_rules ADD COLUMN note TEXT NOT NULL DEFAULT ''`)                //nolint
 
 	_, err := db.conn.Exec(`
@@ -286,7 +290,11 @@ func (db *DB) migrate() error {
 		cert_id          INTEGER NOT NULL DEFAULT 0,
 		cache_enabled    INTEGER NOT NULL DEFAULT 0,
 		cache_by_session INTEGER NOT NULL DEFAULT 0,
-		session_cookie_name TEXT NOT NULL DEFAULT ''
+		session_cookie_name TEXT NOT NULL DEFAULT '',
+		cache_ttl_floor    INTEGER NOT NULL DEFAULT 0,
+		cache_ttl_ceiling  INTEGER NOT NULL DEFAULT 0,
+		cache_grace        INTEGER NOT NULL DEFAULT 0,
+		cache_keep         INTEGER NOT NULL DEFAULT 0
 	);
 
 	CREATE TABLE IF NOT EXISTS certificates (
@@ -611,6 +619,10 @@ type Service struct {
 	CacheEnabled      bool   // route clean traffic through the local Varnish cache
 	CacheBySession    bool   // partition cached objects by SessionCookieName's value instead of refusing to cache any cookie-bearing request
 	SessionCookieName string // name of this service's session cookie; required for CacheBySession to take effect
+	CacheTTLFloor     int    // seconds; 0 = no floor beyond the built-in 1h default for static assets
+	CacheTTLCeiling   int    // seconds; 0 = no ceiling, backend Cache-Control wins
+	CacheGrace        int    // seconds; 0 = VCL default (30s) — how long a stale object may still be served
+	CacheKeep         int    // seconds; 0 = VCL default (30s) — how long a stale object stays around for conditional revalidation after grace
 }
 
 func (db *DB) AddService(name, host, prefix, backend string, rps float64, burst int) error {
@@ -702,6 +714,19 @@ func (db *DB) SetServiceCache(id int, enabled bool) error {
 // effect until it's set to a non-empty value.
 func (db *DB) SetServiceCacheSession(id int, enabled bool, cookieName string) error {
 	_, err := db.conn.Exec(`UPDATE services SET cache_by_session = ?, session_cookie_name = ? WHERE id = ?`, enabled, cookieName, id)
+	return err
+}
+
+// SetServiceCacheTuning configures per-service Varnish TTL/grace/keep
+// overrides (see services.Registry's Director and deploy/varnish/default.vcl,
+// which read these back as X-Cache-TTL-Floor/-Ceiling/-Grace/-Keep headers).
+// Each value is seconds; 0 means "unset", falling back to the VCL's own
+// defaults (a 1h floor for static assets, no ceiling, 30s grace/keep).
+func (db *DB) SetServiceCacheTuning(id, ttlFloor, ttlCeiling, grace, keep int) error {
+	_, err := db.conn.Exec(
+		`UPDATE services SET cache_ttl_floor = ?, cache_ttl_ceiling = ?, cache_grace = ?, cache_keep = ? WHERE id = ?`,
+		ttlFloor, ttlCeiling, grace, keep, id,
+	)
 	return err
 }
 
@@ -817,10 +842,18 @@ func (db *DB) SetBotSettings(enabled bool, threshold, ttl int) error {
 	return db.setMeta("bot_ttl", strconv.Itoa(ttl))
 }
 
+// serviceColumns is shared by ListServices/GetService so their SELECT list
+// and Scan args can't drift out of sync as columns are added.
+const serviceColumns = `id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled, cache_by_session, session_cookie_name, cache_ttl_floor, cache_ttl_ceiling, cache_grace, cache_keep`
+
+func (db *DB) scanService(row interface{ Scan(...any) error }) (Service, error) {
+	var s Service
+	err := row.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled, &s.CacheBySession, &s.SessionCookieName, &s.CacheTTLFloor, &s.CacheTTLCeiling, &s.CacheGrace, &s.CacheKeep)
+	return s, err
+}
+
 func (db *DB) ListServices() ([]Service, error) {
-	rows, err := db.conn.Query(
-		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled, cache_by_session, session_cookie_name FROM services ORDER BY created_at ASC`,
-	)
+	rows, err := db.conn.Query(`SELECT ` + serviceColumns + ` FROM services ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -828,8 +861,8 @@ func (db *DB) ListServices() ([]Service, error) {
 
 	var out []Service
 	for rows.Next() {
-		var s Service
-		if err := rows.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled, &s.CacheBySession, &s.SessionCookieName); err != nil {
+		s, err := db.scanService(rows)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -839,12 +872,7 @@ func (db *DB) ListServices() ([]Service, error) {
 
 // GetService fetches a single service by ID.
 func (db *DB) GetService(id int) (Service, error) {
-	var s Service
-	err := db.conn.QueryRow(
-		`SELECT id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled, cache_by_session, session_cookie_name FROM services WHERE id = ?`,
-		id,
-	).Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled, &s.CacheBySession, &s.SessionCookieName)
-	return s, err
+	return db.scanService(db.conn.QueryRow(`SELECT `+serviceColumns+` FROM services WHERE id = ?`, id))
 }
 
 const metaKeyServicesMigrated = "services_migrated_from_config"

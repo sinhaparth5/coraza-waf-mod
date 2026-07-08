@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -156,6 +158,7 @@ func (r *Registry) Reload(db *storage.DB) error {
 			backendHost := target.Host
 			cacheBySession := s.CacheBySession
 			sessionCookieName := s.SessionCookieName
+			ttlFloor, ttlCeiling, grace, keep := s.CacheTTLFloor, s.CacheTTLCeiling, s.CacheGrace, s.CacheKeep
 			rp.Director = func(req *http.Request) {
 				stock(req)
 				for _, hn := range spoofableHostHeaders {
@@ -180,6 +183,22 @@ func (r *Registry) Reload(db *storage.DB) error {
 						sum := sha256.Sum256([]byte(ck.Value))
 						req.Header.Set("X-Cache-Session", hex.EncodeToString(sum[:16]))
 					}
+				}
+				// Per-service cache tuning (admin-configurable, 0 = unset —
+				// the VCL falls back to its own defaults for any header
+				// that's absent). Sent as plain seconds; the VCL parses them
+				// with std.duration().
+				if ttlFloor > 0 {
+					req.Header.Set("X-Cache-TTL-Floor", strconv.Itoa(ttlFloor))
+				}
+				if ttlCeiling > 0 {
+					req.Header.Set("X-Cache-TTL-Ceiling", strconv.Itoa(ttlCeiling))
+				}
+				if grace > 0 {
+					req.Header.Set("X-Cache-Grace", strconv.Itoa(grace))
+				}
+				if keep > 0 {
+					req.Header.Set("X-Cache-Keep", strconv.Itoa(keep))
 				}
 				req.URL.Scheme = "http"
 				req.URL.Host = varnishAddr
@@ -480,6 +499,52 @@ func Probe(backend string) error {
 		return fmt.Errorf("backend not reachable: %w", err)
 	}
 	resp.Body.Close()
+	return nil
+}
+
+// safeServiceNameForBan matches the conservative character set allowed to be
+// concatenated into a Varnish ban() expression (see Purge) — Varnish's ban
+// grammar has no escaping mechanism for the compared value (the same
+// unescaped-concatenation pattern is what Varnish's own docs show), so a
+// service name containing e.g. a quote or "||" could widen or break the ban
+// expression. Service names aren't otherwise character-restricted, so this
+// is enforced here rather than at service-creation time.
+var safeServiceNameForBan = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+
+// Purge invalidates every object cached for one service by sending a PURGE
+// request directly to Varnish's client port over loopback — the WAF issuing
+// it, never client traffic, same trust model as the cache-return listener
+// (see main.go's startCacheReturn). deploy/varnish/default.vcl bans on
+// obj.http.X-Cache-Service, the same header the outer Director already tags
+// every cached object with, so this only affects objects belonging to
+// serviceName. Intended for the admin UI's "Purge" button, e.g. right after
+// deploying new content to a backend.
+func Purge(vcfg storage.VarnishConfig, serviceName string) error {
+	if !vcfg.Enabled {
+		return fmt.Errorf("varnish integration is not enabled")
+	}
+	if !safeServiceNameForBan.MatchString(serviceName) {
+		return fmt.Errorf("service name contains characters not safe to purge by")
+	}
+	host, _, err := net.SplitHostPort(vcfg.Addr)
+	if err != nil || (host != "localhost" && (net.ParseIP(host) == nil || !net.ParseIP(host).IsLoopback())) {
+		return fmt.Errorf("refusing to purge a non-loopback varnish address")
+	}
+
+	client := &http.Client{Timeout: probeTimeout}
+	req, err := http.NewRequest("PURGE", "http://"+vcfg.Addr+"/", nil)
+	if err != nil {
+		return fmt.Errorf("invalid varnish address: %w", err)
+	}
+	req.Header.Set("X-Cache-Service", serviceName)
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("varnish not reachable: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("varnish returned %s for purge", resp.Status)
+	}
 	return nil
 }
 
