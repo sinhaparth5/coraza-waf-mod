@@ -440,9 +440,15 @@ func Validate(backend string) error {
 // Probe checks whether a backend URL is currently reachable. Any HTTP
 // response (even 404/500) counts as reachable — we're checking connectivity,
 // not whether the backend has a route at "/". Only a dial/timeout failure
-// counts as unreachable.
+// counts as unreachable. Redirects are not followed: the admin-entered URL
+// is the only target this probe should ever contact.
 func Probe(backend string) error {
-	client := &http.Client{Timeout: probeTimeout}
+	client := &http.Client{
+		Timeout: probeTimeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	req, err := http.NewRequest(http.MethodGet, backend, nil)
 	if err != nil {
 		return fmt.Errorf("invalid backend URL: %w", err)
