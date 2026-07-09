@@ -24,16 +24,20 @@ cd coraza-waf-mod
 make build      # go generate (minifies JS) + go build -> ./coraza-waf-mod
 make test       # go test ./...
 make lint       # golangci-lint run ./... (config: .golangci.yml)
-make hooks      # one-time: enable the pre-push lint hook in .githooks/
 ```
 
 `make lint` requires [golangci-lint](https://golangci-lint.run/welcome/install/)
 (pin: see `LINT_VERSION` in the `Makefile`, matching the `version:` pinned in
-`.github/workflows/ci.yml`'s lint job). `make hooks` points git at the
-versioned `.githooks/pre-push` script (`git config core.hooksPath
-.githooks`) so `golangci-lint run ./...` runs before every `git push`,
-catching lint failures locally instead of first in CI; skip a single push
-with `git push --no-verify`.
+`.github/workflows/ci.yml`'s lint job). The first `make build` or `make test`
+you run in a fresh clone also points git at the versioned
+`.githooks/pre-commit` script (`git config core.hooksPath .githooks` — `hooks`
+is a prerequisite of both targets, idempotent and silent once already set),
+so `golangci-lint run ./...` runs before every `git commit` from then on,
+catching lint failures locally instead of first in CI. There's no way to ship
+that config in a commit — git never version-controls `.git/hooks/` itself —
+so if you never run `make build`/`make test` locally (e.g. editing only docs)
+the hook stays off; enable it explicitly with `make hooks`. Skip a single
+commit with `git commit --no-verify`.
 
 Run a single package's tests while iterating:
 
@@ -64,8 +68,9 @@ signal/mitigation packages, `internal/notify/` for outbound reporting) — see
 ## Coding conventions
 
 - Run **`gofmt`** on every changed Go file, and **`make lint`**
-  (golangci-lint) before pushing — the same check runs in CI and, once
-  `make hooks` is enabled, in a pre-push hook. Keep package names short,
+  (golangci-lint) before committing — the same check runs in CI and, once
+  the pre-commit hook is enabled (automatic after your first `make build` or
+  `make test`), locally on every `git commit`. Keep package names short,
   lowercase, and role-based; export only what crosses a package boundary.
 - Prefer **table-driven tests** (e.g. `TestRegistryMatchPrefixPriority`), and add
   cases next to the package you changed.

@@ -30,6 +30,7 @@ func TestIPRulesTemplateRendersAutobanAndNotes(t *testing.T) {
 		"AdminPath":      "/admin",
 		"AlertCount":     0,
 		"Rules":          rules,
+		"ThreatScores":   map[string]int{"203.0.113.7": 73},
 		"CurPage":        1,
 		"TotalPages":     1,
 		"Total":          2,
@@ -73,6 +74,14 @@ func TestIPRulesTemplateRendersAutobanAndNotes(t *testing.T) {
 	// Single page: no Prev/Next controls should render at all.
 	if strings.Contains(page, "Page 1 of 1") {
 		t.Error("pagination footer must not render when there's only one page")
+	}
+	// Threat score (issue #12): the scored row shows its score, the
+	// unscored row shows the "no data yet" placeholder instead of "Score 0".
+	if !strings.Contains(page, "Score 73") {
+		t.Error(`rendered page missing "Score 73" for the row with a recorded threat score`)
+	}
+	if !strings.Contains(page, "Score —") {
+		t.Error(`rendered page missing "Score —" for the row with no recorded threat score`)
 	}
 }
 

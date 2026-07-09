@@ -370,6 +370,27 @@
         </div>
       </div>
 
+      <!-- ⑤.5 Threat Score — hidden until this IP has a recorded score -->
+      <div id="ld-threat-section" class="hidden">
+        <p class="ld-section-title">Threat Score</p>
+        <div class="bg-surface border border-line rounded-2xl overflow-hidden">
+          <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
+            <i class="hgi hgi-stroke hgi-rounded hgi-shield-energy text-slate-400 text-[16px] shrink-0"></i>
+            <div class="flex-1 min-w-0">
+              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">Composite Score (0–100)</p>
+              <p id="ld-threat-score" class="mono text-[13px] text-slate-700"></p>
+            </div>
+          </div>
+          <div class="flex items-center gap-3 px-4 py-3">
+            <i class="hgi hgi-stroke hgi-rounded hgi-chart-breakout-square text-slate-400 text-[16px] shrink-0"></i>
+            <div class="flex-1 min-w-0">
+              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">Breakdown</p>
+              <p id="ld-threat-breakdown" class="mono text-[13px] text-slate-700"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ⑥ Security — only when blocked -->
       <div id="ld-security" class="hidden">
         <p class="ld-section-title">Security Decision</p>

@@ -110,7 +110,7 @@
   <div class="card overflow-hidden h-fit">
     {{template "card-header" (map "Cat" "Firewall" "Title" "Active IP Rules" "Badge" (printf "%d rules" .Total))}}
     <div id="ip-rules-body" class="flex flex-col gap-1 px-2 pb-2">
-      {{template "ip-rules-rows" (map "AdminPath" .AdminPath "Rules" .Rules "CurPage" .CurPage "TotalPages" .TotalPages "Total" .Total)}}
+      {{template "ip-rules-rows" (map "AdminPath" .AdminPath "Rules" .Rules "ThreatScores" .ThreatScores "CurPage" .CurPage "TotalPages" .TotalPages "Total" .Total)}}
     </div>
   </div>
 
@@ -183,6 +183,11 @@
   {{if .Auto}}
   <span class="text-[12px] font-semibold px-[10px] py-1 rounded-full shrink-0 bg-amber-100 text-amber-700">Auto</span>
   {{end}}
+  {{$score := 0}}
+  {{if $.ThreatScores}}{{$score = index $.ThreatScores .IP}}{{end}}
+  <span class="text-[12px] font-semibold px-[10px] py-1 rounded-full shrink-0 bg-slate-100 text-slate-600" title="Composite threat score (0-100)">
+    {{if gt $score 0}}Score {{$score}}{{else}}Score —{{end}}
+  </span>
   <span class="text-[12px] font-semibold px-[10px] py-1 rounded-full shrink-0 {{if eq .RuleType "block"}}bg-red-100 text-red-600{{else}}bg-green-100 text-green-600{{end}}">{{if eq .RuleType "block"}}Block{{else}}Allow{{end}}</span>
   {{template "remove-btn" (map "URL" (printf "%s/ip-rules/%d?page=%d" $.AdminPath .ID $.CurPage) "Target" "#ip-rules-body" "Confirm" (printf "Remove rule for %s?" .IP))}}
 </div>

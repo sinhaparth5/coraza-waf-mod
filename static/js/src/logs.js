@@ -615,6 +615,22 @@
       }
     }
 
+    var threatSection = document.getElementById('ld-threat-section');
+    if (threatSection) {
+      if (d.has_threat_score) {
+        threatSection.classList.remove('hidden');
+        setText('ld-threat-score', String(d.threat_score) + ' / 100');
+        setText('ld-threat-breakdown',
+          'autoban ' + d.threat_autoban +
+          ' · bot ' + d.threat_bot +
+          ' · asn ' + d.threat_asn +
+          ' · geo ' + d.threat_geo +
+          ' · ja4 ' + d.threat_ja4);
+      } else {
+        threatSection.classList.add('hidden');
+      }
+    }
+
     var secEl = document.getElementById('ld-security');
     if (secEl) {
       if (d.blocked) {

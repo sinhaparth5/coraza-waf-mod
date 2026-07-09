@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Runs golangci-lint before every commit, so lint failures surface locally
+# instead of first showing up in CI. Enabled automatically the first time
+# you run `make build` or `make test` (or explicitly via `make hooks`);
+# skip a single commit with `git commit --no-verify`.
+set -euo pipefail
+
+echo "==> golangci-lint (pre-commit)"
+
+if ! command -v golangci-lint >/dev/null 2>&1; then
+	echo "golangci-lint not found — install it: https://golangci-lint.run/welcome/install/"
+	echo "or skip this check once with: git commit --no-verify"
+	exit 1
+fi
+
+golangci-lint run ./...
