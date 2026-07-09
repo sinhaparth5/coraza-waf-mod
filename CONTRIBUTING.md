@@ -5,7 +5,8 @@ reverse proxy with an embedded HTMX/Tailwind admin dashboard. This guide covers
 how to build, test, and submit changes.
 
 By contributing, you agree that your contributions are licensed under the
-project's [Apache License 2.0](LICENSE).
+project's [Apache License 2.0](LICENSE), and to abide by the project's
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Prerequisites
 
