@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This is a single-binary Go WAF and reverse proxy with an embedded admin UI. `main.go` wires startup, config, TLS, pruning, and server modes. Core packages include `config/`, `waf/`, `proxy/`, `services/`, `storage/`, and `metrics/`. Blocking and detection logic lives in `blocklist/`, `geo/`, `asn/`, `bot/`, `ja3/`, `ja4/`, `ratelimit/`, and `threatintel/`. The dashboard lives in `ui/handlers.go` and `ui/templates/`. Frontend sources are in `static/js/src/`; generated files go to `static/js/dist/`.
+This is a single-binary Go WAF and reverse proxy with an embedded admin UI. `main.go` wires startup, config, TLS, pruning, and server modes. All implementation packages live under `internal/`, grouped by concern. Core packages include `internal/config/`, `internal/security/waf/`, `internal/proxy/`, `internal/services/`, `internal/storage/`, and `internal/notify/metrics/`. Blocking and detection logic lives under `internal/security/` (`blocklist/`, `geo/`, `asn/`, `bot/`, `ja3/`, `ja4/`, `ratelimit/`, `threatintel/`). The dashboard lives in `internal/ui/handlers.go` and `internal/ui/templates/`. Frontend sources are in `static/js/src/`; generated files go to `static/js/dist/`.
 
 ## Build, Test, and Development Commands
 
@@ -19,11 +19,11 @@ After editing `static/js/src/*.js`, run `make generate` or `make build` before a
 
 ## Coding Style & Naming Conventions
 
-Use standard Go formatting: run `gofmt` on changed Go files and keep package names short, lowercase, and role-based. Export names only for cross-package APIs. Prefer table-driven tests for routing, blocking, and config behavior. Templates use Tailwind utilities from `ui/templates/base.html`; avoid adding a Node build pipeline, inline `style` attributes, or separate CSS for utilities Tailwind can express.
+Use standard Go formatting: run `gofmt` on changed Go files and keep package names short, lowercase, and role-based. Export names only for cross-package APIs. Prefer table-driven tests for routing, blocking, and config behavior. Templates use Tailwind utilities from `internal/ui/templates/base.html`; avoid adding a Node build pipeline, inline `style` attributes, or separate CSS for utilities Tailwind can express.
 
 ## Testing Guidelines
 
-Tests exist in `proxy/`, `ratelimit/`, `ja3/`, `ja4/`, `services/`, `storage/`, and `ui/`. Add tests next to the package being changed, using Go’s standard `testing` package and names like `TestRegistryMatchPrefixPriority`. Run `make test` before submitting. For focused work, use `go test ./proxy -run TestName -v` with the relevant package path.
+Tests exist in `internal/proxy/`, `internal/security/ratelimit/`, `internal/security/ja3/`, `internal/security/ja4/`, `internal/services/`, `internal/storage/`, and `internal/ui/`. Add tests next to the package being changed, using Go’s standard `testing` package and names like `TestRegistryMatchPrefixPriority`. Run `make test` before submitting. For focused work, use `go test ./internal/proxy -run TestName -v` with the relevant package path.
 
 ## Commit & Pull Request Guidelines
 
