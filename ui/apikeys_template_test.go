@@ -39,15 +39,17 @@ func TestAPIKeysCardRenders(t *testing.T) {
 		"/admin/settings/api-keys", "/admin/api/v1",
 		"cwaf_full_secret_value_shown_once", "won't be shown again",
 		"ci-deploy", "cwaf_abcd1234", "terraform", "cwaf_ef567890", "Never",
+		`data-copy-value="cwaf_full_secret_value_shown_once"`, "copy-btn-icon", "copy-btn-label",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("api-keys-card output missing %q", want)
 		}
 	}
-	// The raw secret must never appear more than once in this card's markup —
-	// otherwise a re-render (e.g. after a later revoke) could leak it again.
-	if strings.Count(out, "cwaf_full_secret_value_shown_once") != 1 {
-		t.Errorf("raw key must appear exactly once, got %d occurrences", strings.Count(out, "cwaf_full_secret_value_shown_once"))
+	// The raw secret appears exactly twice by design — the visible <code> and
+	// the copy button's data-copy-value — and never a third time; a third
+	// occurrence would mean it leaked somewhere else in a later re-render.
+	if n := strings.Count(out, "cwaf_full_secret_value_shown_once"); n != 2 {
+		t.Errorf("raw key must appear exactly twice (display + copy button), got %d occurrences", n)
 	}
 
 	buf.Reset()

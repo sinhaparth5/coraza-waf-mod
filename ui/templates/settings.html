@@ -307,7 +307,14 @@
   {{if .NewAPIKey}}
   <div class="rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[13px] px-4 py-3 mb-4">
     <p class="font-semibold mb-1">Copy this key now — it won't be shown again.</p>
-    <code class="block font-mono text-[12px] bg-white border border-amber-200 rounded-lg px-3 py-2 mt-1 select-all break-all">{{.NewAPIKey}}</code>
+    <div class="flex items-center gap-2 mt-1">
+      <code class="flex-1 min-w-0 font-mono text-[12px] bg-white border border-amber-200 rounded-lg px-3 py-2 select-all break-all">{{.NewAPIKey}}</code>
+      <button type="button" data-copy-value="{{.NewAPIKey}}"
+              class="copy-btn inline-flex items-center gap-[6px] shrink-0 rounded-lg border border-amber-200 bg-white text-amber-800 text-[12px] font-medium px-3 py-2 hover:bg-amber-50 transition-colors duration-150 cursor-pointer">
+        <i class="hgi hgi-stroke hgi-rounded hgi-copy-01 text-sm copy-btn-icon"></i>
+        <span class="copy-btn-label">Copy</span>
+      </button>
+    </div>
   </div>
   {{end}}
   {{if .APIKeySaveErr}}
