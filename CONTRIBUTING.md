@@ -27,11 +27,17 @@ make test       # go test ./...
 Run a single package's tests while iterating:
 
 ```bash
-go test ./proxy/ -run TestName -v
+go test ./internal/proxy/ -run TestName -v
 ```
 
-Tests live alongside the code they cover — `proxy/`, `ratelimit/`, `ja3/`,
-`ja4/`, `storage/`, `mailer/`, `autoban/`, `challenge/`, `services/`, `ui/`.
+Tests live alongside the code they cover — `internal/proxy/`,
+`internal/security/ratelimit/`, `internal/security/ja3/`,
+`internal/security/ja4/`, `internal/storage/`, `internal/notify/mailer/`,
+`internal/security/autoban/`, `internal/security/challenge/`,
+`internal/services/`, `internal/ui/`. Every implementation package lives
+under `internal/`, grouped by concern (`internal/security/` for
+signal/mitigation packages, `internal/notify/` for outbound reporting) — see
+[`CLAUDE.md`](CLAUDE.md)'s "Module layout" for the full tree.
 
 ## Build rules that will bite you
 
