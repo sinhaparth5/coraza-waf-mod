@@ -66,6 +66,7 @@
     </div>
 
     {{template "autoban-card" .}}
+    {{template "adaptive-card" .}}
 
     <!-- Rules overview -->
     <div class="rounded-[28px] bg-navy p-6 flex flex-col gap-2">
@@ -157,6 +158,70 @@
       </div>
     </div>
     <p class="text-[12px] text-slate-500 -mt-1">Scoring inside the window: critical WAF hit = 5, other WAF hit = 2, rate-limited = 1, unsolved bot challenge = 1. Private and allow-listed IPs are never banned.</p>
+
+    <button type="submit" class="btn-primary w-full flex items-center justify-center gap-2">
+      <i class="hgi hgi-stroke hgi-rounded hgi-checkmark-circle-02 text-sm"></i>
+      Save &amp; apply
+    </button>
+  </form>
+</div>
+{{end}}
+
+{{define "adaptive-card"}}
+<div class="card p-6" id="adaptive-card">
+  <div class="flex items-center gap-[10px] mb-2">
+    <div class="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center">
+      <i class="hgi hgi-stroke hgi-rounded hgi-shield-energy text-[14px] text-amber-600"></i>
+    </div>
+    <h2 class="text-[17px] font-bold text-slate-900">Adaptive enforcement</h2>
+  </div>
+  <p class="text-[12px] text-slate-500 mb-4">Scales the global rate limit and can force a bot challenge based on each client's current <span class="font-semibold text-slate-600">threat score</span> (shown per-row above) — tighter for high-risk IPs, relaxed for low-risk ones. Reversible: every request re-checks the live score, so this never permanently blocks anyone the way Automatic banning does.</p>
+
+  {{if .AdaptiveSaveOK}}
+  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Saved — adaptive enforcement settings applied.</div>
+  {{end}}
+  {{if .AdaptiveSaveErr}}
+  <div class="rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px] px-4 py-3 mb-4">{{.AdaptiveSaveErr}}</div>
+  {{end}}
+
+  <form hx-post="/admin/ip-rules/adaptive" hx-target="#adaptive-card" hx-swap="outerHTML" class="flex flex-col gap-4">
+    <label class="flex items-center justify-between cursor-pointer">
+      <span class="text-[13px] font-medium text-slate-700">Adjust enforcement automatically</span>
+      <span class="relative inline-block">
+        <input type="checkbox" name="adaptive_enabled" value="1" class="peer sr-only" {{if .AdaptiveEnabled}}checked{{end}}/>
+        <span class="block w-10 h-6 bg-slate-200 peer-checked:bg-brand rounded-full transition-colors duration-200 peer-focus:outline-none"></span>
+        <span class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-4"></span>
+      </span>
+    </label>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">High-risk threshold (score ≥)</label>
+        <input name="adaptive_high_threshold" type="number" min="1" max="100" value="{{.AdaptiveHighThresh}}"
+          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+      </div>
+      <div>
+        <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Low-risk threshold (score ≤)</label>
+        <input name="adaptive_low_threshold" type="number" min="0" max="99" value="{{.AdaptiveLowThresh}}"
+          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+      </div>
+      <div>
+        <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">High-risk rate scale</label>
+        <input name="adaptive_high_rate_scale" type="number" min="0.05" max="1" step="0.05" value="{{.AdaptiveHighScale}}"
+          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+      </div>
+      <div>
+        <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Low-risk rate scale</label>
+        <input name="adaptive_low_rate_scale" type="number" min="1" max="5" step="0.05" value="{{.AdaptiveLowScale}}"
+          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+      </div>
+      <div class="col-span-2">
+        <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Force bot challenge (score ≥)</label>
+        <input name="adaptive_force_challenge_threshold" type="number" min="1" max="100" value="{{.AdaptiveForceChallenge}}"
+          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+      </div>
+    </div>
+    <p class="text-[12px] text-slate-500 -mt-1">Rate scale multiplies the global limit's rate and burst — 0.3 means 30% of normal for high-risk IPs, 1.5 means 150% of normal for low-risk ones. Blocked/challenged rows from adaptive enforcement show up in Logs tagged <span class="mono">:adaptive</span>.</p>
 
     <button type="submit" class="btn-primary w-full flex items-center justify-center gap-2">
       <i class="hgi hgi-stroke hgi-rounded hgi-checkmark-circle-02 text-sm"></i>

@@ -150,7 +150,7 @@ function showToast(data) {
 
   function getCfg(action) {
     var a = (action || '').toLowerCase();
-    if (a === 'rate_limited')    return CONFIGS.rate;
+    if (a.indexOf('rate_limited') === 0) return CONFIGS.rate; // covers "rate_limited:adaptive"
     if (a.indexOf('geo') !== -1) return CONFIGS.geo;
     if (a.indexOf('ip')  !== -1) return CONFIGS.ip;
     return CONFIGS.waf;

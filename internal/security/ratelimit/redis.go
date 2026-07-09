@@ -93,6 +93,25 @@ func NewRedisBackend(addr, password string, rate float64, burst int) (*RedisBack
 
 // Allow checks and consumes one token for ip. Satisfies Backend.
 func (r *RedisBackend) Allow(ip string) Result {
+	return r.allow(ip, r.rate, r.burst)
+}
+
+// AllowScaled behaves like Allow but against rate/burst multiplied by scale.
+// Satisfies Backend. The Lua script already takes rate/burst as per-call
+// arguments (see tokenBucketLua), so scaling needs no script change — just
+// different numbers passed in for this one call.
+func (r *RedisBackend) AllowScaled(ip string, scale float64) Result {
+	if scale <= 0 {
+		scale = 1.0
+	}
+	burst := int(float64(r.burst) * scale)
+	if burst < 1 {
+		burst = 1 // a scale bug must never fully lock out traffic
+	}
+	return r.allow(ip, r.rate*scale, burst)
+}
+
+func (r *RedisBackend) allow(ip string, rate float64, burst int) Result {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
@@ -100,11 +119,11 @@ func (r *RedisBackend) Allow(ip string) Result {
 	nowMs := time.Now().UnixMilli()
 
 	vals, err := r.script.Run(ctx, r.client, []string{key},
-		r.rate, r.burst, nowMs).Int64Slice()
+		rate, burst, nowMs).Int64Slice()
 	if err != nil || len(vals) < 3 {
 		// Redis unavailable or a malformed script reply — fail open to avoid
 		// blocking legitimate traffic (indexing a short reply would panic).
-		return Result{Allowed: true, Limit: r.rate, Burst: r.burst}
+		return Result{Allowed: true, Limit: rate, Burst: burst}
 	}
 
 	allowed := vals[0] == 1
@@ -116,11 +135,11 @@ func (r *RedisBackend) Allow(ip string) Result {
 			Allowed:    false,
 			RetryAfter: time.Duration(retryMs) * time.Millisecond,
 			Remaining:  0,
-			Limit:      r.rate,
-			Burst:      r.burst,
+			Limit:      rate,
+			Burst:      burst,
 		}
 	}
-	return Result{Allowed: true, Remaining: remaining, Limit: r.rate, Burst: r.burst}
+	return Result{Allowed: true, Remaining: remaining, Limit: rate, Burst: burst}
 }
 
 // TrackedIPs returns the number of rate-limit keys currently stored in Redis.

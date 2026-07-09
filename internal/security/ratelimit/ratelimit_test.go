@@ -119,6 +119,73 @@ func TestTrackedIPsCount(t *testing.T) {
 	}
 }
 
+// TestAllowScaledMatchesAllowAtScale1 checks AllowScaled(ip, 1.0) behaves
+// identically to Allow — the adaptive-enforcement no-op case (issue #16).
+func TestAllowScaledMatchesAllowAtScale1(t *testing.T) {
+	l := New(cfg(5, 3))
+	defer l.Stop()
+
+	for i := 0; i < 3; i++ {
+		if res := l.AllowScaled("10.0.1.1", 1.0); !res.Allowed {
+			t.Fatalf("request %d within burst should be allowed at scale 1.0", i+1)
+		}
+	}
+	if res := l.AllowScaled("10.0.1.1", 1.0); res.Allowed {
+		t.Fatal("4th request beyond burst should be blocked at scale 1.0")
+	}
+}
+
+// TestAllowScaledTightensSooner checks a high-risk scale (<1) blocks a
+// client sooner than the unscaled limit would.
+func TestAllowScaledTightensSooner(t *testing.T) {
+	l := New(cfg(10, 10)) // burst 10 normally
+	defer l.Stop()
+
+	// At scale 0.3, effective burst floors to 3 (10*0.3=3). The 4th call
+	// must already be blocked, well before the unscaled burst of 10.
+	allowed := 0
+	for i := 0; i < 10; i++ {
+		if l.AllowScaled("10.0.1.2", 0.3).Allowed {
+			allowed++
+		}
+	}
+	if allowed != 3 {
+		t.Fatalf("allowed %d requests at scale 0.3 (burst 10), want 3", allowed)
+	}
+}
+
+// TestAllowScaledRelaxesFurther checks a low-risk scale (>1) allows more
+// requests through than the unscaled limit would.
+func TestAllowScaledRelaxesFurther(t *testing.T) {
+	l := New(cfg(10, 4)) // burst 4 normally
+	defer l.Stop()
+
+	allowed := 0
+	for i := 0; i < 10; i++ {
+		if l.AllowScaled("10.0.1.3", 1.5).Allowed { // effective burst 6
+			allowed++
+		}
+	}
+	if allowed != 6 {
+		t.Fatalf("allowed %d requests at scale 1.5 (burst 4), want 6", allowed)
+	}
+}
+
+// TestAllowScaledNeverFullyLocksOut checks a zero/negative/tiny scale can't
+// reduce effective burst below 1 token — a scale bug must never fully lock
+// out traffic (issue #16's reversibility requirement).
+func TestAllowScaledNeverFullyLocksOut(t *testing.T) {
+	l := New(cfg(10, 10))
+	defer l.Stop()
+
+	for _, scale := range []float64{0, -1, 0.001} {
+		ip := "10.0.1.4"
+		if res := l.AllowScaled(ip, scale); !res.Allowed {
+			t.Errorf("scale %v: first request must be allowed (floor of 1 burst token), got blocked", scale)
+		}
+	}
+}
+
 func TestJanitorEvictsIdleBuckets(t *testing.T) {
 	// Override the module-level constants isn't possible from tests; instead
 	// we directly call evictIdle with a future cutoff to simulate elapsed time.

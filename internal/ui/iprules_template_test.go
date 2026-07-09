@@ -25,23 +25,29 @@ func TestIPRulesTemplateRendersAutobanAndNotes(t *testing.T) {
 		{ID: 2, IP: "1.2.3.4", RuleType: "allow", CreatedAt: time.Date(2026, 7, 1, 9, 0, 0, 0, time.UTC)},
 	}
 	data := map[string]any{
-		"Page":           "ip_rules",
-		"Heading":        "IP Rules",
-		"AdminPath":      "/admin",
-		"AlertCount":     0,
-		"Rules":          rules,
-		"ThreatScores":   map[string]int{"203.0.113.7": 73},
-		"CurPage":        1,
-		"TotalPages":     1,
-		"Total":          2,
-		"Apps":           []any{},
-		"BlockCount":     1,
-		"AllowCount":     1,
-		"BlockPct":       50,
-		"AllowPct":       50,
-		"AutobanEnabled": true,
-		"AutobanThresh":  10,
-		"AutobanWindow":  10,
+		"Page":                   "ip_rules",
+		"Heading":                "IP Rules",
+		"AdminPath":              "/admin",
+		"AlertCount":             0,
+		"Rules":                  rules,
+		"ThreatScores":           map[string]int{"203.0.113.7": 73},
+		"CurPage":                1,
+		"TotalPages":             1,
+		"Total":                  2,
+		"Apps":                   []any{},
+		"BlockCount":             1,
+		"AllowCount":             1,
+		"BlockPct":               50,
+		"AllowPct":               50,
+		"AutobanEnabled":         true,
+		"AutobanThresh":          10,
+		"AutobanWindow":          10,
+		"AdaptiveEnabled":        false,
+		"AdaptiveHighThresh":     70,
+		"AdaptiveLowThresh":      10,
+		"AdaptiveHighScale":      0.3,
+		"AdaptiveLowScale":       1.5,
+		"AdaptiveForceChallenge": 70,
 	}
 
 	var buf bytes.Buffer
@@ -56,6 +62,10 @@ func TestIPRulesTemplateRendersAutobanAndNotes(t *testing.T) {
 		`name="autoban_threshold"`,
 		`bg-amber-100 text-amber-700">Auto</span>`, // badge on the auto-banned row
 		"Auto-banned — 12 blocked requests in 10 min",
+		"Adaptive enforcement",
+		`hx-post="/admin/ip-rules/adaptive"`,
+		`name="adaptive_high_threshold"`,
+		`name="adaptive_force_challenge_threshold"`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("rendered page missing %q", want)

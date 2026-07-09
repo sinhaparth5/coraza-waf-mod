@@ -33,6 +33,7 @@ import (
 	"coraza-waf-mod/internal/notify/metrics"
 	"coraza-waf-mod/internal/notify/webhook"
 	"coraza-waf-mod/internal/proxy"
+	"coraza-waf-mod/internal/security/adaptive"
 	"coraza-waf-mod/internal/security/asn"
 	"coraza-waf-mod/internal/security/autoban"
 	"coraza-waf-mod/internal/security/blocklist"
@@ -222,15 +223,21 @@ func main() {
 
 	// Unified per-IP threat score: a composite read model (issue #12)
 	// combining autoban's history, bot score, ASN/hosting classification,
-	// geo risk, and JA4 repeat-offender history. Read-only today — no
-	// enforcement is driven by it yet (see issue #16).
+	// geo risk, and JA4 repeat-offender history.
 	scorer := threatscore.New(db, banner.Score)
+	defer scorer.Stop()
 	if rules, err := db.ListGeoRules(); err != nil {
 		log.Printf("threatscore: initial geo rules load: %v", err)
 	} else {
 		scorer.ReloadGeoRules(rules)
 	}
 	db.SetThreatScoreFn(scorer.Record)
+
+	// Threat-score-driven adaptive enforcement (issue #16): scales the
+	// global rate limit and can force a bot challenge based on a client's
+	// current composite score. Disabled by default — opt in from the IP
+	// Rules page once real scores are visible there.
+	adaptivePolicy := adaptive.New(db)
 
 	// nginx-style access.log: opt-in flat-file log for tooling that expects
 	// one (fail2ban, log shippers, grep/awk, logrotate) — independent of the
@@ -282,7 +289,7 @@ func main() {
 		},
 	}))
 
-	h := proxy.NewHandler(registry, engine, db, ipbl, geoBl, rl, asnLookup, ch, cfg.TrustedProxies...)
+	h := proxy.NewHandler(registry, engine, db, ipbl, geoBl, rl, asnLookup, ch, scorer, adaptivePolicy, cfg.TrustedProxies...)
 	// Stops whichever rate-limit backend is active at shutdown — not
 	// necessarily rl, since ReloadRateLimit (Settings page) may have hot-
 	// swapped it any number of times since startup.
@@ -313,7 +320,7 @@ func main() {
 		h.ReloadRateLimit(newBackend)
 	}
 
-	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs, reloadBot, buildChallenger, reloadRateLimit, reloadWAF, intelWorker.SyncSource, emailReporter.SendNow, banner.ReloadConfig, scorer)
+	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs, reloadBot, buildChallenger, reloadRateLimit, reloadWAF, intelWorker.SyncSource, emailReporter.SendNow, banner.ReloadConfig, scorer, adaptivePolicy.ReloadConfig)
 	if err != nil {
 		log.Fatalf("ui init: %v", err)
 	}

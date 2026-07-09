@@ -101,7 +101,9 @@ func (p *Pusher) shouldSend(events string, entry storage.RequestLog) bool {
 	category := "proxied"
 	if entry.Blocked {
 		category = "blocked"
-	} else if entry.Action == "bot_challenge" {
+	} else if strings.HasPrefix(entry.Action, "bot_challenge") {
+		// Prefix match: issue #16's adaptive enforcement can also trigger a
+		// challenge, logged as "bot_challenge:adaptive".
 		category = "challenged"
 	}
 	for _, e := range strings.Split(events, ",") {

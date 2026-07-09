@@ -9,10 +9,12 @@ import (
 
 	"coraza-waf-mod/internal/config"
 	"coraza-waf-mod/internal/proxy"
+	"coraza-waf-mod/internal/security/adaptive"
 	"coraza-waf-mod/internal/security/blocklist"
 	"coraza-waf-mod/internal/security/challenge"
 	"coraza-waf-mod/internal/security/geo"
 	"coraza-waf-mod/internal/security/ratelimit"
+	"coraza-waf-mod/internal/security/threatscore"
 	"coraza-waf-mod/internal/security/waf"
 	"coraza-waf-mod/internal/services"
 	"coraza-waf-mod/internal/storage"
@@ -65,7 +67,7 @@ func newTestHandler(t *testing.T, backend *httptest.Server) *proxy.Handler {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	t.Cleanup(func() { rl.Stop() })
 
-	return proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil)
+	return proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, nil, nil)
 }
 
 func TestNormalRequestProxied(t *testing.T) {
@@ -154,7 +156,7 @@ func TestIPBlocklistBlocks(t *testing.T) {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 
-	h2 := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil)
+	h2 := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, nil, nil)
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -190,7 +192,7 @@ func TestRateLimitReturns429(t *testing.T) {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: true, RequestsPerSecond: 1, Burst: 1})
 	defer rl.Stop()
 
-	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil)
+	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, nil, nil)
 	e := echo.New()
 
 	sendReq := func() int {
@@ -231,7 +233,7 @@ func TestCFConnectingIPUsedAsRealIP(t *testing.T) {
 	defer rl.Stop()
 
 	_ = capturedRemote
-	h2 := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil)
+	h2 := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, nil, nil)
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -269,7 +271,7 @@ func TestCFConnectingIPSpoofIgnored(t *testing.T) {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 
-	h2 := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil)
+	h2 := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, nil, nil)
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -308,7 +310,7 @@ func TestForwardedHeadersIgnoredFromUntrustedSource(t *testing.T) {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 
-	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil)
+	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, nil, nil)
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -344,7 +346,7 @@ func TestForwardedHeadersUsedFromTrustedProxy(t *testing.T) {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 
-	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, "198.51.100.0/24")
+	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, nil, nil, "198.51.100.0/24")
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -383,7 +385,7 @@ func TestRateLimitHeadersPresent(t *testing.T) {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 
-	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil)
+	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, nil, nil)
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -432,5 +434,149 @@ func TestChallengeNamespaceNeverChallengedOrProxied(t *testing.T) {
 	_ = h.Handle(e.NewContext(req, rec))
 	if rec.Code != http.StatusTemporaryRedirect {
 		t.Errorf("normal path with active challenger: expected 307, got %d", rec.Code)
+	}
+}
+
+// TestAdaptiveEnforcementTightensRateLimitForHighRiskIP exercises issue #16
+// end to end: a client whose cached threat score is at/above the configured
+// high-risk threshold gets a scaled-down effective rate limit, while an
+// unscored client keeps the normal limit.
+func TestAdaptiveEnforcementTightensRateLimitForHighRiskIP(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	dir := t.TempDir()
+	db, err := storage.Open(filepath.Join(dir, "adaptive-rl.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	if err := db.AddService("svc", "", "/", backend.URL, 0, 0); err != nil {
+		t.Fatalf("add service: %v", err)
+	}
+
+	ipbl, _ := blocklist.NewIPBlocklist(db)
+	geoBl, _ := geo.New("", db)
+	defer geoBl.Close()
+	reg, _ := services.New(db)
+	engine, _ := waf.New(config.WAFConfig{Enabled: false}, nil)
+
+	// Generous global limit (burst 10) so an unscored IP sails through a
+	// handful of requests; the point is the high-risk IP getting a much
+	// smaller *effective* burst via adaptive scaling.
+	rl := ratelimit.New(config.RateLimitConfig{Enabled: true, RequestsPerSecond: 100, Burst: 10})
+	defer rl.Stop()
+
+	scorer := threatscore.New(db, func(string) int { return 100 }) // autoban part clamps to 40
+	defer scorer.Stop()
+	// Seed the cache directly (Record normally runs async off the log
+	// worker) so CurrentScore reflects a high score before any request.
+	scorer.Record(storage.RequestLog{RealIP: "203.0.113.50", BotScore: 100}) // 40 + 20 = 60
+
+	if err := db.SetAdaptiveEnforcementConfig(storage.AdaptiveEnforcementConfig{
+		Enabled: true, HighRiskThreshold: 50, LowRiskThreshold: 0,
+		HighRiskRateScale: 0.2, LowRiskRateScale: 1.0, ForceChallengeThreshold: 100,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	adaptivePolicy := adaptive.New(db)
+
+	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, scorer, adaptivePolicy)
+	e := echo.New()
+
+	sendReq := func(ip string) int {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		// X-Real-IP is only honored from a trusted proxy (none configured
+		// here) — set RemoteAddr directly, matching TestIPBlockedByRule.
+		req.RemoteAddr = ip + ":12345"
+		rec := httptest.NewRecorder()
+		_ = h.Handle(e.NewContext(req, rec))
+		return rec.Code
+	}
+
+	// High-risk IP: effective burst floor(10*0.2)=2. 3rd request must block.
+	if code := sendReq("203.0.113.50"); code != http.StatusOK {
+		t.Fatalf("high-risk IP request 1 = %d, want 200", code)
+	}
+	if code := sendReq("203.0.113.50"); code != http.StatusOK {
+		t.Fatalf("high-risk IP request 2 = %d, want 200", code)
+	}
+	if code := sendReq("203.0.113.50"); code != http.StatusTooManyRequests {
+		t.Fatalf("high-risk IP request 3 = %d, want 429 (scaled burst 2 exhausted)", code)
+	}
+
+	// Unscored IP: normal burst of 10 comfortably covers 3 requests.
+	for i := 1; i <= 3; i++ {
+		if code := sendReq("203.0.113.51"); code != http.StatusOK {
+			t.Fatalf("unscored IP request %d = %d, want 200 (normal burst 10)", i, code)
+		}
+	}
+}
+
+// TestAdaptiveEnforcementForcesChallengeForHighRiskIP checks a client whose
+// score meets ForceChallengeThreshold is redirected to the challenge page
+// even though the per-service bot_mode is "inherit" and the request's own
+// bot-analysis score never crosses the challenger's own threshold.
+func TestAdaptiveEnforcementForcesChallengeForHighRiskIP(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	dir := t.TempDir()
+	db, err := storage.Open(filepath.Join(dir, "adaptive-challenge.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	if err := db.AddService("svc", "", "/", backend.URL, 0, 0); err != nil {
+		t.Fatalf("add service: %v", err)
+	}
+
+	ipbl, _ := blocklist.NewIPBlocklist(db)
+	geoBl, _ := geo.New("", db)
+	defer geoBl.Close()
+	reg, _ := services.New(db)
+	engine, _ := waf.New(config.WAFConfig{Enabled: false}, nil)
+	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
+	defer rl.Stop()
+
+	scorer := threatscore.New(db, func(string) int { return 100 })
+	defer scorer.Stop()
+	scorer.Record(storage.RequestLog{RealIP: "203.0.113.60", BotScore: 100}) // 40 + 20 = 60
+	scorer.Record(storage.RequestLog{RealIP: "203.0.113.61", BotScore: 0})   // 0 — normal
+
+	if err := db.SetAdaptiveEnforcementConfig(storage.AdaptiveEnforcementConfig{
+		Enabled: true, HighRiskThreshold: 50, LowRiskThreshold: 0,
+		HighRiskRateScale: 1.0, LowRiskRateScale: 1.0, ForceChallengeThreshold: 50,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	adaptivePolicy := adaptive.New(db)
+
+	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, scorer, adaptivePolicy)
+	// Threshold 1000: botAnalysis's own score can never trigger a challenge
+	// on its own — only the adaptive policy can, isolating what this test
+	// actually proves.
+	h.ReloadBotProtection(challenge.New("test-secret", 3600, 1000))
+	e := echo.New()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	// X-Real-IP is only honored from a trusted proxy (none configured here).
+	req.RemoteAddr = "203.0.113.60:12345"
+	rec := httptest.NewRecorder()
+	_ = h.Handle(e.NewContext(req, rec))
+	if rec.Code != http.StatusTemporaryRedirect {
+		t.Fatalf("high-risk IP: expected 307 challenge redirect, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "203.0.113.61:12345"
+	rec = httptest.NewRecorder()
+	_ = h.Handle(e.NewContext(req, rec))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("normal-risk IP: expected 200 (proxied, no challenge), got %d", rec.Code)
 	}
 }

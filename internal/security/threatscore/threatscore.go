@@ -14,6 +14,16 @@
 // single log-worker goroutine, so it must stay fast: an in-memory read of
 // autoban's history plus a couple of indexed SQLite writes, no network I/O.
 //
+// Record also caches the score it just computed in memory, read back
+// synchronously via CurrentScore — used by threat-score-driven adaptive
+// enforcement (issue #16) to make a per-request decision without a SQLite
+// read on the hot path (mirroring blocklist/geo's in-memory-cache model,
+// not adding a new query-per-request pattern). Because Record runs
+// asynchronously after the request that produced it has already been
+// logged, CurrentScore for a given IP always reflects that IP's *previous*
+// requests, never the one currently in flight — the same one-request lag
+// autoban's ban already has.
+//
 // Scoring per event (each component capped, total capped at 100):
 //
 //	autoban's current point total for the IP   up to 40
@@ -40,6 +50,17 @@ const (
 	ja4ScorePerHit  = 3
 )
 
+// janitorInterval/idleTTL bound the in-memory score cache — a public-facing
+// proxy sees an unbounded number of distinct client IPs over time, same
+// reasoning as ratelimit.Limiter's bucket map. idleTTL is much longer than
+// ratelimit's (5m): a threat score is meant to reflect standing reputation,
+// not a short-lived rate-limit window, and letting it decay too fast would
+// mean a brief lull in traffic silently resets a high-risk IP back to 0.
+const (
+	janitorInterval = time.Minute
+	idleTTL         = 30 * time.Minute
+)
+
 // store is the subset of *storage.DB the scorer needs — an interface so
 // tests can run against a fake without a real database.
 type store interface {
@@ -54,20 +75,68 @@ type Scorer struct {
 
 	mu            sync.RWMutex
 	riskCountries map[string]bool
+	scores        map[string]int       // in-memory cache backing CurrentScore
+	lastSeen      map[string]time.Time // bounds the scores map, mirrors ratelimit.Limiter's bucket janitor
+
+	stop chan struct{}
+	once sync.Once
 
 	now func() time.Time // injectable for tests
 }
 
-// New builds a Scorer. autobanScore is typically (*autoban.Banner).Score —
-// injected rather than imported directly so this package doesn't need to
-// know how autoban stores its history, only that it can report a current
-// point total for an IP.
+// New builds a Scorer and starts its janitor goroutine. autobanScore is
+// typically (*autoban.Banner).Score — injected rather than imported
+// directly so this package doesn't need to know how autoban stores its
+// history, only that it can report a current point total for an IP.
 func New(db *storage.DB, autobanScore func(ip string) int) *Scorer {
-	return &Scorer{
+	s := &Scorer{
 		db:            db,
 		autobanScore:  autobanScore,
 		riskCountries: make(map[string]bool),
+		scores:        make(map[string]int),
+		lastSeen:      make(map[string]time.Time),
+		stop:          make(chan struct{}),
 		now:           time.Now,
+	}
+	go s.janitor()
+	return s
+}
+
+// Stop terminates the janitor goroutine. Safe to call more than once.
+func (s *Scorer) Stop() { s.once.Do(func() { close(s.stop) }) }
+
+// CurrentScore returns ip's most recently computed composite score, or 0 if
+// Record has never processed a request from ip (or its cache entry has
+// idled out). Safe to call from the request hot path — pure in-memory read,
+// no SQLite. See the package doc comment for the one-request lag this
+// implies.
+func (s *Scorer) CurrentScore(ip string) int {
+	if s == nil {
+		return 0
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.scores[ip]
+}
+
+func (s *Scorer) janitor() {
+	ticker := time.NewTicker(janitorInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			cutoff := s.now().Add(-idleTTL)
+			s.mu.Lock()
+			for ip, t := range s.lastSeen {
+				if t.Before(cutoff) {
+					delete(s.lastSeen, ip)
+					delete(s.scores, ip)
+				}
+			}
+			s.mu.Unlock()
+		case <-s.stop:
+			return
+		}
 	}
 }
 
@@ -121,6 +190,14 @@ func (s *Scorer) Record(e storage.RequestLog) {
 	}
 
 	total := clamp(autobanPart+botPart+asnPart+geoPart+ja4Part, 0, 100)
+
+	// Update the in-memory cache regardless of whether the DB write below
+	// succeeds — CurrentScore should reflect the freshest computed value for
+	// live enforcement decisions even if SQLite hiccups.
+	s.mu.Lock()
+	s.scores[e.RealIP] = total
+	s.lastSeen[e.RealIP] = s.now()
+	s.mu.Unlock()
 
 	err := s.db.UpsertIPThreatScore(storage.IPThreatScore{
 		IP:           e.RealIP,
