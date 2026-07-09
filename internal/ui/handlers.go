@@ -113,6 +113,7 @@ type Handler struct {
 	syncThreatIntel func(id int64)
 	sendReportNow   func() error
 	reloadAutoban   func()
+	reloadAdaptive  func()
 	scorer          *threatscore.Scorer
 	loginLimiter    *loginLimiter
 	apiKeyLimiter   *loginLimiter
@@ -144,7 +145,7 @@ type atAGlanceCard struct {
 // assets at "static/js/dist/*" (see assets.go in the repo root); it's
 // served under /<admin_path>/static/js/. imgsFS must contain
 // "static/imgs/*"; it's served under /<admin_path>/static/imgs/.
-func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error, reloadAutoban func(), scorer *threatscore.Scorer) (*Handler, error) {
+func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error, reloadAutoban func(), scorer *threatscore.Scorer, reloadAdaptive func()) (*Handler, error) {
 	sub, err := fs.Sub(jsFS, "static/js/dist")
 	if err != nil {
 		return nil, fmt.Errorf("sub static/js/dist: %w", err)
@@ -153,7 +154,7 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 	if err != nil {
 		return nil, fmt.Errorf("sub static/imgs: %w", err)
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, reloadAutoban: reloadAutoban, scorer: scorer, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), trustedNets: parseTrustedNets(cfg.TrustedProxies)}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, reloadAutoban: reloadAutoban, scorer: scorer, reloadAdaptive: reloadAdaptive, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), trustedNets: parseTrustedNets(cfg.TrustedProxies)}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -257,6 +258,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.GET("/ip-rules/rows", h.IPRulesRows)
 	g.POST("/ip-rules", h.AddIPRule)
 	g.POST("/ip-rules/autoban", h.SaveAutobanSettings)
+	g.POST("/ip-rules/adaptive", h.SaveAdaptiveSettings)
 	g.DELETE("/ip-rules/:id", h.DeleteIPRule)
 	g.GET("/geo-rules", h.GeoRulesPage)
 	g.POST("/geo-rules", h.AddGeoRule)
@@ -1009,6 +1011,7 @@ func (h *Handler) IPRulesPage(c echo.Context) error {
 	}
 
 	ab, _ := h.db.GetAutobanConfig()
+	ad, _ := h.db.GetAdaptiveEnforcementConfig()
 	data["Apps"] = h.registry.List()
 	data["BlockCount"] = blockCount
 	data["AllowCount"] = allowCount
@@ -1017,6 +1020,12 @@ func (h *Handler) IPRulesPage(c echo.Context) error {
 	data["AutobanEnabled"] = ab.Enabled
 	data["AutobanThresh"] = ab.Threshold
 	data["AutobanWindow"] = ab.WindowMinutes
+	data["AdaptiveEnabled"] = ad.Enabled
+	data["AdaptiveHighThresh"] = ad.HighRiskThreshold
+	data["AdaptiveLowThresh"] = ad.LowRiskThreshold
+	data["AdaptiveHighScale"] = ad.HighRiskRateScale
+	data["AdaptiveLowScale"] = ad.LowRiskRateScale
+	data["AdaptiveForceChallenge"] = ad.ForceChallengeThreshold
 	return h.render(c, "ip_rules", data)
 }
 
@@ -1054,6 +1063,44 @@ func (h *Handler) SaveAutobanSettings(c echo.Context) error {
 		"AutobanWindow":  cfg.WindowMinutes,
 		"AutobanSaveOK":  saveErr == "",
 		"AutobanSaveErr": saveErr,
+	})
+}
+
+// SaveAdaptiveSettings persists the adaptive-enforcement knobs shown on the
+// IP Rules page and hot-reloads the policy so they apply immediately.
+func (h *Handler) SaveAdaptiveSettings(c echo.Context) error {
+	cfg := storage.DefaultAdaptiveEnforcementConfig()
+	cfg.Enabled = c.FormValue("adaptive_enabled") == "1"
+	if n, err := strconv.Atoi(c.FormValue("adaptive_high_threshold")); err == nil && n >= 1 && n <= 100 {
+		cfg.HighRiskThreshold = n
+	}
+	if n, err := strconv.Atoi(c.FormValue("adaptive_low_threshold")); err == nil && n >= 0 && n <= 99 {
+		cfg.LowRiskThreshold = n
+	}
+	if f, err := strconv.ParseFloat(c.FormValue("adaptive_high_rate_scale"), 64); err == nil && f > 0 && f <= 1 {
+		cfg.HighRiskRateScale = f
+	}
+	if f, err := strconv.ParseFloat(c.FormValue("adaptive_low_rate_scale"), 64); err == nil && f >= 1 && f <= 5 {
+		cfg.LowRiskRateScale = f
+	}
+	if n, err := strconv.Atoi(c.FormValue("adaptive_force_challenge_threshold")); err == nil && n >= 1 && n <= 100 {
+		cfg.ForceChallengeThreshold = n
+	}
+	saveErr := ""
+	if err := h.db.SetAdaptiveEnforcementConfig(cfg); err != nil {
+		saveErr = "Could not save: " + err.Error()
+	} else if h.reloadAdaptive != nil {
+		h.reloadAdaptive()
+	}
+	return h.renderPartial(c, "ip_rules", "adaptive-card", map[string]any{
+		"AdaptiveEnabled":        cfg.Enabled,
+		"AdaptiveHighThresh":     cfg.HighRiskThreshold,
+		"AdaptiveLowThresh":      cfg.LowRiskThreshold,
+		"AdaptiveHighScale":      cfg.HighRiskRateScale,
+		"AdaptiveLowScale":       cfg.LowRiskRateScale,
+		"AdaptiveForceChallenge": cfg.ForceChallengeThreshold,
+		"AdaptiveSaveOK":         saveErr == "",
+		"AdaptiveSaveErr":        saveErr,
 	})
 }
 

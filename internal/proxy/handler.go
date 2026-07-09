@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"coraza-waf-mod/internal/notify/metrics"
+	"coraza-waf-mod/internal/security/adaptive"
 	"coraza-waf-mod/internal/security/asn"
 	"coraza-waf-mod/internal/security/blocklist"
 	"coraza-waf-mod/internal/security/bot"
@@ -24,6 +25,7 @@ import (
 	ja3pkg "coraza-waf-mod/internal/security/ja3"
 	ja4pkg "coraza-waf-mod/internal/security/ja4"
 	"coraza-waf-mod/internal/security/ratelimit"
+	"coraza-waf-mod/internal/security/threatscore"
 	"coraza-waf-mod/internal/security/waf"
 	"coraza-waf-mod/internal/services"
 	"coraza-waf-mod/internal/storage"
@@ -34,17 +36,22 @@ import (
 const serverHeader = "Coraza WAF Mod"
 
 type Handler struct {
-	wafMu          sync.RWMutex
-	waf            *waf.Engine
-	challengerMu   sync.RWMutex
-	challenger     *challenge.Challenger // nil = bot protection disabled
-	ratelimitMu    sync.RWMutex
-	ratelimit      ratelimit.Backend
-	db             *storage.DB
-	ipbl           *blocklist.IPBlocklist
-	geoBl          *geo.Blocker
-	asnLookup      *asn.Lookup
-	registry       *services.Registry
+	wafMu        sync.RWMutex
+	waf          *waf.Engine
+	challengerMu sync.RWMutex
+	challenger   *challenge.Challenger // nil = bot protection disabled
+	ratelimitMu  sync.RWMutex
+	ratelimit    ratelimit.Backend
+	db           *storage.DB
+	ipbl         *blocklist.IPBlocklist
+	geoBl        *geo.Blocker
+	asnLookup    *asn.Lookup
+	registry     *services.Registry
+	// scorer and adaptive are fixed for the Handler's lifetime — no mutex
+	// needed at this level, since both already lock internally (same
+	// reasoning as why ipbl/geoBl/registry aren't wrapped again here).
+	scorer         *threatscore.Scorer
+	adaptive       *adaptive.Policy
 	trustedProxies []*net.IPNet
 }
 
@@ -140,7 +147,7 @@ func (h *Handler) StopRateLimit() {
 
 // NewHandler builds the proxy pipeline. Pass nil for ch to disable bot
 // protection / JS challenge (the default when bot_protection.enabled = false).
-func NewHandler(registry *services.Registry, engine *waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, rl ratelimit.Backend, asnLookup *asn.Lookup, ch *challenge.Challenger, trustedProxyCIDRs ...string) *Handler {
+func NewHandler(registry *services.Registry, engine *waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, rl ratelimit.Backend, asnLookup *asn.Lookup, ch *challenge.Challenger, scorer *threatscore.Scorer, adaptivePolicy *adaptive.Policy, trustedProxyCIDRs ...string) *Handler {
 	return &Handler{
 		waf:            engine,
 		db:             db,
@@ -150,6 +157,8 @@ func NewHandler(registry *services.Registry, engine *waf.Engine, db *storage.DB,
 		ratelimit:      rl,
 		registry:       registry,
 		challenger:     ch,
+		scorer:         scorer,
+		adaptive:       adaptivePolicy,
 		trustedProxies: parseTrustedProxyCIDRs(trustedProxyCIDRs),
 	}
 }
@@ -215,6 +224,14 @@ func (h *Handler) Handle(c echo.Context) error {
 		BotScore:   botAnalysis.Score,
 	}
 
+	// Threat-score-driven adaptive enforcement (issue #16): a pure in-memory
+	// read of the client's last-computed composite score (issue #12) plus a
+	// pure policy decision from it — no I/O, safe on every request. Reflects
+	// that IP's *previous* requests, not this one in flight (threatscore.Scorer
+	// updates its cache asynchronously on the log-worker goroutine).
+	threatScore := h.scorer.CurrentScore(clientIP)
+	adaptiveDecision := h.adaptive.Decide(threatScore)
+
 	// The /_cz/ namespace belongs to the challenge system. Its real routes
 	// (GET /_cz/challenge etc.) are registered before the catch-all, so any
 	// /_cz/ request landing here is an unregistered method/path combo — e.g.
@@ -226,17 +243,26 @@ func (h *Handler) Handle(c echo.Context) error {
 		return c.NoContent(http.StatusNotFound)
 	}
 
-	// Bot protection: challenge clients based on global setting + per-service override.
+	// Bot protection: challenge clients based on global setting + per-service
+	// override + threat-score-driven adaptive enforcement (issue #16).
 	if ch != nil && !botAnalysis.IsTrustedCrawler {
 		svcMode := "inherit"
 		if app != nil && app.BotMode != "" {
 			svcMode = app.BotMode
 		}
 		if svcMode != "off" && !ch.PassedChallenge(r) {
-			score := botAnalysis.Score
-			if svcMode == "always" || score >= ch.Threshold() {
+			byService := svcMode == "always"
+			byBotScore := botAnalysis.Score >= ch.Threshold()
+			if byService || byBotScore || adaptiveDecision.ForceChallenge {
 				metrics.BotChallengedTotal.WithLabelValues(appName).Inc()
-				h.logChallenged(r, appName, clientIP, http.StatusTemporaryRedirect, time.Since(start), meta)
+				reason := "bot_challenge"
+				if !byService && !byBotScore {
+					// The only reason this fired is the adaptive policy —
+					// tag it distinctly so it's visible in the logs, same
+					// Action-string convention as every other decision here.
+					reason = "bot_challenge:adaptive"
+				}
+				h.logChallenged(r, appName, clientIP, http.StatusTemporaryRedirect, reason, time.Since(start), meta)
 				return c.Redirect(http.StatusTemporaryRedirect, ch.ChallengeURL(r.RequestURI))
 			}
 		}
@@ -255,19 +281,25 @@ func (h *Handler) Handle(c echo.Context) error {
 	}
 
 	// 1.5 Rate limit — cheap per-IP throttle, before geo/WAF inspection.
+	// Scaled by threat-score-driven adaptive enforcement (issue #16) when
+	// enabled; adaptiveDecision.RateScale is 1.0 (no-op) otherwise.
 	h.ratelimitMu.RLock()
 	rlBackend := h.ratelimit
 	h.ratelimitMu.RUnlock()
 	var rlRes ratelimit.Result
 	if rlBackend != nil {
-		rlRes = rlBackend.Allow(clientIP)
+		rlRes = rlBackend.AllowScaled(clientIP, adaptiveDecision.RateScale)
 	} else {
 		rlRes = ratelimit.Result{Allowed: true}
 	}
 	setRateLimitHeaders(c.Response().Header(), rlRes)
 	if !rlRes.Allowed {
 		metrics.RateLimitedTotal.WithLabelValues(appName).Inc()
-		h.logBlocked(r, appName, clientIP, country, http.StatusTooManyRequests, 0, "rate_limited", time.Since(start), meta)
+		rlReason := "rate_limited"
+		if adaptiveDecision.RateScale != 1.0 {
+			rlReason = "rate_limited:adaptive"
+		}
+		h.logBlocked(r, appName, clientIP, country, http.StatusTooManyRequests, 0, rlReason, time.Since(start), meta)
 		secs := int(rlRes.RetryAfter.Seconds())
 		if secs < 1 {
 			secs = 1
@@ -450,9 +482,11 @@ func (h *Handler) logBlocked(r *http.Request, appName, clientIP, country string,
 // logChallenged logs a bot challenge redirect (307) without marking it as
 // Blocked. A challenge is not a definitive deny — the browser solves the JS
 // PoW and proceeds normally — so it should not trigger blocked notifications
-// or inflate the blocked-request counters. BotStats.ChallengedToday still
-// counts these via action = 'bot_challenge'.
-func (h *Handler) logChallenged(r *http.Request, appName, clientIP string, status int, dur time.Duration, m reqMeta) {
+// or inflate the blocked-request counters. reason is "bot_challenge" for a
+// normal challenge or "bot_challenge:adaptive" when issue #16's adaptive
+// enforcement forced it; BotStats.ChallengedToday and friends match both via
+// `action LIKE 'bot_challenge%'`.
+func (h *Handler) logChallenged(r *http.Request, appName, clientIP string, status int, reason string, dur time.Duration, m reqMeta) {
 	h.writeLog(storage.RequestLog{
 		Timestamp:   time.Now().UTC(),
 		AppName:     appName,
@@ -464,7 +498,7 @@ func (h *Handler) logChallenged(r *http.Request, appName, clientIP string, statu
 		Query:       m.Query,
 		Status:      status,
 		Blocked:     false,
-		Action:      "bot_challenge",
+		Action:      reason,
 		UserAgent:   r.UserAgent(),
 		Duration:    dur.Milliseconds(),
 		HeadersJSON: captureHeaders(r),

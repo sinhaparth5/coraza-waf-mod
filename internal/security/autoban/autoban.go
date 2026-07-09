@@ -140,8 +140,10 @@ func (b *Banner) Record(e storage.RequestLog) {
 	}
 	// Challenge redirects are Blocked=false by design but still score: a
 	// client repeatedly bounced to the challenge without ever solving it is
-	// a scanner, not a browser.
-	challenged := !e.Blocked && e.Action == "bot_challenge"
+	// a scanner, not a browser. Prefix match — issue #16's adaptive
+	// enforcement can also trigger a challenge, logged as
+	// "bot_challenge:adaptive", which must score exactly the same way.
+	challenged := !e.Blocked && strings.HasPrefix(e.Action, "bot_challenge")
 	if !e.Blocked && !challenged {
 		return
 	}
@@ -159,7 +161,7 @@ func (b *Banner) Record(e storage.RequestLog) {
 		ev.pts, ev.critical = ptsCritical, true
 	case e.RuleID > 0:
 		ev.pts, ev.waf = ptsWAF, true
-	case e.Action == "rate_limited":
+	case strings.HasPrefix(e.Action, "rate_limited"):
 		ev.pts, ev.rl = ptsRateLimited, true
 	default:
 		return

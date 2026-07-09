@@ -43,6 +43,8 @@ func testScorer(db *fakeStore, autobanScore func(string) int) *Scorer {
 		db:            db,
 		autobanScore:  autobanScore,
 		riskCountries: make(map[string]bool),
+		scores:        make(map[string]int),
+		lastSeen:      make(map[string]time.Time),
 		now:           func() time.Time { return time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC) },
 	}
 }
@@ -226,5 +228,83 @@ func TestTotalScoreNeverExceeds100(t *testing.T) {
 
 	if got := db.scores["203.0.113.99"].Total; got != 100 {
 		t.Errorf("Total = %d, want capped at 100", got)
+	}
+}
+
+// TestCurrentScoreReflectsLastRecord checks the in-memory cache CurrentScore
+// reads from (issue #16's hot-path lookup) tracks the most recent Record
+// call, not a stale earlier one.
+func TestCurrentScoreReflectsLastRecord(t *testing.T) {
+	db := newFakeStore()
+	s := testScorer(db, func(string) int { return 10 })
+
+	if got := s.CurrentScore("203.0.113.30"); got != 0 {
+		t.Fatalf("CurrentScore before any Record = %d, want 0", got)
+	}
+
+	s.Record(storage.RequestLog{RealIP: "203.0.113.30", BotScore: 5})
+	first := s.CurrentScore("203.0.113.30")
+	if first != 15 { // autoban 10 + bot 5
+		t.Fatalf("CurrentScore after first Record = %d, want 15", first)
+	}
+
+	s.Record(storage.RequestLog{RealIP: "203.0.113.30", BotScore: 20})
+	second := s.CurrentScore("203.0.113.30")
+	if second != 30 { // autoban 10 + bot 20
+		t.Fatalf("CurrentScore after second Record = %d, want 30 (latest, not stale first value)", second)
+	}
+}
+
+// TestCurrentScoreUnknownIPIsZero checks an IP that has never been scored
+// reads as 0, not an error or panic — the "no data yet" case adaptive.Decide
+// must treat as normal risk.
+func TestCurrentScoreUnknownIPIsZero(t *testing.T) {
+	db := newFakeStore()
+	s := testScorer(db, nil)
+	s.Record(storage.RequestLog{RealIP: "203.0.113.31"})
+
+	if got := s.CurrentScore("203.0.113.32"); got != 0 {
+		t.Errorf("CurrentScore for a never-seen IP = %d, want 0", got)
+	}
+}
+
+// TestCurrentScoreNilScorerIsZero checks a nil *Scorer (e.g. a test Handler
+// built without one) doesn't panic — mirrors asn.Lookup's nil-receiver
+// guard, the established pattern in this codebase for optional deps.
+func TestCurrentScoreNilScorerIsZero(t *testing.T) {
+	var s *Scorer
+	if got := s.CurrentScore("203.0.113.33"); got != 0 {
+		t.Errorf("nil Scorer CurrentScore = %d, want 0", got)
+	}
+}
+
+// TestJanitorEvictsIdleScores mirrors ratelimit.TestJanitorEvictsIdleBuckets:
+// simulates the janitor's eviction pass directly (no live ticker) by forcing
+// a cutoff far in the future so every entry counts as idle.
+func TestJanitorEvictsIdleScores(t *testing.T) {
+	db := newFakeStore()
+	s := testScorer(db, nil)
+
+	s.Record(storage.RequestLog{RealIP: "203.0.113.40"})
+	s.Record(storage.RequestLog{RealIP: "203.0.113.41"})
+	if got := len(s.scores); got != 2 {
+		t.Fatalf("expected 2 cached scores before eviction, got %d", got)
+	}
+
+	cutoff := s.now().Add(time.Hour)
+	s.mu.Lock()
+	for ip, t := range s.lastSeen {
+		if t.Before(cutoff) {
+			delete(s.lastSeen, ip)
+			delete(s.scores, ip)
+		}
+	}
+	s.mu.Unlock()
+
+	if len(s.scores) != 0 || len(s.lastSeen) != 0 {
+		t.Fatalf("expected empty caches after eviction, got scores=%d lastSeen=%d", len(s.scores), len(s.lastSeen))
+	}
+	if got := s.CurrentScore("203.0.113.40"); got != 0 {
+		t.Errorf("evicted IP CurrentScore = %d, want 0", got)
 	}
 }

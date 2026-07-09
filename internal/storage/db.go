@@ -593,6 +593,94 @@ func (db *DB) SetAutobanConfig(cfg AutobanConfig) error {
 	return db.setMeta("autoban_window_min", strconv.Itoa(cfg.WindowMinutes))
 }
 
+// ── Adaptive enforcement config ──────────────────────────────────────────────
+
+// AdaptiveEnforcementConfig controls threat-score-driven adaptive
+// enforcement (the adaptive package, issue #16): dynamically scaling the
+// global rate limit and forcing a bot challenge based on a client's current
+// composite threat score (threatscore package, issue #12). Stored in the
+// meta table and managed from the IP Rules page, next to Autoban.
+type AdaptiveEnforcementConfig struct {
+	Enabled                 bool
+	HighRiskThreshold       int     // score >= this: tighten the rate limit
+	LowRiskThreshold        int     // score <= this: relax the rate limit
+	HighRiskRateScale       float64 // multiplies rate+burst for high-risk IPs, e.g. 0.3
+	LowRiskRateScale        float64 // multiplies rate+burst for low-risk IPs, e.g. 1.5
+	ForceChallengeThreshold int     // score >= this: force a bot challenge regardless of per-service bot_mode
+}
+
+// DefaultAdaptiveEnforcementConfig is used when nothing is stored yet.
+// Disabled by default — unlike autoban, this is a brand-new mechanism
+// driven by a heuristic composite score (see threatscore's ASN/hosting
+// classification) and includes a security-*loosening* action (relaxing
+// rate limits for low-risk IPs); an admin should see real scores on the IP
+// Rules page before opting in, rather than have enforcement silently start
+// adjusting traffic on upgrade.
+func DefaultAdaptiveEnforcementConfig() AdaptiveEnforcementConfig {
+	return AdaptiveEnforcementConfig{
+		Enabled: false, HighRiskThreshold: 70, LowRiskThreshold: 10,
+		HighRiskRateScale: 0.3, LowRiskRateScale: 1.5, ForceChallengeThreshold: 70,
+	}
+}
+
+func (db *DB) GetAdaptiveEnforcementConfig() (AdaptiveEnforcementConfig, error) {
+	cfg := DefaultAdaptiveEnforcementConfig()
+	if v, err := db.getMeta("adaptive_enabled"); err != nil {
+		return cfg, err
+	} else if v != "" {
+		cfg.Enabled = v == "1"
+	}
+	if v, _ := db.getMeta("adaptive_high_threshold"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			cfg.HighRiskThreshold = n
+		}
+	}
+	if v, _ := db.getMeta("adaptive_low_threshold"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			cfg.LowRiskThreshold = n
+		}
+	}
+	if v, _ := db.getMeta("adaptive_high_rate_scale"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+			cfg.HighRiskRateScale = f
+		}
+	}
+	if v, _ := db.getMeta("adaptive_low_rate_scale"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+			cfg.LowRiskRateScale = f
+		}
+	}
+	if v, _ := db.getMeta("adaptive_force_challenge_threshold"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			cfg.ForceChallengeThreshold = n
+		}
+	}
+	return cfg, nil
+}
+
+func (db *DB) SetAdaptiveEnforcementConfig(cfg AdaptiveEnforcementConfig) error {
+	enabled := "0"
+	if cfg.Enabled {
+		enabled = "1"
+	}
+	if err := db.setMeta("adaptive_enabled", enabled); err != nil {
+		return err
+	}
+	if err := db.setMeta("adaptive_high_threshold", strconv.Itoa(cfg.HighRiskThreshold)); err != nil {
+		return err
+	}
+	if err := db.setMeta("adaptive_low_threshold", strconv.Itoa(cfg.LowRiskThreshold)); err != nil {
+		return err
+	}
+	if err := db.setMeta("adaptive_high_rate_scale", strconv.FormatFloat(cfg.HighRiskRateScale, 'f', -1, 64)); err != nil {
+		return err
+	}
+	if err := db.setMeta("adaptive_low_rate_scale", strconv.FormatFloat(cfg.LowRiskRateScale, 'f', -1, 64)); err != nil {
+		return err
+	}
+	return db.setMeta("adaptive_force_challenge_threshold", strconv.Itoa(cfg.ForceChallengeThreshold))
+}
+
 // ── Varnish cache config ─────────────────────────────────────────────────────
 
 // VarnishConfig controls the optional Varnish accelerator sitting between the
@@ -1147,7 +1235,7 @@ func (db *DB) GetBotStats() BotStats {
 	var challenged, total, blocked int
 	db.conn.QueryRow(
 		`SELECT
-			COUNT(*) FILTER (WHERE action = 'bot_challenge'),
+			COUNT(*) FILTER (WHERE action LIKE 'bot_challenge%'),
 			COUNT(*),
 			COUNT(*) FILTER (WHERE blocked = 1)
 		FROM requests WHERE ts >= ?`, startOfDay,
@@ -2373,8 +2461,8 @@ func (db *DB) GetDailyReport(from, to time.Time) (DailyReport, error) {
 		       COUNT(*) FILTER (WHERE blocked = 1 AND rule_id > 0),
 		       COUNT(*) FILTER (WHERE blocked = 1 AND action LIKE 'ip_blocked%'),
 		       COUNT(*) FILTER (WHERE blocked = 1 AND action LIKE 'geo_blocked%'),
-		       COUNT(*) FILTER (WHERE blocked = 1 AND action = 'rate_limited'),
-		       COUNT(*) FILTER (WHERE action = 'bot_challenge')
+		       COUNT(*) FILTER (WHERE blocked = 1 AND action LIKE 'rate_limited%'),
+		       COUNT(*) FILTER (WHERE action LIKE 'bot_challenge%')
 		FROM requests WHERE ts >= ? AND ts < ?`,
 		from.UTC(), to.UTC(),
 	).Scan(&rep.Total, &rep.Blocked, &rep.Status403, &rep.UniqueBlockedIPs,

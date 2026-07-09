@@ -19,6 +19,12 @@ import (
 // in-process Limiter and RedisBackend satisfy it.
 type Backend interface {
 	Allow(ip string) Result
+	// AllowScaled behaves like Allow but with rate and burst multiplied by
+	// scale (1.0 = identical to Allow). Used by threat-score-driven adaptive
+	// enforcement (issue #16) to tighten or relax the limit for a specific
+	// client without touching the global config. scale <= 0 is treated as
+	// 1.0 — a bad scale must never fully lock out traffic.
+	AllowScaled(ip string, scale float64) Result
 	TrackedIPs() int
 	Stop()
 }
@@ -108,6 +114,26 @@ type Result struct {
 
 // Allow reports whether a request from ip may proceed, consuming one token.
 func (l *Limiter) Allow(ip string) Result {
+	return l.allow(ip, l.rate, l.burst)
+}
+
+// AllowScaled behaves like Allow but against rate/burst multiplied by scale.
+// Satisfies Backend. Recomputing the effective rate/burst on every call is
+// correct token-bucket math even when scale changes between calls for the
+// same IP — the bucket itself (tokens/lastRefill) doesn't need to know about
+// scaling at all.
+func (l *Limiter) AllowScaled(ip string, scale float64) Result {
+	if scale <= 0 {
+		scale = 1.0
+	}
+	burst := l.burst * scale
+	if burst < 1 {
+		burst = 1 // a scale bug must never fully lock out traffic
+	}
+	return l.allow(ip, l.rate*scale, burst)
+}
+
+func (l *Limiter) allow(ip string, rate, burst float64) Result {
 	if !l.enabled {
 		return Result{Allowed: true}
 	}
@@ -118,30 +144,30 @@ func (l *Limiter) Allow(ip string) Result {
 
 	b, ok := l.buckets[ip]
 	if !ok {
-		b = &bucket{tokens: l.burst - 1, lastRefill: now}
+		b = &bucket{tokens: burst - 1, lastRefill: now}
 		l.buckets[ip] = b
-		return Result{Allowed: true, Remaining: int(b.tokens), Limit: l.rate, Burst: int(l.burst)}
+		return Result{Allowed: true, Remaining: int(b.tokens), Limit: rate, Burst: int(burst)}
 	}
 
 	elapsed := now.Sub(b.lastRefill).Seconds()
-	b.tokens += elapsed * l.rate
-	if b.tokens > l.burst {
-		b.tokens = l.burst
+	b.tokens += elapsed * rate
+	if b.tokens > burst {
+		b.tokens = burst
 	}
 	b.lastRefill = now
 
 	if b.tokens < 1 {
-		waitSecs := (1 - b.tokens) / l.rate
+		waitSecs := (1 - b.tokens) / rate
 		return Result{
 			Allowed:    false,
 			RetryAfter: time.Duration(waitSecs * float64(time.Second)),
 			Remaining:  0,
-			Limit:      l.rate,
-			Burst:      int(l.burst),
+			Limit:      rate,
+			Burst:      int(burst),
 		}
 	}
 	b.tokens--
-	return Result{Allowed: true, Remaining: int(b.tokens), Limit: l.rate, Burst: int(l.burst)}
+	return Result{Allowed: true, Remaining: int(b.tokens), Limit: rate, Burst: int(burst)}
 }
 
 // TrackedIPs returns the number of per-IP buckets currently in memory.
