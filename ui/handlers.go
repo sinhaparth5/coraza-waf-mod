@@ -862,7 +862,7 @@ func (h *Handler) LogDetail(c echo.Context) error {
 // ipRulesPageSize caps how many rows the IP Rules admin page pulls into
 // memory per request — autoban can grow ip_rules into the thousands, and the
 // page previously loaded the whole table on every view and every add/delete.
-const ipRulesPageSize = 50
+const ipRulesPageSize = 16
 
 // ipRulesRowsData fetches one page of rules for the ip-rules-rows partial,
 // clamping page into range so a page that just emptied out (e.g. the last
