@@ -465,8 +465,24 @@ func (r *Registry) List() []storage.Service {
 	return out
 }
 
-// Validate checks that a backend URL is well-formed and absolute, used by
-// the admin UI before saving a new service.
+// metadataDenylist holds the handful of network targets that are never a
+// legitimate backend for any deployment of this proxy: cloud
+// instance-metadata endpoints. Unlike the rest of the private/internal
+// address space — which legitimately hosts real backends behind this
+// reverse proxy, so it's deliberately not blocked wholesale — nothing
+// should ever be configured to receive client traffic proxied to these.
+var metadataDenylist = map[string]bool{
+	"169.254.169.254":          true, // AWS/Azure/GCP/DigitalOcean/Alibaba IMDS
+	"fd00:ec2::254":            true, // AWS IMDSv2, IPv6
+	"metadata.google.internal": true,
+}
+
+// Validate checks that a backend URL is well-formed, absolute, and not a
+// cloud metadata endpoint, used by the admin UI before saving a new service
+// (and before Probe ever contacts it — see CodeQL go/request-forgery: the
+// admin-supplied backend URL is otherwise passed straight into an outbound
+// request with no other target restriction, since arbitrary internal hosts
+// are the expected, legitimate use of this field).
 func Validate(backend string) error {
 	u, err := url.Parse(backend)
 	if err != nil {
@@ -474,6 +490,17 @@ func Validate(backend string) error {
 	}
 	if u.Scheme == "" || u.Host == "" {
 		return fmt.Errorf("backend URL must be absolute (e.g. http://127.0.0.1:3000)")
+	}
+	host := u.Hostname()
+	if metadataDenylist[strings.ToLower(host)] {
+		return fmt.Errorf("backend host %q is a cloud metadata endpoint, not a valid backend", host)
+	}
+	if ips, err := net.LookupHost(host); err == nil {
+		for _, ip := range ips {
+			if metadataDenylist[ip] {
+				return fmt.Errorf("backend host %q resolves to a cloud metadata endpoint, not a valid backend", host)
+			}
+		}
 	}
 	return nil
 }

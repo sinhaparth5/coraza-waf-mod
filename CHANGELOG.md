@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.7] - 2026-07-09
+
+### Added
+- **Threat score**: a unified per-IP composite risk score (0–100), summing
+  autoban's current point total, the bot-analysis score, an ASN/hosting
+  classification, a geo-risk flag reusing existing geo block rules, and a
+  JA4 repeat-offender component backed by a new `ja4_reputation` table.
+  Read-only for now — surfaced on the log detail modal and as a "Score N"
+  badge per row on the IP Rules page, with a per-component breakdown so an
+  admin can see *why* an IP scored what it did.
+- **Adaptive enforcement**: threat-score-driven scaling of the global rate
+  limit and forced bot challenges for high-risk clients, opt-in and off by
+  default from a new "Adaptive enforcement" card on the IP Rules page.
+  High-risk IPs (above a configurable threshold) get a tightened rate-limit
+  burst/RPS and, past a stricter second threshold, a forced challenge
+  regardless of per-service bot mode; low-risk IPs get a relaxed limit.
+  Every adjustment is logged with an `:adaptive` action suffix alongside
+  the normal block/challenge reasons, and re-evaluates the live score on
+  every request — a scoring bug self-heals as soon as the score changes
+  rather than leaving a permanent lockout. Paranoia-level tiering (the
+  third lever originally proposed) was deliberately left out: Coraza bakes
+  paranoia level into the compiled WAF engine at build time with no
+  per-request override, so supporting it would mean holding multiple full
+  pre-built engines in memory — tracked separately rather than built here.
+
+### Changed
+- The lint git hook now runs before every **commit** instead of only before
+  a push (`.githooks/pre-commit`, was `pre-push`), and installs itself
+  automatically the first time anyone runs `make build` or `make test` —
+  `make hooks` still works but is no longer something every clone has to
+  remember to run separately.
+
+### Security
+- **Services**: adding a backend now rejects cloud instance-metadata
+  endpoints (`169.254.169.254`, AWS IMDSv2's `fd00:ec2::254`,
+  `metadata.google.internal`), checked both against the literal host and
+  its resolved IPs, before the add-service reachability probe ever contacts
+  it (CodeQL `go/request-forgery`). Ordinary internal/private backends —
+  the expected, legitimate use of this field — are unaffected.
+
 ## [1.4.6] - 2026-07-09
 
 ### Added

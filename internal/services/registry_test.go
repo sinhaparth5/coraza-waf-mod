@@ -226,3 +226,39 @@ func TestRegistryMatchPrefixBoundary(t *testing.T) {
 		}
 	}
 }
+
+// TestValidateRejectsMetadataEndpoints checks the go/request-forgery
+// mitigation: admin-supplied backend URLs pointing at a cloud
+// instance-metadata endpoint are rejected before Probe ever contacts them,
+// while ordinary internal/private backends (the expected, legitimate use of
+// this field) are left alone.
+func TestValidateRejectsMetadataEndpoints(t *testing.T) {
+	cases := []struct {
+		name    string
+		backend string
+		wantErr bool
+	}{
+		{"aws/azure/gcp/do metadata IP", "http://169.254.169.254/latest/meta-data/", true},
+		{"metadata IP with port", "http://169.254.169.254:80/", true},
+		{"gcp metadata hostname", "http://metadata.google.internal/computeMetadata/v1/", true},
+		{"gcp metadata hostname mixed case", "http://Metadata.Google.Internal/", true},
+		{"aws imds v2 ipv6", "http://[fd00:ec2::254]/latest/meta-data/", true},
+		{"ordinary loopback backend", "http://127.0.0.1:3000", false},
+		{"ordinary private network backend", "http://10.0.0.5:8080", false},
+		{"ordinary public backend", "http://198.51.100.1", false}, // RFC 5737 documentation range, no real DNS lookup
+		{"missing scheme", "example.com", true},
+		{"missing host", "http://", true},
+		{"unparseable", "http://[::1", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := Validate(tc.backend)
+			if tc.wantErr && err == nil {
+				t.Errorf("Validate(%q) = nil, want error", tc.backend)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("Validate(%q) = %v, want nil", tc.backend, err)
+			}
+		})
+	}
+}
