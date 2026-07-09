@@ -29,13 +29,14 @@ const logQueueSize = 10000
 const slowWriteThreshold = 500 * time.Millisecond
 
 type DB struct {
-	conn        *sql.DB
-	logQueue    chan RequestLog
-	logDone     chan struct{}
-	broadcastFn func(RequestLog)
-	webhookFn   func(RequestLog)
-	autobanFn   func(RequestLog)
-	accessLogFn func(RequestLog)
+	conn          *sql.DB
+	logQueue      chan RequestLog
+	logDone       chan struct{}
+	broadcastFn   func(RequestLog)
+	webhookFn     func(RequestLog)
+	autobanFn     func(RequestLog)
+	threatScoreFn func(RequestLog)
+	accessLogFn   func(RequestLog)
 }
 
 // SetAutobanFn registers a callback invoked (from the log worker goroutine)
@@ -65,6 +66,14 @@ func (db *DB) SetBroadcastFn(fn func(RequestLog)) {
 // writer without coupling storage to the accesslog package.
 func (db *DB) SetAccessLogFn(fn func(RequestLog)) {
 	db.accessLogFn = fn
+}
+
+// SetThreatScoreFn registers a callback invoked (from the log worker
+// goroutine) after each successful DB insert. Used to feed the unified
+// per-IP threat-score subsystem without coupling storage to the
+// threatscore package.
+func (db *DB) SetThreatScoreFn(fn func(RequestLog)) {
+	db.threatScoreFn = fn
 }
 
 // RequestLog is one row in the requests table.
@@ -156,6 +165,9 @@ func (db *DB) runLogWorker() {
 			}
 			if db.autobanFn != nil {
 				db.autobanFn(entry)
+			}
+			if db.threatScoreFn != nil {
+				db.threatScoreFn(entry)
 			}
 			if db.accessLogFn != nil {
 				db.accessLogFn(entry)
@@ -371,6 +383,24 @@ func (db *DB) migrate() error {
 		events  TEXT    NOT NULL DEFAULT 'blocked,challenged'
 	);
 	INSERT OR IGNORE INTO webhook_config (id) VALUES (1);
+
+	CREATE TABLE IF NOT EXISTS ip_threat_scores (
+		ip            TEXT PRIMARY KEY,
+		total_score   INTEGER NOT NULL DEFAULT 0,
+		autoban_score INTEGER NOT NULL DEFAULT 0,
+		bot_score     INTEGER NOT NULL DEFAULT 0,
+		asn_score     INTEGER NOT NULL DEFAULT 0,
+		geo_score     INTEGER NOT NULL DEFAULT 0,
+		ja4_score     INTEGER NOT NULL DEFAULT 0,
+		updated_at    DATETIME NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS ja4_reputation (
+		ja4          TEXT PRIMARY KEY,
+		hits         INTEGER NOT NULL DEFAULT 0,
+		blocked_hits INTEGER NOT NULL DEFAULT 0,
+		last_seen    DATETIME NOT NULL
+	);
 	`)
 	if err != nil {
 		return err
@@ -2385,4 +2415,128 @@ func (db *DB) ExportRequests(f LogFilter, fn func(RequestLog) bool) error {
 		}
 	}
 	return rows.Err()
+}
+
+// ── Threat score ──────────────────────────────────────────────────────────────
+//
+// Unified per-IP threat-intelligence score (issue #12) — a composite read
+// model combining autoban history, bot score, ASN/hosting classification,
+// geo risk, and JA4 repeat-offender history. Computed incrementally by
+// internal/security/threatscore.Scorer.Record, registered via
+// SetThreatScoreFn like every other log-worker fan-out hook. Distinct from
+// the unrelated internal/security/threatintel package (external IP
+// block-list sync) despite the similar name.
+
+// IPThreatScore is one row in ip_threat_scores: the latest composite score
+// for an IP plus the per-signal breakdown that produced it, so the admin UI
+// can show *why* an IP scored what it did, not just the total.
+type IPThreatScore struct {
+	IP           string
+	Total        int
+	AutobanScore int
+	BotScore     int
+	ASNScore     int
+	GeoScore     int
+	JA4Score     int
+	UpdatedAt    time.Time
+}
+
+// UpsertIPThreatScore stores s's latest composite score, replacing any
+// previous score for the same IP.
+func (db *DB) UpsertIPThreatScore(s IPThreatScore) error {
+	_, err := db.conn.Exec(
+		`INSERT INTO ip_threat_scores (ip, total_score, autoban_score, bot_score, asn_score, geo_score, ja4_score, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(ip) DO UPDATE SET
+		   total_score = excluded.total_score,
+		   autoban_score = excluded.autoban_score,
+		   bot_score = excluded.bot_score,
+		   asn_score = excluded.asn_score,
+		   geo_score = excluded.geo_score,
+		   ja4_score = excluded.ja4_score,
+		   updated_at = excluded.updated_at`,
+		s.IP, s.Total, s.AutobanScore, s.BotScore, s.ASNScore, s.GeoScore, s.JA4Score, s.UpdatedAt.UTC(),
+	)
+	return err
+}
+
+// GetIPThreatScore returns ip's latest composite score. The second return
+// value is false if no score has been recorded for ip yet.
+func (db *DB) GetIPThreatScore(ip string) (IPThreatScore, bool, error) {
+	var s IPThreatScore
+	s.IP = ip
+	err := db.conn.QueryRow(
+		`SELECT total_score, autoban_score, bot_score, asn_score, geo_score, ja4_score, updated_at
+		 FROM ip_threat_scores WHERE ip = ?`, ip,
+	).Scan(&s.Total, &s.AutobanScore, &s.BotScore, &s.ASNScore, &s.GeoScore, &s.JA4Score, &s.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return IPThreatScore{}, false, nil
+	}
+	if err != nil {
+		return IPThreatScore{}, false, err
+	}
+	return s, true, nil
+}
+
+// GetIPThreatScores returns the total score for every IP in ips that has
+// one on record, keyed by IP. IPs with no recorded score are simply absent
+// from the result rather than reported as zero. A single bulk query, used by
+// the IP Rules page to avoid an N+1 lookup per row.
+func (db *DB) GetIPThreatScores(ips []string) (map[string]int, error) {
+	out := make(map[string]int, len(ips))
+	if len(ips) == 0 {
+		return out, nil
+	}
+
+	placeholders := strings.Repeat("?,", len(ips))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]any, len(ips))
+	for i, ip := range ips {
+		args[i] = ip
+	}
+
+	rows, err := db.conn.Query(
+		`SELECT ip, total_score FROM ip_threat_scores WHERE ip IN (`+placeholders+`)`, args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var ip string
+		var score int
+		if err := rows.Scan(&ip, &score); err != nil {
+			return nil, err
+		}
+		out[ip] = score
+	}
+	return out, rows.Err()
+}
+
+// BumpJA4Reputation records one observed request for ja4 (a hit, and a
+// blocked hit if blocked is true) and returns the fingerprint's updated
+// lifetime totals. Used to track JA4 fingerprints that keep showing up on
+// blocked traffic across many IPs/connections — the ja4 package's own store
+// is connection-scoped and forgets fingerprints as soon as the connection
+// closes.
+func (db *DB) BumpJA4Reputation(ja4 string, blocked bool) (hits, blockedHits int, err error) {
+	blockedInc := 0
+	if blocked {
+		blockedInc = 1
+	}
+	_, err = db.conn.Exec(
+		`INSERT INTO ja4_reputation (ja4, hits, blocked_hits, last_seen) VALUES (?, 1, ?, ?)
+		 ON CONFLICT(ja4) DO UPDATE SET
+		   hits = hits + 1,
+		   blocked_hits = blocked_hits + ?,
+		   last_seen = excluded.last_seen`,
+		ja4, blockedInc, time.Now().UTC(), blockedInc,
+	)
+	if err != nil {
+		return 0, 0, err
+	}
+	err = db.conn.QueryRow(
+		`SELECT hits, blocked_hits FROM ja4_reputation WHERE ja4 = ?`, ja4,
+	).Scan(&hits, &blockedHits)
+	return hits, blockedHits, err
 }

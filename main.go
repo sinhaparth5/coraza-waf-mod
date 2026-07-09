@@ -35,6 +35,7 @@ import (
 	"coraza-waf-mod/internal/proxy"
 	"coraza-waf-mod/internal/security/asn"
 	"coraza-waf-mod/internal/security/autoban"
+	"coraza-waf-mod/internal/security/threatscore"
 	"coraza-waf-mod/internal/security/blocklist"
 	"coraza-waf-mod/internal/security/challenge"
 	"coraza-waf-mod/internal/security/geo"
@@ -218,6 +219,18 @@ func main() {
 	})
 	defer banner.Stop()
 	db.SetAutobanFn(banner.Record)
+
+	// Unified per-IP threat score: a composite read model (issue #12)
+	// combining autoban's history, bot score, ASN/hosting classification,
+	// geo risk, and JA4 repeat-offender history. Read-only today — no
+	// enforcement is driven by it yet (see issue #16).
+	scorer := threatscore.New(db, banner.Score)
+	if rules, err := db.ListGeoRules(); err != nil {
+		log.Printf("threatscore: initial geo rules load: %v", err)
+	} else {
+		scorer.ReloadGeoRules(rules)
+	}
+	db.SetThreatScoreFn(scorer.Record)
 
 	// nginx-style access.log: opt-in flat-file log for tooling that expects
 	// one (fail2ban, log shippers, grep/awk, logrotate) — independent of the
