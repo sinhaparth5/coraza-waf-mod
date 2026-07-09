@@ -44,7 +44,13 @@ var funcs = template.FuncMap{
 	"fmtTime":     func(t time.Time) string { return t.Format("02 Jan 15:04:05") },
 	"fmtTimeFull": func(t time.Time) string { return t.UTC().Format("2006-01-02 15:04:05 UTC") },
 	"fmtDur":      func(ms int64) string { return fmt.Sprintf("%dms", ms) },
-	"today":       func() string { return time.Now().Format("2 January 2006") },
+	"fmtLastUsed": func(t *time.Time) string {
+		if t == nil {
+			return "Never"
+		}
+		return t.Format("02 Jan 15:04:05")
+	},
+	"today": func() string { return time.Now().Format("2 January 2006") },
 	"truncate": func(s string, n int) string {
 		if len(s) <= n {
 			return s
@@ -106,6 +112,7 @@ type Handler struct {
 	sendReportNow   func() error
 	reloadAutoban   func()
 	loginLimiter    *loginLimiter
+	apiKeyLimiter   *loginLimiter
 	trustedNets     []*net.IPNet
 }
 
@@ -143,7 +150,7 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 	if err != nil {
 		return nil, fmt.Errorf("sub static/imgs: %w", err)
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, reloadAutoban: reloadAutoban, loginLimiter: newLoginLimiter(), trustedNets: parseTrustedNets(cfg.TrustedProxies)}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, reloadAutoban: reloadAutoban, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), trustedNets: parseTrustedNets(cfg.TrustedProxies)}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -274,6 +281,8 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/settings/webhook", h.SaveWebhookConfig)
 	g.POST("/settings/email", h.SaveEmailSettings)
 	g.POST("/settings/email/test", h.TestEmailReport)
+	g.POST("/settings/api-keys", h.CreateAPIKey)
+	g.DELETE("/settings/api-keys/:id", h.DeleteAPIKey)
 	g.GET("/waf-rules", h.WAFRulesPage)
 	g.POST("/waf-rules/disable", h.DisableWAFRule)
 	g.DELETE("/waf-rules/:id", h.EnableWAFRule)
@@ -1664,6 +1673,7 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 	wh, _ := h.db.GetWebhookConfig()
 	ec, _ := h.db.GetEmailConfig()
 	vc, _ := h.db.GetVarnishConfig()
+	apiKeys, _ := h.db.ListAPIKeys()
 	return h.render(c, "settings", map[string]any{
 		"AdminEmail":     email,
 		"BotEnabled":     botEnabled,
@@ -1684,6 +1694,63 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 		"EmailTokenSet":  ec.Token != "",
 		"VarnishEnabled": vc.Enabled,
 		"VarnishAddr":    vc.Addr,
+		"APIKeys":        apiKeys,
+	})
+}
+
+// CreateAPIKey generates a new bearer token for the REST API and shows it to
+// the admin exactly once — only its SHA-256 hash and a display prefix are
+// persisted (see newAPIKey, ui/api.go).
+func (h *Handler) CreateAPIKey(c echo.Context) error {
+	name := strings.TrimSpace(c.FormValue("name"))
+	apiKeys, _ := h.db.ListAPIKeys()
+
+	if name == "" {
+		return h.renderPartial(c, "settings", "api-keys-card", map[string]any{
+			"AdminPath":     h.cfg.Admin.Path,
+			"APIKeys":       apiKeys,
+			"APIKeySaveErr": "Name is required.",
+		})
+	}
+
+	raw, prefix, hash, err := newAPIKey()
+	if err != nil {
+		return h.renderPartial(c, "settings", "api-keys-card", map[string]any{
+			"AdminPath":     h.cfg.Admin.Path,
+			"APIKeys":       apiKeys,
+			"APIKeySaveErr": "Could not generate a key: " + err.Error(),
+		})
+	}
+	if _, err := h.db.CreateAPIKey(name, prefix, hash); err != nil {
+		return h.renderPartial(c, "settings", "api-keys-card", map[string]any{
+			"AdminPath":     h.cfg.Admin.Path,
+			"APIKeys":       apiKeys,
+			"APIKeySaveErr": err.Error(),
+		})
+	}
+
+	apiKeys, _ = h.db.ListAPIKeys()
+	return h.renderPartial(c, "settings", "api-keys-card", map[string]any{
+		"AdminPath": h.cfg.Admin.Path,
+		"APIKeys":   apiKeys,
+		"NewAPIKey": raw,
+	})
+}
+
+// DeleteAPIKey revokes a key by deleting its row — any request already using
+// it fails its next auth check immediately, no cache or TTL to wait out.
+func (h *Handler) DeleteAPIKey(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.String(http.StatusBadRequest, "invalid id")
+	}
+	if err := h.db.RemoveAPIKey(id); err != nil {
+		return err
+	}
+	apiKeys, _ := h.db.ListAPIKeys()
+	return h.renderPartial(c, "settings", "api-keys-rows", map[string]any{
+		"AdminPath": h.cfg.Admin.Path,
+		"Keys":      apiKeys,
 	})
 }
 

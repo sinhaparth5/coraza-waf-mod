@@ -286,6 +286,7 @@ func main() {
 		log.Fatalf("ui init: %v", err)
 	}
 	uiHandler.Register(e)
+	uiHandler.RegisterAPI(e)
 
 	// Challenge routes must be registered before the catch-all proxy route so
 	// Echo routes them to the challenger, not the backend.
