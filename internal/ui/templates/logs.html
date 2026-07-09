@@ -174,10 +174,13 @@
     {{end}}
   </div>
 
-  <!-- SSE live feed: Terminal (access log) view, hidden until selected -->
-  <div id="access-log-wrapper" class="hidden overflow-y-auto h-[calc(100vh-280px)] bg-slate-900">
-    <div id="access-log-feed" class="text-white text-[12px] font-mono px-4 py-3 whitespace-pre-wrap break-all">
-      <p id="access-log-empty" class="text-slate-400">Waiting for requests…</p>
+  <!-- SSE live feed: Terminal (access log) view, hidden until selected.
+       Lines don't wrap (whitespace-pre) — overflow-auto gives a horizontal
+       scrollbar for long lines instead, like a real terminal. -->
+  <div id="access-log-wrapper" class="hidden overflow-auto h-[calc(100vh-280px)] bg-slate-900">
+    <div id="access-log-feed" class="text-white text-[12px] font-mono px-4 py-3 whitespace-pre">
+      {{range .AccessLogRecent}}<div>{{.}}</div>{{end}}
+      {{if not .AccessLogRecent}}<p id="access-log-empty" class="text-slate-400">Waiting for requests…</p>{{end}}
     </div>
   </div>
   {{end}}

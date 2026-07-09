@@ -1228,6 +1228,45 @@ type LogRow struct {
 	Duration  int64
 }
 
+// ListRecentRequestLogs returns up to limit requests since the given time,
+// in chronological (oldest first) order — used to preload the access-log
+// terminal panel with the last 24h of history instead of starting empty on
+// every page load. Unlike LogRow (used by the table view), this returns full
+// RequestLog values because accesslog.FormatLine also needs Query and Proto,
+// which LogRow doesn't carry.
+//
+// The DB query itself is ORDER BY ts DESC (so LIMIT keeps the most recent N
+// within the window, not the oldest N), then reversed in Go — appending
+// these client-side in the returned order reads top-to-bottom like a real
+// tail -f, newest at the bottom, matching how live lines get appended.
+func (db *DB) ListRecentRequestLogs(since time.Time, limit int) ([]RequestLog, error) {
+	rows, err := db.conn.Query(
+		`SELECT ts, real_ip, method, path, query, proto, status, user_agent
+		 FROM requests WHERE ts >= ? ORDER BY ts DESC LIMIT ?`,
+		since.UTC(), limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []RequestLog
+	for rows.Next() {
+		var r RequestLog
+		if err := rows.Scan(&r.Timestamp, &r.RealIP, &r.Method, &r.Path, &r.Query, &r.Proto, &r.Status, &r.UserAgent); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out, nil
+}
+
 // ListRequests returns paginated request logs, newest first.
 // Optionally filter by blocked-only or IP.
 func (db *DB) ListRequests(blockedOnly bool, ip string, limit, offset int) ([]LogRow, error) {

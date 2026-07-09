@@ -713,6 +713,16 @@ func (h *Handler) ThreatsSeries(c echo.Context) error {
 
 const logsPageSize = 50
 
+// accessLogHistoryWindow/accessLogHistoryLimit bound how much history the
+// access-log terminal panel preloads on page load — otherwise it starts
+// empty ("Waiting for requests…") until new live traffic happens to arrive.
+// Limit matches the client-side cap (accessLogMaxLines in logs.js) so the
+// initial render and the steady-state line count agree.
+const (
+	accessLogHistoryWindow = 24 * time.Hour
+	accessLogHistoryLimit  = 100
+)
+
 // Logs serves the logs page. The row data always comes from the database
 // (so it survives restarts, unlike the in-memory broadcast ring buffer).
 // In "live" mode (no filters, page 1) the page also keeps an SSE connection
@@ -753,17 +763,32 @@ func (h *Handler) Logs(c echo.Context) error {
 		return err
 	}
 
+	// Preload the access-log terminal panel with recent history — it only
+	// makes sense in live mode, same as the panel itself.
+	var accessLogRecent []string
+	if live {
+		history, err := h.db.ListRecentRequestLogs(time.Now().Add(-accessLogHistoryWindow), accessLogHistoryLimit)
+		if err != nil {
+			return err
+		}
+		accessLogRecent = make([]string, len(history))
+		for i, entry := range history {
+			accessLogRecent[i] = accesslog.FormatLine(entry)
+		}
+	}
+
 	return h.render(c, "logs", map[string]any{
-		"Apps":         h.registry.List(),
-		"History":      !live,
-		"Recent":       rows,
-		"Total":        total,
-		"CurPage":      page,
-		"TotalPages":   max(1, (total+logsPageSize-1)/logsPageSize),
-		"FilterApp":    filter.AppName,
-		"FilterStatus": filter.StatusClass,
-		"FilterFrom":   fromStr,
-		"FilterTo":     toStr,
+		"Apps":            h.registry.List(),
+		"History":         !live,
+		"Recent":          rows,
+		"AccessLogRecent": accessLogRecent,
+		"Total":           total,
+		"CurPage":         page,
+		"TotalPages":      max(1, (total+logsPageSize-1)/logsPageSize),
+		"FilterApp":       filter.AppName,
+		"FilterStatus":    filter.StatusClass,
+		"FilterFrom":      fromStr,
+		"FilterTo":        toStr,
 	})
 }
 

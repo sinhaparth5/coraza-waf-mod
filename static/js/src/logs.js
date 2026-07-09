@@ -424,6 +424,28 @@
     }
 
     var accessLogMaxLines = 100;
+    // Auto-scroll to the newest line only while the user is already at (or
+    // very near) the bottom — if they've scrolled up to read older entries,
+    // new lines must not yank the view back down. Tracked separately from
+    // the manual Pause button so either one stops auto-scroll.
+    var accessLogAutoScroll = true;
+    var accessLogScrollThreshold = 32; // px tolerance to count as "at the bottom"
+
+    function accessLogScrollToBottom() {
+      if (accessLogWrapper) accessLogWrapper.scrollTop = accessLogWrapper.scrollHeight;
+    }
+
+    if (accessLogWrapper) {
+      // Note: no initial accessLogScrollToBottom() call here — the wrapper
+      // starts display:none (Table is the default view), so scrollHeight
+      // isn't meaningful yet. setView('terminal') below does it once the
+      // panel actually has a layout box.
+      accessLogWrapper.addEventListener('scroll', function () {
+        var distanceFromBottom = accessLogWrapper.scrollHeight - accessLogWrapper.scrollTop - accessLogWrapper.clientHeight;
+        accessLogAutoScroll = distanceFromBottom < accessLogScrollThreshold;
+      });
+    }
+
     function openAccessLogStream() {
       if (accessLogStream || !accessLogFeed || !window.EventSource) return;
       accessLogStream = new EventSource(adminPath + '/access-log/stream');
@@ -437,7 +459,7 @@
         var line = document.createElement('div');
         line.textContent = e.data;
         accessLogFeed.appendChild(line);
-        if (!paused) accessLogFeed.scrollTop = accessLogFeed.scrollHeight;
+        if (!paused && accessLogAutoScroll) accessLogScrollToBottom();
 
         while (accessLogFeed.children.length > accessLogMaxLines) {
           accessLogFeed.removeChild(accessLogFeed.firstChild);
@@ -490,6 +512,11 @@
       } else {
         closeTableStream();
         openAccessLogStream();
+        // The wrapper was display:none until the toggle above ran, so its
+        // scrollHeight only became meaningful just now — scroll to the
+        // newest (bottom) entry now that it has a real layout box.
+        accessLogAutoScroll = true;
+        accessLogScrollToBottom();
       }
     }
 
