@@ -71,6 +71,7 @@
   {{template "ratelimit-card" .}}
   {{template "webhook-card" .}}
   {{template "email-card" .}}
+  {{template "api-keys-card" .}}
 
   <!-- ── WAF hot-reload ────────────────────────────────────────────────────── -->
   <div class="card p-6">
@@ -296,6 +297,60 @@
     <p class="text-[11px] text-slate-400 -mt-2">The test uses the <em>saved</em> settings and covers the last 24 hours — save first, then test.</p>
   </form>
 </div>
+{{end}}
+
+{{define "api-keys-card"}}
+<div class="card p-6" id="api-keys-card">
+  <h2 class="text-[15px] font-bold text-slate-800 mb-1">API Keys</h2>
+  <p class="text-[13px] text-slate-500 mb-5">Bearer tokens for programmatic management of services, IP rules, and bans at <code class="font-mono text-[11px] bg-surface px-1 py-0.5 rounded">{{.AdminPath}}/api/v1/*</code> — <code class="font-mono text-[11px]">Authorization: Bearer &lt;key&gt;</code>, no session cookie or CSRF token needed. Each key can do everything the admin session can (all-or-nothing in this version — no read-only keys yet).</p>
+
+  {{if .NewAPIKey}}
+  <div class="rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[13px] px-4 py-3 mb-4">
+    <p class="font-semibold mb-1">Copy this key now — it won't be shown again.</p>
+    <div class="flex items-center gap-2 mt-1">
+      <code class="flex-1 min-w-0 font-mono text-[12px] bg-white border border-amber-200 rounded-lg px-3 py-2 select-all break-all">{{.NewAPIKey}}</code>
+      <button type="button" data-copy-value="{{.NewAPIKey}}"
+              class="copy-btn inline-flex items-center gap-[6px] shrink-0 rounded-lg border border-amber-200 bg-white text-amber-800 text-[12px] font-medium px-3 py-2 hover:bg-amber-50 transition-colors duration-150 cursor-pointer">
+        <i class="hgi hgi-stroke hgi-rounded hgi-copy-01 text-sm copy-btn-icon"></i>
+        <span class="copy-btn-label">Copy</span>
+      </button>
+    </div>
+  </div>
+  {{end}}
+  {{if .APIKeySaveErr}}
+  <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.APIKeySaveErr}}</div>
+  {{end}}
+
+  <form hx-post="{{.AdminPath}}/settings/api-keys" hx-target="#api-keys-card" hx-swap="outerHTML" class="flex items-end gap-3 mb-5">
+    <div class="flex-1">
+      <label class="block text-[12px] text-slate-500 mb-[6px] font-medium" for="api_key_name">Key name</label>
+      <input id="api_key_name" name="name" type="text" placeholder="ci-deploy, terraform, ..." required
+        class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+    </div>
+    <button type="submit" class="btn-primary px-6 shrink-0">Generate key</button>
+  </form>
+
+  <div id="api-keys-body" class="flex flex-col gap-1">
+    {{template "api-keys-rows" (map "AdminPath" .AdminPath "Keys" .APIKeys)}}
+  </div>
+</div>
+{{end}}
+
+{{define "api-keys-rows"}}
+{{range .Keys}}
+<div class="flex items-center gap-3 p-3 rounded-2xl hover:bg-surface transition-colors duration-150 border border-line">
+  <div class="w-10 h-10 rounded-full bg-brand-tint flex items-center justify-center shrink-0">
+    <i class="hgi hgi-stroke hgi-rounded hgi-key-01 text-base text-brand-dark"></i>
+  </div>
+  <div class="flex-1 min-w-0">
+    <div class="text-[14px] font-semibold text-slate-900 truncate">{{.Name}}</div>
+    <div class="text-[12px] text-slate-500 truncate mono">{{.Prefix}}••••••••••••••••••••••••••••••• · created {{fmtTime .CreatedAt}} · last used {{fmtLastUsed .LastUsedAt}}</div>
+  </div>
+  {{template "remove-btn" (map "URL" (printf "%s/settings/api-keys/%d" $.AdminPath .ID) "Target" "#api-keys-body" "Confirm" (printf "Revoke API key %q? Anything using it will start getting 401s immediately." .Name))}}
+</div>
+{{else}}
+{{template "empty-state" (map "Icon" "hgi-key-01" "Message" "No API keys yet")}}
+{{end}}
 {{end}}
 
 {{define "ratelimit-card"}}
