@@ -377,6 +377,9 @@
   var adminPath = document.body.dataset.adminPath || '';
   var paused = false;
   var stream;
+  var accessLogWrapper = document.getElementById('access-log-wrapper');
+  var accessLogFeed = document.getElementById('access-log-feed');
+  var accessLogStream;
 
   function togglePause() {
     paused = !paused;
@@ -406,17 +409,97 @@
     });
     obs.observe(feed, { childList: true });
 
-    if (window.EventSource) {
+    function openTableStream() {
+      if (stream || !window.EventSource) return;
       stream = new EventSource(adminPath + '/logs/stream');
       stream.onmessage = function (e) {
         feed.insertAdjacentHTML('afterbegin', e.data);
       };
     }
+
+    function closeTableStream() {
+      if (!stream) return;
+      stream.close();
+      stream = null;
+    }
+
+    var accessLogMaxLines = 100;
+    function openAccessLogStream() {
+      if (accessLogStream || !accessLogFeed || !window.EventSource) return;
+      accessLogStream = new EventSource(adminPath + '/access-log/stream');
+      accessLogStream.onmessage = function (e) {
+        var empty = document.getElementById('access-log-empty');
+        if (empty) empty.remove();
+
+        // Build the line as a text node, never innerHTML/insertAdjacentHTML —
+        // request path and user-agent are attacker-controlled and must never
+        // be interpreted as markup.
+        var line = document.createElement('div');
+        line.textContent = e.data;
+        accessLogFeed.appendChild(line);
+        if (!paused) accessLogFeed.scrollTop = accessLogFeed.scrollHeight;
+
+        while (accessLogFeed.children.length > accessLogMaxLines) {
+          accessLogFeed.removeChild(accessLogFeed.firstChild);
+        }
+      };
+    }
+
+    function closeAccessLogStream() {
+      if (!accessLogStream) return;
+      accessLogStream.close();
+      accessLogStream = null;
+    }
+
+    openTableStream();
+
+    // ── Table / Terminal view toggle ─────────────────────────────────────
+    // Only one SSE connection is kept open at a time — both endpoints
+    // subscribe to the same server-side broadcaster, so there's no reason
+    // to pay for two live connections when only one view is visible.
+    var tableBtn = document.getElementById('view-table-btn');
+    var terminalBtn = document.getElementById('view-terminal-btn');
+    var logColumns = document.getElementById('log-columns');
+    var tableHint = document.getElementById('table-format-hint');
+
+    function setView(view) {
+      var isTable = view === 'table';
+      wrapper.classList.toggle('hidden', !isTable);
+      if (logColumns) logColumns.classList.toggle('hidden', !isTable);
+      if (tableHint) tableHint.classList.toggle('hidden', !isTable);
+      if (accessLogWrapper) accessLogWrapper.classList.toggle('hidden', isTable);
+
+      if (tableBtn) {
+        tableBtn.classList.toggle('bg-white', isTable);
+        tableBtn.classList.toggle('shadow-sm', isTable);
+        tableBtn.classList.toggle('text-slate-800', isTable);
+        tableBtn.classList.toggle('text-slate-500', !isTable);
+        tableBtn.setAttribute('aria-selected', String(isTable));
+      }
+      if (terminalBtn) {
+        terminalBtn.classList.toggle('bg-white', !isTable);
+        terminalBtn.classList.toggle('shadow-sm', !isTable);
+        terminalBtn.classList.toggle('text-slate-800', !isTable);
+        terminalBtn.classList.toggle('text-slate-500', isTable);
+        terminalBtn.setAttribute('aria-selected', String(!isTable));
+      }
+
+      if (isTable) {
+        closeAccessLogStream();
+        openTableStream();
+      } else {
+        closeTableStream();
+        openAccessLogStream();
+      }
+    }
+
+    if (tableBtn) tableBtn.addEventListener('click', function () { setView('table'); });
+    if (terminalBtn) terminalBtn.addEventListener('click', function () { setView('terminal'); });
   }
 
   function closeStream() {
-    if (!stream) return;
-    stream.close(); stream = null;
+    if (stream) { stream.close(); stream = null; }
+    if (accessLogStream) { accessLogStream.close(); accessLogStream = null; }
   }
   window.addEventListener('pagehide', closeStream);
   window.addEventListener('beforeunload', closeStream);

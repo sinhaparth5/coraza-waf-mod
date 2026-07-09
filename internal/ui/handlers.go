@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"coraza-waf-mod/internal/config"
+	"coraza-waf-mod/internal/notify/accesslog"
 	"coraza-waf-mod/internal/notify/mailer"
 	"coraza-waf-mod/internal/notify/metrics"
 	"coraza-waf-mod/internal/security/blocklist"
@@ -248,6 +249,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.GET("/logs", h.Logs)
 	g.GET("/logs/export", h.ExportLogs)
 	g.GET("/logs/stream", h.LogsStream)
+	g.GET("/access-log/stream", h.AccessLogStream)
 	g.GET("/logs/:id", h.LogDetail)
 	g.GET("/ip-rules", h.IPRulesPage)
 	g.GET("/ip-rules/rows", h.IPRulesRows)
@@ -795,6 +797,45 @@ func (h *Handler) LogsStream(c echo.Context) error {
 				fmt.Fprintf(w, "data: %s\n", line)
 			}
 			fmt.Fprint(w, "\n")
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		case <-c.Request().Context().Done():
+			return nil
+		}
+	}
+}
+
+// AccessLogStream is an SSE endpoint mirroring LogsStream — same broadcaster
+// subscription, same connection lifecycle — but emits a single plain-text
+// nginx-combined-format line per event instead of an HTML fragment, powering
+// the dashboard's terminal-style live panel. It's independent of whether the
+// --access-log file is enabled: this reads from the in-memory broadcaster,
+// not the file, so it works even when no file is being written.
+func (h *Handler) AccessLogStream(c echo.Context) error {
+	w := c.Response().Writer
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+
+	ch := h.broadcaster.Subscribe()
+	defer h.broadcaster.Unsubscribe(ch)
+
+	for {
+		select {
+		case entry, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			// FormatLine never contains a newline, so no multi-line "data:"
+			// splitting is needed here (contrast LogsStream, which sends a
+			// multi-line HTML fragment).
+			fmt.Fprintf(w, "data: %s\n\n", accesslog.FormatLine(entry))
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}

@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"coraza-waf-mod/internal/config"
+	"coraza-waf-mod/internal/notify/accesslog"
 	"coraza-waf-mod/internal/notify/mailer"
 	"coraza-waf-mod/internal/notify/metrics"
 	"coraza-waf-mod/internal/notify/webhook"
@@ -86,6 +87,9 @@ func main() {
 	retention := fs.Int("retention", 30, "request log retention in days (0 = keep forever)")
 	tlsCert := fs.String("tls-cert", "", "PEM certificate file for HTTPS fallback (self-signed)")
 	tlsKey := fs.String("tls-key", "", "PEM private key file for HTTPS fallback (self-signed)")
+	accessLogPath := fs.String("access-log", "", "nginx-style access log file path (empty = disabled)")
+	accessLogMaxSizeMB := fs.Int("access-log-max-size-mb", 100, "rotate access log after this many MB")
+	accessLogMaxBackups := fs.Int("access-log-max-backups", 5, "number of rotated access log files to keep")
 	fs.Parse(os.Args[1:])
 
 	cfg := config.Defaults()
@@ -214,6 +218,21 @@ func main() {
 	})
 	defer banner.Stop()
 	db.SetAutobanFn(banner.Record)
+
+	// nginx-style access.log: opt-in flat-file log for tooling that expects
+	// one (fail2ban, log shippers, grep/awk, logrotate) — independent of the
+	// SQLite-backed admin UI logging above. Disabled unless --access-log is set.
+	if *accessLogPath != "" {
+		accessLogWriter, err := accesslog.New(*accessLogPath, *accessLogMaxSizeMB, *accessLogMaxBackups)
+		if err != nil {
+			log.Fatalf("access log: %v", err)
+		}
+		// Deliberately deferred after db.Close() (registered above) so it
+		// still exists — LIFO means it runs *before* db.Close() — while
+		// runLogWorker drains any queued entries during shutdown.
+		defer accessLogWriter.Close()
+		db.SetAccessLogFn(accessLogWriter.Push)
+	}
 
 	// Bot protection settings come entirely from the DB (managed via Settings page).
 	botEnabled, botThreshold, botTTL, _ := db.GetBotSettings()

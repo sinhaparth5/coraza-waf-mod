@@ -35,6 +35,7 @@ type DB struct {
 	broadcastFn func(RequestLog)
 	webhookFn   func(RequestLog)
 	autobanFn   func(RequestLog)
+	accessLogFn func(RequestLog)
 }
 
 // SetAutobanFn registers a callback invoked (from the log worker goroutine)
@@ -57,6 +58,13 @@ func (db *DB) SetWebhookFn(fn func(RequestLog)) {
 // broadcaster without importing ui from storage.
 func (db *DB) SetBroadcastFn(fn func(RequestLog)) {
 	db.broadcastFn = fn
+}
+
+// SetAccessLogFn registers a callback invoked (from the log worker goroutine)
+// after each successful DB insert. Used to feed the nginx-style access.log
+// writer without coupling storage to the accesslog package.
+func (db *DB) SetAccessLogFn(fn func(RequestLog)) {
+	db.accessLogFn = fn
 }
 
 // RequestLog is one row in the requests table.
@@ -148,6 +156,9 @@ func (db *DB) runLogWorker() {
 			}
 			if db.autobanFn != nil {
 				db.autobanFn(entry)
+			}
+			if db.accessLogFn != nil {
+				db.accessLogFn(entry)
 			}
 		}
 	}
