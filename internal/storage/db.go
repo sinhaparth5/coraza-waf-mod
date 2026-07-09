@@ -1115,13 +1115,13 @@ func (db *DB) GetBotStats() BotStats {
 	now := time.Now().UTC()
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	var challenged, total, blocked int
-	db.conn.QueryRow( //nolint
+	db.conn.QueryRow(
 		`SELECT
 			COUNT(*) FILTER (WHERE action = 'bot_challenge'),
 			COUNT(*),
 			COUNT(*) FILTER (WHERE blocked = 1)
 		FROM requests WHERE ts >= ?`, startOfDay,
-	).Scan(&challenged, &total, &blocked)
+	).Scan(&challenged, &total, &blocked) //nolint
 	passed := total - blocked
 	if passed < 0 {
 		passed = 0

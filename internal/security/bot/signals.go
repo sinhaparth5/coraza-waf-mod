@@ -89,8 +89,8 @@ func Analyze(r *http.Request) Analysis {
 		}
 	}
 
-	switch {
-	case ua == "":
+	switch ua {
+	case "":
 		a.add(5, "missing_ua")
 	default:
 		for _, s := range knownScanners {

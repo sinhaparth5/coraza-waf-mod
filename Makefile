@@ -6,7 +6,11 @@ DIST    := dist
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS  := -s -w -X main.version=$(VERSION)
 
-.PHONY: build generate run test clean dist checksums tag
+# Keep in sync with .github/workflows/ci.yml's golangci-lint-action `version:`
+# input, so a clean local `make lint` and CI never disagree on results.
+LINT_VERSION := v2.12.2
+
+.PHONY: build generate run test lint hooks clean dist checksums tag
 
 build: generate
 	go build -ldflags "-X main.version=$(VERSION)" -o $(BINARY) .
@@ -19,6 +23,22 @@ run: build
 
 test:
 	go test ./...
+
+# Requires golangci-lint $(LINT_VERSION) — https://golangci-lint.run/welcome/install/
+# Config lives in .golangci.yml. Same command CI and the pre-push hook run.
+lint:
+	@command -v golangci-lint >/dev/null 2>&1 || { \
+		echo "golangci-lint not found. Install $(LINT_VERSION):"; \
+		echo "  https://golangci-lint.run/welcome/install/"; \
+		exit 1; \
+	}
+	golangci-lint run ./...
+
+# One-time setup: point git at the versioned hooks in .githooks/ instead of
+# the untracked, per-clone .git/hooks/ directory.
+hooks:
+	git config core.hooksPath .githooks
+	@echo "==> git hooks enabled (.githooks) — golangci-lint runs before every push"
 
 clean:
 	rm -f $(BINARY)

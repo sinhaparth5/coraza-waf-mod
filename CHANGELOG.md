@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.6] - 2026-07-09
+
+### Added
+- **REST API**: `{admin.path}/api/v1/*`, authenticated with `Authorization:
+  Bearer <key>` instead of the session cookie — a separate, CSRF-exempt Echo
+  group for programmatic management. Covers full CRUD for services and IP
+  rules, plus read/manual ban/unban for the ban list (backed by the same
+  `ip_rules` table, filtered to global block rows). Keys are `cwaf_`-prefixed
+  160-bit tokens shown once at creation and stored only as a SHA-256 digest;
+  managed from a new API Keys card on the Settings page, with a one-click
+  copy button on the one-time key display.
+- **IP Rules**: paginated at 16 rows per page instead of loading the whole
+  table — it can grow into the thousands via autoban. Prev/Next controls
+  fetch a partial (`GET /admin/ip-rules/rows`) without a full page reload,
+  mirroring the existing Services page pattern.
+- **Logs**: a Table/Terminal toggle on the live Logs page. Terminal view is
+  a dark, monospace panel streaming the same traffic in nginx combined log
+  format (`IP - - [time] "request" status bytes "referer" "user-agent"`,
+  `-` placeholders for the byte count and referer this project doesn't
+  track). It preloads the last 24 hours of history on page load instead of
+  starting empty, scrolls horizontally instead of soft-wrapping long lines,
+  and only auto-follows new lines while already scrolled to the bottom —
+  scrolling up to read history doesn't require a separate pause action.
+  Backed by a new opt-in `--access-log` flag (plus
+  `--access-log-max-size-mb`/`--access-log-max-backups`) that also writes
+  the same lines to a rotating flat file for external tooling (fail2ban,
+  log shippers, `logrotate`), independent of whether the live panel is open.
+- **Linting**: `golangci-lint` (pinned `v2.12.2`, config in `.golangci.yml`)
+  now runs both in CI (`.github/workflows/ci.yml`'s new `lint` job, which
+  gates tag releases alongside the test job) and locally before every push
+  via an opt-in git hook (`make hooks` once per clone, `.githooks/pre-push`).
+
+### Changed
+- Every implementation package moved under `internal/` and was regrouped by
+  concern (`internal/security/` for detection/mitigation packages,
+  `internal/notify/` for outbound reporting, etc.) — a folder-structure
+  cleanup with no behavior change. See `CLAUDE.md`'s "Module layout" for the
+  full tree if you're carrying a fork or an out-of-tree patch.
+
 ## [1.4.5] - 2026-07-08
 
 ### Added

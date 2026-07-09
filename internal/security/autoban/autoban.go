@@ -264,8 +264,8 @@ func bannable(ip string) bool {
 	if parsed == nil {
 		return false
 	}
-	return !(parsed.IsLoopback() || parsed.IsPrivate() || parsed.IsLinkLocalUnicast() ||
-		parsed.IsLinkLocalMulticast() || parsed.IsUnspecified())
+	return !parsed.IsLoopback() && !parsed.IsPrivate() && !parsed.IsLinkLocalUnicast() &&
+		!parsed.IsLinkLocalMulticast() && !parsed.IsUnspecified()
 }
 
 // banReason summarises what earned the ban, e.g.

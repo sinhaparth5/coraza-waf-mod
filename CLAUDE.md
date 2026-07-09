@@ -23,13 +23,17 @@ make build       # go generate (minifies JS) + go build -> ./coraza-waf-mod
 make generate    # regenerate minified JS only (go generate ./...), no build
 make run         # build + run
 make test        # go test ./...
+make lint        # golangci-lint run ./... (config: .golangci.yml, pinned version in LINT_VERSION)
+make hooks       # one-time: git config core.hooksPath .githooks, enabling the pre-push lint hook
 make clean       # remove binary, minified JS, dist/
 make dist        # cross-compile linux/amd64 + linux/arm64 + windows/amd64 release binaries (CGO_ENABLED=0)
 make checksums   # sha256sum dist/* -> dist/checksums.txt
 make tag VERSION=v1.0.0  # annotated git tag + push to origin, triggers the GitHub Actions release workflow
 ```
 
-Run a single test: `go test ./internal/proxy/ -run TestName -v` (substitute the package). Existing tests live in `internal/proxy/`, `internal/security/ratelimit/`, `internal/security/ja3/`, `internal/security/ja4/`, `internal/storage/`, `internal/notify/mailer/`, `internal/security/autoban/`, `internal/security/challenge/`, `internal/services/`, `internal/security/waf/`, and `internal/ui/`. Run `gofmt` on changed Go files; the existing tests are table-driven (e.g. `TestRegistryMatchPrefixPriority`), so add cases next to the package being changed in that style.
+Run a single test: `go test ./internal/proxy/ -run TestName -v` (substitute the package). Existing tests live in `internal/proxy/`, `internal/security/ratelimit/`, `internal/security/ja3/`, `internal/security/ja4/`, `internal/storage/`, `internal/notify/mailer/`, `internal/security/autoban/`, `internal/security/challenge/`, `internal/services/`, `internal/security/waf/`, and `internal/ui/`. Run `gofmt` and `make lint` on changed Go files; the existing tests are table-driven (e.g. `TestRegistryMatchPrefixPriority`), so add cases next to the package being changed in that style.
+
+**Linting** (`.golangci.yml`, golangci-lint v2 config format): `linters.default: standard` (errcheck, govet, ineffassign, staticcheck, unused) plus the `common-false-positives`/`std-error-handling` exclusion presets, which cover the usual `defer f.Close()`-style false positives. What those presets don't catch — e.g. `(*flag.FlagSet).Parse` on a set built with `flag.ExitOnError` (a checked error there is genuinely unreachable code, since a parse failure calls `os.Exit` before `Parse` returns) — is suppressed inline with a same-line `//nolint` and a short reason, matching the handful of pre-existing `//nolint` comments in `internal/storage/db.go` (idempotent `ALTER TABLE` migrations, an intentionally-ignored stats `Scan`). `.github/workflows/ci.yml`'s `lint` job runs `golangci/golangci-lint-action` pinned to the same version as the Makefile's `LINT_VERSION`, and `release` now `needs: [lint, test]` — a lint failure blocks a tag release exactly like a test failure does. `.githooks/pre-push` runs the identical `golangci-lint run ./...` locally before every push once `make hooks` has pointed git at it (`git config core.hooksPath .githooks` — plain `.git/hooks/` isn't version-controlled, so this is the only way to ship a hook to every clone); `git push --no-verify` skips it for one push.
 
 **Runtime CLI flags** (there is no config file — every bootstrap setting is a flag; see `main.go`'s `main()`):
 

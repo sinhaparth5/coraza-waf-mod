@@ -2173,7 +2173,7 @@ func (h *Handler) SaveWebhookConfig(c echo.Context) error {
 	secret := strings.TrimSpace(c.FormValue("webhook_secret"))
 	enabled := c.FormValue("webhook_enabled") == "1"
 	// webhook_events is a multi-value checkbox — collect all checked values.
-	eventVals, _ := c.Request().PostForm["webhook_events"]
+	eventVals := c.Request().PostForm["webhook_events"]
 	events := strings.Join(eventVals, ",")
 	if events == "" {
 		events = "blocked"

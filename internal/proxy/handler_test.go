@@ -143,8 +143,8 @@ func TestIPBlocklistBlocks(t *testing.T) {
 	dir := t.TempDir()
 	db, _ := storage.Open(filepath.Join(dir, "bl.db"))
 	defer db.Close()
-	db.AddService("svc", "", "/", backend.URL, 0, 0)
-	db.AddIPRule("", "10.0.0.1", "block")
+	_ = db.AddService("svc", "", "/", backend.URL, 0, 0)
+	_ = db.AddIPRule("", "10.0.0.1", "block")
 
 	ipbl, _ := blocklist.NewIPBlocklist(db)
 	geoBl, _ := geo.New("", db)
@@ -178,7 +178,7 @@ func TestRateLimitReturns429(t *testing.T) {
 	dir := t.TempDir()
 	db, _ := storage.Open(filepath.Join(dir, "rl.db"))
 	defer db.Close()
-	db.AddService("svc", "", "/", backend.URL, 0, 0)
+	_ = db.AddService("svc", "", "/", backend.URL, 0, 0)
 
 	ipbl, _ := blocklist.NewIPBlocklist(db)
 	geoBl, _ := geo.New("", db)
@@ -219,8 +219,8 @@ func TestCFConnectingIPUsedAsRealIP(t *testing.T) {
 	dir := t.TempDir()
 	db, _ := storage.Open(filepath.Join(dir, "cf.db"))
 	defer db.Close()
-	db.AddService("svc", "", "/", backend.URL, 0, 0)
-	db.AddIPRule("", "203.0.113.1", "block")
+	_ = db.AddService("svc", "", "/", backend.URL, 0, 0)
+	_ = db.AddIPRule("", "203.0.113.1", "block")
 
 	ipbl, _ := blocklist.NewIPBlocklist(db)
 	geoBl, _ := geo.New("", db)
@@ -257,9 +257,9 @@ func TestCFConnectingIPSpoofIgnored(t *testing.T) {
 	dir := t.TempDir()
 	db, _ := storage.Open(filepath.Join(dir, "spoof.db"))
 	defer db.Close()
-	db.AddService("svc", "", "/", backend.URL, 0, 0)
+	_ = db.AddService("svc", "", "/", backend.URL, 0, 0)
 	// Block the IP the attacker tries to impersonate via the spoofed header.
-	db.AddIPRule("", "203.0.113.1", "block")
+	_ = db.AddIPRule("", "203.0.113.1", "block")
 
 	ipbl, _ := blocklist.NewIPBlocklist(db)
 	geoBl, _ := geo.New("", db)
@@ -297,8 +297,8 @@ func TestForwardedHeadersIgnoredFromUntrustedSource(t *testing.T) {
 	dir := t.TempDir()
 	db, _ := storage.Open(filepath.Join(dir, "xff-spoof.db"))
 	defer db.Close()
-	db.AddService("svc", "", "/", backend.URL, 0, 0)
-	db.AddIPRule("", "203.0.113.10", "block")
+	_ = db.AddService("svc", "", "/", backend.URL, 0, 0)
+	_ = db.AddIPRule("", "203.0.113.10", "block")
 
 	ipbl, _ := blocklist.NewIPBlocklist(db)
 	geoBl, _ := geo.New("", db)
@@ -333,8 +333,8 @@ func TestForwardedHeadersUsedFromTrustedProxy(t *testing.T) {
 	dir := t.TempDir()
 	db, _ := storage.Open(filepath.Join(dir, "xff-trusted.db"))
 	defer db.Close()
-	db.AddService("svc", "", "/", backend.URL, 0, 0)
-	db.AddIPRule("", "203.0.113.10", "block")
+	_ = db.AddService("svc", "", "/", backend.URL, 0, 0)
+	_ = db.AddIPRule("", "203.0.113.10", "block")
 
 	ipbl, _ := blocklist.NewIPBlocklist(db)
 	geoBl, _ := geo.New("", db)

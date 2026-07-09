@@ -90,7 +90,7 @@ func main() {
 	accessLogPath := fs.String("access-log", "", "nginx-style access log file path (empty = disabled)")
 	accessLogMaxSizeMB := fs.Int("access-log-max-size-mb", 100, "rotate access log after this many MB")
 	accessLogMaxBackups := fs.Int("access-log-max-backups", 5, "number of rotated access log files to keep")
-	fs.Parse(os.Args[1:])
+	fs.Parse(os.Args[1:]) //nolint // ExitOnError: never returns an error to check
 
 	cfg := config.Defaults()
 	cfg.ListenAddr = *listen
@@ -565,7 +565,7 @@ func runPruneOnly(args []string) {
 	fs := flag.NewFlagSet("prune", flag.ExitOnError)
 	dbPath := fs.String("db", "waf.db", "SQLite database path")
 	retention := fs.Int("retention", 30, "log retention in days (0 = keep forever)")
-	fs.Parse(args)
+	fs.Parse(args) //nolint // ExitOnError: never returns an error to check
 
 	db, err := storage.Open(*dbPath)
 	if err != nil {
@@ -606,7 +606,7 @@ func runSetup(args []string) {
 	adminEmail := fs.String("admin-email", "", "admin email address")
 	domain := fs.String("domain", "", "primary domain for ACME (Let's Encrypt)")
 	acmeEmail := fs.String("acme-email", "", "ACME contact email (defaults to admin email)")
-	fs.Parse(args)
+	fs.Parse(args) //nolint // ExitOnError: never returns an error to check
 
 	if *adminEmail == "" {
 		log.Fatal("setup: --admin-email is required")
@@ -656,7 +656,7 @@ func runGencert(args []string) {
 	keyFile := fs.String("key", "key.pem", "output PEM private key file")
 	hosts := fs.String("hosts", "", "comma-separated hostnames and/or IP addresses for SANs")
 	days := fs.Int("days", 3650, "certificate validity in days")
-	fs.Parse(args)
+	fs.Parse(args) //nolint // ExitOnError: never returns an error to check
 
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {

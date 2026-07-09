@@ -22,7 +22,17 @@ git clone https://github.com/sinhaparth5/coraza-waf-mod.git
 cd coraza-waf-mod
 make build      # go generate (minifies JS) + go build -> ./coraza-waf-mod
 make test       # go test ./...
+make lint       # golangci-lint run ./... (config: .golangci.yml)
+make hooks      # one-time: enable the pre-push lint hook in .githooks/
 ```
+
+`make lint` requires [golangci-lint](https://golangci-lint.run/welcome/install/)
+(pin: see `LINT_VERSION` in the `Makefile`, matching the `version:` pinned in
+`.github/workflows/ci.yml`'s lint job). `make hooks` points git at the
+versioned `.githooks/pre-push` script (`git config core.hooksPath
+.githooks`) so `golangci-lint run ./...` runs before every `git push`,
+catching lint failures locally instead of first in CI; skip a single push
+with `git push --no-verify`.
 
 Run a single package's tests while iterating:
 
@@ -52,8 +62,10 @@ signal/mitigation packages, `internal/notify/` for outbound reporting) — see
 
 ## Coding conventions
 
-- Run **`gofmt`** on every changed Go file. Keep package names short, lowercase,
-  and role-based; export only what crosses a package boundary.
+- Run **`gofmt`** on every changed Go file, and **`make lint`**
+  (golangci-lint) before pushing — the same check runs in CI and, once
+  `make hooks` is enabled, in a pre-push hook. Keep package names short,
+  lowercase, and role-based; export only what crosses a package boundary.
 - Prefer **table-driven tests** (e.g. `TestRegistryMatchPrefixPriority`), and add
   cases next to the package you changed.
 - **Frontend:** styling is Tailwind via the CDN Play script — there is no

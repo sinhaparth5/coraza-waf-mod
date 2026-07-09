@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Runs golangci-lint before every push, so lint failures surface locally
+# instead of first showing up in CI. Enable once per clone with `make hooks`
+# (git config core.hooksPath .githooks); skip a single push with
+# `git push --no-verify`.
+set -euo pipefail
+
+echo "==> golangci-lint (pre-push)"
+
+if ! command -v golangci-lint >/dev/null 2>&1; then
+	echo "golangci-lint not found — install it: https://golangci-lint.run/welcome/install/"
+	echo "or skip this check once with: git push --no-verify"
+	exit 1
+fi
+
+golangci-lint run ./...
