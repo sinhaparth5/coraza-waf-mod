@@ -250,6 +250,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.GET("/logs/stream", h.LogsStream)
 	g.GET("/logs/:id", h.LogDetail)
 	g.GET("/ip-rules", h.IPRulesPage)
+	g.GET("/ip-rules/rows", h.IPRulesRows)
 	g.POST("/ip-rules", h.AddIPRule)
 	g.POST("/ip-rules/autoban", h.SaveAutobanSettings)
 	g.DELETE("/ip-rules/:id", h.DeleteIPRule)
@@ -858,36 +859,81 @@ func (h *Handler) LogDetail(c echo.Context) error {
 
 // ── IP Rules ───────────────────────────────────────────────────────────────────
 
+// ipRulesPageSize caps how many rows the IP Rules admin page pulls into
+// memory per request — autoban can grow ip_rules into the thousands, and the
+// page previously loaded the whole table on every view and every add/delete.
+const ipRulesPageSize = 50
+
+// ipRulesRowsData fetches one page of rules for the ip-rules-rows partial,
+// clamping page into range so a page that just emptied out (e.g. the last
+// row on it was deleted) falls back to the new last page instead of
+// rendering nothing. Shared by the full page render and every HTMX action
+// that re-renders just the rows (add, delete, Prev/Next).
+func (h *Handler) ipRulesRowsData(page int) (map[string]any, error) {
+	if page < 1 {
+		page = 1
+	}
+	rules, total, err := h.db.ListIPRulesPaginated(ipRulesPageSize, (page-1)*ipRulesPageSize)
+	if err != nil {
+		return nil, err
+	}
+	totalPages := max(1, (total+ipRulesPageSize-1)/ipRulesPageSize)
+	if page > totalPages {
+		page = totalPages
+		if rules, _, err = h.db.ListIPRulesPaginated(ipRulesPageSize, (page-1)*ipRulesPageSize); err != nil {
+			return nil, err
+		}
+	}
+	return map[string]any{
+		"AdminPath":  h.cfg.Admin.Path,
+		"Rules":      rules,
+		"CurPage":    page, // named to match the Logs page's pagination fields (not "Page" — h.render overwrites that key with the template name for nav highlighting)
+		"TotalPages": totalPages,
+		"Total":      total,
+	}, nil
+}
+
 func (h *Handler) IPRulesPage(c echo.Context) error {
-	rules, err := h.db.ListIPRules()
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	data, err := h.ipRulesRowsData(page)
 	if err != nil {
 		return err
 	}
-	blockCount, allowCount := 0, 0
-	for _, r := range rules {
-		if r.RuleType == "block" {
-			blockCount++
-		} else {
-			allowCount++
-		}
+
+	// Block/allow counts and percentages must reflect the whole table, not
+	// just the current page, so they're a separate query rather than derived
+	// from the paginated rows.
+	blockCount, allowCount, err := h.db.CountIPRulesByType()
+	if err != nil {
+		return err
 	}
 	blockPct, allowPct := 0, 0
-	if total := len(rules); total > 0 {
-		blockPct = blockCount * 100 / total
-		allowPct = allowCount * 100 / total
+	if grandTotal := blockCount + allowCount; grandTotal > 0 {
+		blockPct = blockCount * 100 / grandTotal
+		allowPct = allowCount * 100 / grandTotal
 	}
+
 	ab, _ := h.db.GetAutobanConfig()
-	return h.render(c, "ip_rules", map[string]any{
-		"Rules":          rules,
-		"Apps":           h.registry.List(),
-		"BlockCount":     blockCount,
-		"AllowCount":     allowCount,
-		"BlockPct":       blockPct,
-		"AllowPct":       allowPct,
-		"AutobanEnabled": ab.Enabled,
-		"AutobanThresh":  ab.Threshold,
-		"AutobanWindow":  ab.WindowMinutes,
-	})
+	data["Apps"] = h.registry.List()
+	data["BlockCount"] = blockCount
+	data["AllowCount"] = allowCount
+	data["BlockPct"] = blockPct
+	data["AllowPct"] = allowPct
+	data["AutobanEnabled"] = ab.Enabled
+	data["AutobanThresh"] = ab.Threshold
+	data["AutobanWindow"] = ab.WindowMinutes
+	return h.render(c, "ip_rules", data)
+}
+
+// IPRulesRows renders just the paginated rows partial — the Prev/Next
+// buttons hx-get this so paging never reloads the whole page.
+func (h *Handler) IPRulesRows(c echo.Context) error {
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	data, err := h.ipRulesRowsData(page)
+	if err != nil {
+		return err
+	}
+	return h.renderPartial(c, "ip_rules", "ip-rules-rows", data)
 }
 
 // SaveAutobanSettings persists the automatic-banning knobs shown on the IP
@@ -946,8 +992,13 @@ func (h *Handler) AddIPRule(c echo.Context) error {
 	if err := h.ipbl.Reload(h.db); err != nil {
 		return err
 	}
-	rules, _ := h.db.ListIPRules()
-	return h.renderPartial(c, "ip_rules", "ip-rules-rows", rules)
+	// A new rule sorts newest-first, so it always lands on page 1 — show that
+	// page regardless of where the admin's list view happened to be scrolled.
+	data, err := h.ipRulesRowsData(1)
+	if err != nil {
+		return err
+	}
+	return h.renderPartial(c, "ip_rules", "ip-rules-rows", data)
 }
 
 func (h *Handler) DeleteIPRule(c echo.Context) error {
@@ -961,8 +1012,15 @@ func (h *Handler) DeleteIPRule(c echo.Context) error {
 	if err := h.ipbl.Reload(h.db); err != nil {
 		return err
 	}
-	rules, _ := h.db.ListIPRules()
-	return h.renderPartial(c, "ip_rules", "ip-rules-rows", rules)
+	// Stay on whichever page the admin was viewing (carried as ?page= on the
+	// delete URL — see the remove-btn call in ip-rules-rows); ipRulesRowsData
+	// clamps back a page if this delete just emptied the last one.
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	data, err := h.ipRulesRowsData(page)
+	if err != nil {
+		return err
+	}
+	return h.renderPartial(c, "ip_rules", "ip-rules-rows", data)
 }
 
 // ── Geo Rules ─────────────────────────────────────────────────────────────────

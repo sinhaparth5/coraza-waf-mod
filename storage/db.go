@@ -445,6 +445,62 @@ func (db *DB) ListIPRules() ([]IPRule, error) {
 	return rules, rows.Err()
 }
 
+// ListIPRulesPaginated returns one page of rules (newest first) plus the
+// total row count, mirroring ListRequestsFiltered's "COUNT then SELECT ...
+// LIMIT ? OFFSET ?" shape — used by the IP Rules admin page so a large,
+// autoban-grown ip_rules table is never pulled into memory in one query.
+func (db *DB) ListIPRulesPaginated(limit, offset int) ([]IPRule, int, error) {
+	var total int
+	if err := db.conn.QueryRow(`SELECT COUNT(*) FROM ip_rules`).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := db.conn.Query(
+		`SELECT id, app_name, ip, rule_type, note, created_at FROM ip_rules ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+		limit, offset,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var rules []IPRule
+	for rows.Next() {
+		var r IPRule
+		if err := rows.Scan(&r.ID, &r.AppName, &r.IP, &r.RuleType, &r.Note, &r.CreatedAt); err != nil {
+			return nil, 0, err
+		}
+		rules = append(rules, r)
+	}
+	return rules, total, rows.Err()
+}
+
+// CountIPRulesByType returns the global block/allow counts across the whole
+// ip_rules table (not just the current page) — used for the IP Rules page's
+// "Rules overview" percentages, which must reflect the full table regardless
+// of which page is currently displayed.
+func (db *DB) CountIPRulesByType() (blockCount, allowCount int, err error) {
+	rows, err := db.conn.Query(`SELECT rule_type, COUNT(*) FROM ip_rules GROUP BY rule_type`)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var ruleType string
+		var n int
+		if err := rows.Scan(&ruleType, &n); err != nil {
+			return 0, 0, err
+		}
+		if ruleType == "block" {
+			blockCount = n
+		} else {
+			allowCount = n
+		}
+	}
+	return blockCount, allowCount, rows.Err()
+}
+
 // ── Autoban config ───────────────────────────────────────────────────────────
 
 // AutobanConfig controls the automatic IP banner (autoban package). Stored in
