@@ -26,6 +26,7 @@ import (
 	"coraza-waf-mod/internal/security/challenge"
 	"coraza-waf-mod/internal/security/geo"
 	"coraza-waf-mod/internal/security/ratelimit"
+	"coraza-waf-mod/internal/security/threatscore"
 	"coraza-waf-mod/internal/services"
 	"coraza-waf-mod/internal/storage"
 
@@ -112,6 +113,7 @@ type Handler struct {
 	syncThreatIntel func(id int64)
 	sendReportNow   func() error
 	reloadAutoban   func()
+	scorer          *threatscore.Scorer
 	loginLimiter    *loginLimiter
 	apiKeyLimiter   *loginLimiter
 	trustedNets     []*net.IPNet
@@ -142,7 +144,7 @@ type atAGlanceCard struct {
 // assets at "static/js/dist/*" (see assets.go in the repo root); it's
 // served under /<admin_path>/static/js/. imgsFS must contain
 // "static/imgs/*"; it's served under /<admin_path>/static/imgs/.
-func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error, reloadAutoban func()) (*Handler, error) {
+func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error, reloadAutoban func(), scorer *threatscore.Scorer) (*Handler, error) {
 	sub, err := fs.Sub(jsFS, "static/js/dist")
 	if err != nil {
 		return nil, fmt.Errorf("sub static/js/dist: %w", err)
@@ -151,7 +153,7 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 	if err != nil {
 		return nil, fmt.Errorf("sub static/imgs: %w", err)
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, reloadAutoban: reloadAutoban, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), trustedNets: parseTrustedNets(cfg.TrustedProxies)}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, reloadAutoban: reloadAutoban, scorer: scorer, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), trustedNets: parseTrustedNets(cfg.TrustedProxies)}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -1134,6 +1136,7 @@ func (h *Handler) AddGeoRule(c echo.Context) error {
 		return err
 	}
 	rules, _ := h.db.ListGeoRules()
+	h.scorer.ReloadGeoRules(rules)
 	return h.renderPartial(c, "geo_rules", "geo-rules-rows", rules)
 }
 
@@ -1149,6 +1152,7 @@ func (h *Handler) DeleteGeoRule(c echo.Context) error {
 		return err
 	}
 	rules, _ := h.db.ListGeoRules()
+	h.scorer.ReloadGeoRules(rules)
 	return h.renderPartial(c, "geo_rules", "geo-rules-rows", rules)
 }
 
