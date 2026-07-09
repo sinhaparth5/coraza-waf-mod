@@ -42,6 +42,7 @@ func TestLogsPageLiveViewHasTerminalToggle(t *testing.T) {
 		`id="log-columns"`, `id="table-format-hint"`,
 		"bg-slate-900", "text-white",
 		"overflow-auto", "whitespace-pre", // no wrap + horizontal scroll, not soft-wrapped
+		`id="ld-threat-section"`, `id="ld-threat-score"`, `id="ld-threat-breakdown"`, // unified threat score (issue #12)
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("live logs page missing %q", want)

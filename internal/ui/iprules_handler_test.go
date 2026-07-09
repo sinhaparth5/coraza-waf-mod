@@ -62,3 +62,42 @@ func TestIPRulesRowsDataClamping(t *testing.T) {
 		t.Fatalf("page 0 data CurPage = %v, want clamped to 1", data["CurPage"])
 	}
 }
+
+// TestIPRulesRowsDataIncludesThreatScores checks ipRulesRowsData bulk-fetches
+// the current page's threat scores (issue #12) in one call rather than
+// leaving the UI to look them up per row, and that an IP with no recorded
+// score is simply absent rather than reported as zero.
+func TestIPRulesRowsDataIncludesThreatScores(t *testing.T) {
+	db, err := storage.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if err := db.AddIPRule("", "10.0.0.1", "block"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddIPRule("", "10.0.0.2", "block"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertIPThreatScore(storage.IPThreatScore{IP: "10.0.0.1", Total: 42}); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &Handler{cfg: &config.Config{Admin: config.AdminConfig{Path: "/admin"}}, db: db}
+	data, err := h.ipRulesRowsData(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scores, ok := data["ThreatScores"].(map[string]int)
+	if !ok {
+		t.Fatalf("ThreatScores missing or wrong type: %v", data["ThreatScores"])
+	}
+	if scores["10.0.0.1"] != 42 {
+		t.Errorf("ThreatScores[10.0.0.1] = %d, want 42", scores["10.0.0.1"])
+	}
+	if _, present := scores["10.0.0.2"]; present {
+		t.Error("10.0.0.2 has no recorded score and must be absent, not zero")
+	}
+}

@@ -225,6 +225,50 @@ func TestDisabledConfigNeverBans(t *testing.T) {
 	}
 }
 
+// TestScoreReflectsRecentHistory checks the exported Score accessor added
+// for the threatscore package: it reflects unexpired points, decays once
+// events fall outside the window, and — the specific regression this test
+// guards against — never mutates b.hist (Score must not reuse pruneEvents,
+// which compacts its slice in place via evs[:0] and would corrupt the
+// backing array if called read-only without reassigning the result).
+func TestScoreReflectsRecentHistory(t *testing.T) {
+	db := newFakeStore()
+	db.cfg.WindowMinutes = 10
+	now := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
+	b, _ := testBanner(db, now)
+
+	// One generic WAF hit (2 pts) well inside the window, one rate-limited
+	// hit (1 pt) also inside — below the default threshold, so no ban.
+	b.Record(blockedEvent("203.0.113.20", "deny", 920100, now))
+	b.Record(blockedEvent("203.0.113.20", "rate_limited", 0, now))
+
+	if got := b.Score("203.0.113.20"); got != 3 {
+		t.Fatalf("Score = %d, want 3 (2 + 1)", got)
+	}
+
+	// Calling Score repeatedly must not mutate history — a real bug risk
+	// since pruneEvents compacts in place.
+	if got := b.Score("203.0.113.20"); got != 3 {
+		t.Fatalf("Score on second call = %d, want 3 (unchanged)", got)
+	}
+	if len(b.hist["203.0.113.20"]) != 2 {
+		t.Fatalf("hist length = %d after Score calls, want unchanged at 2", len(b.hist["203.0.113.20"]))
+	}
+
+	// An IP with no history at all scores 0, not an error/panic.
+	if got := b.Score("203.0.113.21"); got != 0 {
+		t.Fatalf("Score for unknown IP = %d, want 0", got)
+	}
+
+	// Advance the clock past the window: the same events must no longer
+	// count, without Record ever having pruned them itself.
+	b2, _ := testBanner(db, now.Add(11*time.Minute))
+	b2.hist = b.hist
+	if got := b2.Score("203.0.113.20"); got != 0 {
+		t.Fatalf("Score after window expiry = %d, want 0", got)
+	}
+}
+
 func TestCriticalRuleRanges(t *testing.T) {
 	for id, want := range map[int]bool{
 		930100: true,  // LFI

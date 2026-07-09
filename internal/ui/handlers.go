@@ -26,6 +26,7 @@ import (
 	"coraza-waf-mod/internal/security/challenge"
 	"coraza-waf-mod/internal/security/geo"
 	"coraza-waf-mod/internal/security/ratelimit"
+	"coraza-waf-mod/internal/security/threatscore"
 	"coraza-waf-mod/internal/services"
 	"coraza-waf-mod/internal/storage"
 
@@ -112,6 +113,7 @@ type Handler struct {
 	syncThreatIntel func(id int64)
 	sendReportNow   func() error
 	reloadAutoban   func()
+	scorer          *threatscore.Scorer
 	loginLimiter    *loginLimiter
 	apiKeyLimiter   *loginLimiter
 	trustedNets     []*net.IPNet
@@ -142,7 +144,7 @@ type atAGlanceCard struct {
 // assets at "static/js/dist/*" (see assets.go in the repo root); it's
 // served under /<admin_path>/static/js/. imgsFS must contain
 // "static/imgs/*"; it's served under /<admin_path>/static/imgs/.
-func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error, reloadAutoban func()) (*Handler, error) {
+func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error, reloadAutoban func(), scorer *threatscore.Scorer) (*Handler, error) {
 	sub, err := fs.Sub(jsFS, "static/js/dist")
 	if err != nil {
 		return nil, fmt.Errorf("sub static/js/dist: %w", err)
@@ -151,7 +153,7 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 	if err != nil {
 		return nil, fmt.Errorf("sub static/imgs: %w", err)
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, reloadAutoban: reloadAutoban, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), trustedNets: parseTrustedNets(cfg.TrustedProxies)}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, reloadAutoban: reloadAutoban, scorer: scorer, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), trustedNets: parseTrustedNets(cfg.TrustedProxies)}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -891,35 +893,49 @@ func (h *Handler) LogDetail(c echo.Context) error {
 		}
 	}
 
+	// Unified threat score (issue #12) — absent until the log-worker's
+	// threat-score hook has processed at least one event for this IP.
+	threat, hasThreat, err := h.db.GetIPThreatScore(d.RealIP)
+	if err != nil {
+		log.Printf("ui: log detail %d: threat score for %s: %v", d.ID, d.RealIP, err)
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
-		"id":          d.ID,
-		"request_id":  d.RequestID,
-		"timestamp":   d.Timestamp.UTC().Format(time.RFC3339),
-		"app_name":    d.AppName,
-		"real_ip":     d.RealIP,
-		"proxy_ip":    d.ProxyIP,
-		"country":     d.Country,
-		"method":      d.Method,
-		"host":        d.Host,
-		"path":        d.Path,
-		"query":       d.Query,
-		"status":      d.Status,
-		"blocked":     d.Blocked,
-		"rule_id":     d.RuleID,
-		"action":      d.Action,
-		"user_agent":  d.UserAgent,
-		"duration_ms": d.Duration,
-		"proto":       d.Proto,
-		"tls_version": d.TLSVersion,
-		"tls_cipher":  d.TLSCipher,
-		"tls_sni":     d.TLSSNI,
-		"asn":         d.ASN,
-		"org":         d.Org,
-		"ja3_hash":    d.JA3Hash,
-		"ja4":         d.JA4,
-		"visitor_id":  d.VisitorID,
-		"bot_score":   d.BotScore,
-		"headers":     headers,
+		"id":               d.ID,
+		"request_id":       d.RequestID,
+		"timestamp":        d.Timestamp.UTC().Format(time.RFC3339),
+		"app_name":         d.AppName,
+		"real_ip":          d.RealIP,
+		"proxy_ip":         d.ProxyIP,
+		"country":          d.Country,
+		"method":           d.Method,
+		"host":             d.Host,
+		"path":             d.Path,
+		"query":            d.Query,
+		"status":           d.Status,
+		"blocked":          d.Blocked,
+		"rule_id":          d.RuleID,
+		"action":           d.Action,
+		"user_agent":       d.UserAgent,
+		"duration_ms":      d.Duration,
+		"proto":            d.Proto,
+		"tls_version":      d.TLSVersion,
+		"tls_cipher":       d.TLSCipher,
+		"tls_sni":          d.TLSSNI,
+		"asn":              d.ASN,
+		"org":              d.Org,
+		"ja3_hash":         d.JA3Hash,
+		"ja4":              d.JA4,
+		"visitor_id":       d.VisitorID,
+		"bot_score":        d.BotScore,
+		"headers":          headers,
+		"has_threat_score": hasThreat,
+		"threat_score":     threat.Total,
+		"threat_autoban":   threat.AutobanScore,
+		"threat_bot":       threat.BotScore,
+		"threat_asn":       threat.ASNScore,
+		"threat_geo":       threat.GeoScore,
+		"threat_ja4":       threat.JA4Score,
 	})
 }
 
@@ -950,12 +966,25 @@ func (h *Handler) ipRulesRowsData(page int) (map[string]any, error) {
 			return nil, err
 		}
 	}
+
+	// Bulk-fetch this page's threat scores in one query rather than one
+	// lookup per row — see internal/security/threatscore.
+	ips := make([]string, len(rules))
+	for i, r := range rules {
+		ips[i] = r.IP
+	}
+	threatScores, err := h.db.GetIPThreatScores(ips)
+	if err != nil {
+		return nil, err
+	}
+
 	return map[string]any{
-		"AdminPath":  h.cfg.Admin.Path,
-		"Rules":      rules,
-		"CurPage":    page, // named to match the Logs page's pagination fields (not "Page" — h.render overwrites that key with the template name for nav highlighting)
-		"TotalPages": totalPages,
-		"Total":      total,
+		"AdminPath":    h.cfg.Admin.Path,
+		"Rules":        rules,
+		"ThreatScores": threatScores,
+		"CurPage":      page, // named to match the Logs page's pagination fields (not "Page" — h.render overwrites that key with the template name for nav highlighting)
+		"TotalPages":   totalPages,
+		"Total":        total,
 	}, nil
 }
 
@@ -1134,6 +1163,7 @@ func (h *Handler) AddGeoRule(c echo.Context) error {
 		return err
 	}
 	rules, _ := h.db.ListGeoRules()
+	h.scorer.ReloadGeoRules(rules)
 	return h.renderPartial(c, "geo_rules", "geo-rules-rows", rules)
 }
 
@@ -1149,6 +1179,7 @@ func (h *Handler) DeleteGeoRule(c echo.Context) error {
 		return err
 	}
 	rules, _ := h.db.ListGeoRules()
+	h.scorer.ReloadGeoRules(rules)
 	return h.renderPartial(c, "geo_rules", "geo-rules-rows", rules)
 }
 

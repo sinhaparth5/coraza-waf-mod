@@ -12,7 +12,7 @@ LINT_VERSION := v2.12.2
 
 .PHONY: build generate run test lint hooks clean dist checksums tag
 
-build: generate
+build: hooks generate
 	go build -ldflags "-X main.version=$(VERSION)" -o $(BINARY) .
 
 generate:
@@ -21,11 +21,11 @@ generate:
 run: build
 	./$(BINARY)
 
-test:
+test: hooks
 	go test ./...
 
 # Requires golangci-lint $(LINT_VERSION) — https://golangci-lint.run/welcome/install/
-# Config lives in .golangci.yml. Same command CI and the pre-push hook run.
+# Config lives in .golangci.yml. Same command CI and the pre-commit hook run.
 lint:
 	@command -v golangci-lint >/dev/null 2>&1 || { \
 		echo "golangci-lint not found. Install $(LINT_VERSION):"; \
@@ -34,11 +34,17 @@ lint:
 	}
 	golangci-lint run ./...
 
-# One-time setup: point git at the versioned hooks in .githooks/ instead of
-# the untracked, per-clone .git/hooks/ directory.
+# Points git at the versioned hooks in .githooks/ instead of the untracked,
+# per-clone .git/hooks/ directory — there's no way to ship that config in a
+# commit, git deliberately never version-controls .git/hooks/. A prerequisite
+# of build/test so it's enabled the first time anyone runs either, without
+# needing to know this target exists; idempotent and silent once already set,
+# so it doesn't nag on every subsequent build.
 hooks:
-	git config core.hooksPath .githooks
-	@echo "==> git hooks enabled (.githooks) — golangci-lint runs before every push"
+	@if [ "$$(git config --get core.hooksPath 2>/dev/null)" != ".githooks" ]; then \
+		git config core.hooksPath .githooks; \
+		echo "==> git hooks enabled (.githooks) — golangci-lint runs before every commit"; \
+	fi
 
 clean:
 	rm -f $(BINARY)

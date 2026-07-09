@@ -112,6 +112,25 @@ func (b *Banner) ReloadConfig() {
 	b.mu.Unlock()
 }
 
+// Score returns ip's current unexpired point total (0 if it has none),
+// without mutating history — safe to call concurrently from other
+// subsystems (e.g. the threatscore package folds this into a composite
+// per-IP score). Deliberately does not reuse pruneEvents: that helper
+// compacts its slice in place via evs[:0], which would corrupt b.hist[ip]'s
+// backing array if called here without reassigning the result back.
+func (b *Banner) Score(ip string) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	cutoff := b.now().Add(-time.Duration(b.cfg.WindowMinutes) * time.Minute)
+	score := 0
+	for _, ev := range b.hist[ip] {
+		if ev.t.After(cutoff) {
+			score += ev.pts
+		}
+	}
+	return score
+}
+
 // Record scores one logged request. It runs on the storage log worker
 // goroutine, so the fast path is in-memory only; the ban itself (DB write,
 // blocklist reload, email) happens on a spawned goroutine.

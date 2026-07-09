@@ -42,6 +42,7 @@ import (
 	ja4pkg "coraza-waf-mod/internal/security/ja4"
 	"coraza-waf-mod/internal/security/ratelimit"
 	"coraza-waf-mod/internal/security/threatintel"
+	"coraza-waf-mod/internal/security/threatscore"
 	"coraza-waf-mod/internal/security/waf"
 	"coraza-waf-mod/internal/services"
 	"coraza-waf-mod/internal/storage"
@@ -219,6 +220,18 @@ func main() {
 	defer banner.Stop()
 	db.SetAutobanFn(banner.Record)
 
+	// Unified per-IP threat score: a composite read model (issue #12)
+	// combining autoban's history, bot score, ASN/hosting classification,
+	// geo risk, and JA4 repeat-offender history. Read-only today — no
+	// enforcement is driven by it yet (see issue #16).
+	scorer := threatscore.New(db, banner.Score)
+	if rules, err := db.ListGeoRules(); err != nil {
+		log.Printf("threatscore: initial geo rules load: %v", err)
+	} else {
+		scorer.ReloadGeoRules(rules)
+	}
+	db.SetThreatScoreFn(scorer.Record)
+
 	// nginx-style access.log: opt-in flat-file log for tooling that expects
 	// one (fail2ban, log shippers, grep/awk, logrotate) — independent of the
 	// SQLite-backed admin UI logging above. Disabled unless --access-log is set.
@@ -300,7 +313,7 @@ func main() {
 		h.ReloadRateLimit(newBackend)
 	}
 
-	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs, reloadBot, buildChallenger, reloadRateLimit, reloadWAF, intelWorker.SyncSource, emailReporter.SendNow, banner.ReloadConfig)
+	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs, reloadBot, buildChallenger, reloadRateLimit, reloadWAF, intelWorker.SyncSource, emailReporter.SendNow, banner.ReloadConfig, scorer)
 	if err != nil {
 		log.Fatalf("ui init: %v", err)
 	}
