@@ -455,6 +455,8 @@ func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db 
 		if state == http.StateClosed || state == http.StateHijacked {
 			ja3pkg.Delete(conn.RemoteAddr().String())
 			ja4pkg.Delete(conn.RemoteAddr().String())
+			geo.DeleteConn(conn.RemoteAddr().String())
+			asn.DeleteConn(conn.RemoteAddr().String())
 		}
 	}
 
