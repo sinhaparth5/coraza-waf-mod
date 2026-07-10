@@ -180,8 +180,10 @@ func (h *Handler) Handle(c echo.Context) error {
 		appName = app.Name
 	}
 
-	// Enrich once per request — all lookups are in-process memory reads.
-	asnNum, org := h.asnLookup.Lookup(clientIP)
+	// Enrich once per request — all lookups are in-process memory reads,
+	// cached per-connection (see asn.LookupForConn) so a keep-alive
+	// connection only pays for the mmdb lookup once.
+	asnNum, org := h.asnLookup.LookupForConn(r.RemoteAddr, clientIP)
 	tlsVer, tlsCipher, tlsSNI := tlsInfo(r)
 
 	// Bot signal analysis + TLS fingerprints (both O(1), no I/O).
@@ -269,7 +271,7 @@ func (h *Handler) Handle(c echo.Context) error {
 	}
 
 	// Country lookup (used for logging even when not geo-blocked).
-	_, _, country := h.geoBl.Check(clientIP, appName)
+	_, _, country := h.geoBl.Check(r.RemoteAddr, clientIP, appName)
 
 	// 1. IP blocklist — fastest check, no inspection needed.
 	blockedByIP, ipReason := h.ipbl.Check(clientIP, appName)
@@ -327,7 +329,7 @@ func (h *Handler) Handle(c echo.Context) error {
 	}
 
 	// 2. Geo blocklist — country-level block.
-	blockedByGeo, geoReason, _ := h.geoBl.Check(clientIP, appName)
+	blockedByGeo, geoReason, _ := h.geoBl.Check(r.RemoteAddr, clientIP, appName)
 	if blockedByGeo {
 		metrics.GeoBlockedTotal.WithLabelValues(appName, country).Inc()
 		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, geoReason, time.Since(start), meta)
