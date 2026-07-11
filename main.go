@@ -112,15 +112,45 @@ func main() {
 	}
 	defer db.Close()
 
-	// buildWAF constructs a fresh engine reading the current disabled-rule list
-	// from the DB each time, so SIGHUP and the WAF Rules UI page both pick up
-	// the latest toggles without a restart.
-	buildWAF := func() (*waf.Engine, error) {
-		disabledIDs, _ := db.GetDisabledWAFRuleIDs()
-		return waf.New(cfg.WAF, disabledIDs)
+	// buildWAFAll constructs a fresh default engine plus one extra engine per
+	// service that has its own rule exceptions, reading the current DB state
+	// each time, so SIGHUP and the WAF Rules UI page both pick up the latest
+	// toggles without a restart. Only services with at least one row in
+	// waf_service_rule_exceptions get an extra engine — a deployment that
+	// never uses per-service exceptions pays zero extra memory for this
+	// (each engine holds the full compiled OWASP CRS ruleset, so this is
+	// deliberately lazy rather than always building one per service).
+	buildWAFAll := func() (*waf.Engine, map[string]*waf.Engine, error) {
+		globalIDs, err := db.GetDisabledWAFRuleIDs()
+		if err != nil {
+			return nil, nil, err
+		}
+		defaultEngine, err := waf.New(cfg.WAF, globalIDs)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		svcNames, err := db.ListWAFExceptionServiceNames()
+		if err != nil {
+			return nil, nil, err
+		}
+		byService := make(map[string]*waf.Engine, len(svcNames))
+		for _, name := range svcNames {
+			svcIDs, err := db.GetWAFRuleIDsForService(name)
+			if err != nil {
+				return nil, nil, err
+			}
+			merged := append(append([]int{}, globalIDs...), svcIDs...)
+			eng, err := waf.New(cfg.WAF, merged)
+			if err != nil {
+				return nil, nil, err
+			}
+			byService[name] = eng
+		}
+		return defaultEngine, byService, nil
 	}
 
-	engine, err := buildWAF()
+	engine, wafByService, err := buildWAFAll()
 	if err != nil {
 		log.Fatalf("waf init: %v", err)
 	}
@@ -289,21 +319,22 @@ func main() {
 		},
 	}))
 
-	h := proxy.NewHandler(registry, engine, db, ipbl, geoBl, rl, asnLookup, ch, scorer, adaptivePolicy, cfg.TrustedProxies...)
+	h := proxy.NewHandler(registry, engine, wafByService, db, ipbl, geoBl, rl, asnLookup, ch, scorer, adaptivePolicy, cfg.TrustedProxies...)
 	// Stops whichever rate-limit backend is active at shutdown — not
 	// necessarily rl, since ReloadRateLimit (Settings page) may have hot-
 	// swapped it any number of times since startup.
 	defer h.StopRateLimit()
 
-	// reloadWAF rebuilds the WAF engine from the current DB disabled-rule list.
-	// Called from the WAF Rules page when a rule is toggled.
+	// reloadWAF rebuilds the default engine and every per-service override
+	// engine from the current DB state. Called from the WAF Rules page when
+	// a global or per-service rule exception is toggled.
 	reloadWAF := func() {
-		newEngine, err := buildWAF()
+		newEngine, newByService, err := buildWAFAll()
 		if err != nil {
 			log.Printf("waf reload: %v", err)
 			return
 		}
-		h.ReloadWAF(newEngine)
+		h.ReloadWAF(newEngine, newByService)
 	}
 
 	// reloadBot is called from the Settings page when bot protection config changes.
@@ -362,12 +393,12 @@ func main() {
 		signal.Notify(sigCh, syscall.SIGHUP)
 		for range sigCh {
 			log.Printf("SIGHUP: reloading WAF engine...")
-			newEngine, err := buildWAF()
+			newEngine, newByService, err := buildWAFAll()
 			if err != nil {
 				log.Printf("SIGHUP: WAF reload failed, keeping existing engine: %v", err)
 				continue
 			}
-			h.ReloadWAF(newEngine)
+			h.ReloadWAF(newEngine, newByService)
 		}
 	}()
 

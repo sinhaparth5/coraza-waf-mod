@@ -357,6 +357,15 @@ func (db *DB) migrate() error {
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
 
+	CREATE TABLE IF NOT EXISTS waf_service_rule_exceptions (
+		id           INTEGER PRIMARY KEY AUTOINCREMENT,
+		service_name TEXT NOT NULL,
+		rule_id      INTEGER NOT NULL,
+		reason       TEXT NOT NULL DEFAULT '',
+		created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(service_name, rule_id)
+	);
+
 	CREATE TABLE IF NOT EXISTS threat_intel_sources (
 		id             INTEGER PRIMARY KEY AUTOINCREMENT,
 		label          TEXT NOT NULL,
@@ -2281,6 +2290,106 @@ func (db *DB) GetDisabledWAFRuleIDs() ([]int, error) {
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+// ── WAF per-service rule exceptions ─────────────────────────────────────────
+//
+// A separate table rather than a service_name column on waf_disabled_rules:
+// that table's rule_id column is UNIQUE (one row per rule ID, ever), so the
+// same rule can't also have a service-scoped row without a constraint change
+// SQLite can't do via ALTER TABLE. This mirrors the ip_threat_scores/
+// ja4_reputation precedent — a new bolt-on table instead of reshaping an
+// existing one.
+
+// WAFServiceException is one row from the waf_service_rule_exceptions table:
+// a CRS rule disabled for a single service rather than globally.
+type WAFServiceException struct {
+	ID          int64
+	ServiceName string
+	RuleID      int
+	Reason      string
+	CreatedAt   time.Time
+}
+
+// DisableWAFRuleForService adds (or updates the reason for) a rule exception
+// scoped to one service.
+func (db *DB) DisableWAFRuleForService(serviceName string, ruleID int, reason string) error {
+	_, err := db.conn.Exec(
+		`INSERT INTO waf_service_rule_exceptions (service_name, rule_id, reason)
+		 VALUES (?, ?, ?)
+		 ON CONFLICT(service_name, rule_id) DO UPDATE SET reason = excluded.reason`,
+		serviceName, ruleID, reason,
+	)
+	return err
+}
+
+// EnableWAFRuleForService removes a per-service rule exception by its row ID.
+func (db *DB) EnableWAFRuleForService(id int64) error {
+	_, err := db.conn.Exec(`DELETE FROM waf_service_rule_exceptions WHERE id = ?`, id)
+	return err
+}
+
+// ListWAFServiceExceptions returns all per-service rule exceptions, newest first.
+func (db *DB) ListWAFServiceExceptions() ([]WAFServiceException, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, service_name, rule_id, reason, created_at
+		 FROM waf_service_rule_exceptions ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var exceptions []WAFServiceException
+	for rows.Next() {
+		var e WAFServiceException
+		if err := rows.Scan(&e.ID, &e.ServiceName, &e.RuleID, &e.Reason, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		exceptions = append(exceptions, e)
+	}
+	return exceptions, rows.Err()
+}
+
+// GetWAFRuleIDsForService returns the rule IDs disabled specifically for
+// serviceName. It does not include globally-disabled rules — callers union
+// this with GetDisabledWAFRuleIDs themselves.
+func (db *DB) GetWAFRuleIDsForService(serviceName string) ([]int, error) {
+	rows, err := db.conn.Query(
+		`SELECT rule_id FROM waf_service_rule_exceptions WHERE service_name = ?`, serviceName,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// ListWAFExceptionServiceNames returns the distinct service names that have
+// at least one per-service rule exception. Used to know which services need
+// their own compiled WAF engine on top of the shared default one.
+func (db *DB) ListWAFExceptionServiceNames() ([]string, error) {
+	rows, err := db.conn.Query(`SELECT DISTINCT service_name FROM waf_service_rule_exceptions`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	return names, rows.Err()
 }
 
 // tsFormats lists the candidate layouts for parsing timestamps returned by

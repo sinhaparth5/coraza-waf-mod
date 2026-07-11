@@ -67,7 +67,7 @@ func newTestHandler(t *testing.T, backend *httptest.Server) *proxy.Handler {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	t.Cleanup(func() { rl.Stop() })
 
-	return proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, nil, nil)
+	return proxy.NewHandler(reg, engine, nil, db, ipbl, geoBl, rl, nil, nil, nil, nil)
 }
 
 func TestNormalRequestProxied(t *testing.T) {
@@ -135,6 +135,81 @@ func TestXSSBlockedByWAF(t *testing.T) {
 	}
 }
 
+// TestPerServiceWAFException confirms a rule exception scoped to one service
+// (911100, "Method is not allowed by policy" — CRS's default allowed_methods
+// excludes PATCH/PUT/DELETE) only applies to that service's requests; a
+// different service sharing the same WAF still gets blocked by the rule.
+func TestPerServiceWAFException(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	dir := t.TempDir()
+	db, err := storage.Open(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if err := db.AddService("open-svc", "", "/open", backend.URL, 0, 0); err != nil {
+		t.Fatalf("add open-svc: %v", err)
+	}
+	if err := db.AddService("restricted-svc", "", "/restricted", backend.URL, 0, 0); err != nil {
+		t.Fatalf("add restricted-svc: %v", err)
+	}
+
+	reg, err := services.New(db)
+	if err != nil {
+		t.Fatalf("registry: %v", err)
+	}
+
+	defaultEngine, err := waf.New(config.WAFConfig{Enabled: true}, nil)
+	if err != nil {
+		t.Fatalf("default waf init: %v", err)
+	}
+	openEngine, err := waf.New(config.WAFConfig{Enabled: true}, []int{911100})
+	if err != nil {
+		t.Fatalf("open-svc waf init: %v", err)
+	}
+	wafByService := map[string]*waf.Engine{"open-svc": openEngine}
+
+	ipbl, err := blocklist.NewIPBlocklist(db)
+	if err != nil {
+		t.Fatalf("ipbl: %v", err)
+	}
+	geoBl, err := geo.New("", db)
+	if err != nil {
+		t.Fatalf("geo: %v", err)
+	}
+	defer geoBl.Close()
+	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
+	defer rl.Stop()
+
+	h := proxy.NewHandler(reg, defaultEngine, wafByService, db, ipbl, geoBl, rl, nil, nil, nil, nil)
+	e := echo.New()
+
+	req := httptest.NewRequest(http.MethodPatch, "/open/posts/1", nil)
+	req.Header.Set("X-Real-IP", "1.2.3.4")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	if err := h.Handle(c); err != nil {
+		t.Fatalf("Handle returned error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("open-svc PATCH: expected 200 (911100 disabled for this service), got %d", rec.Code)
+	}
+
+	req2 := httptest.NewRequest(http.MethodPatch, "/restricted/posts/1", nil)
+	req2.Header.Set("X-Real-IP", "1.2.3.4")
+	rec2 := httptest.NewRecorder()
+	c2 := e.NewContext(req2, rec2)
+	_ = h.Handle(c2)
+	if rec2.Code != http.StatusForbidden {
+		t.Errorf("restricted-svc PATCH: expected 403 (911100 still enforced globally), got %d", rec2.Code)
+	}
+}
+
 func TestIPBlocklistBlocks(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -156,7 +231,7 @@ func TestIPBlocklistBlocks(t *testing.T) {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 
-	h2 := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, nil, nil)
+	h2 := proxy.NewHandler(reg, engine, nil, db, ipbl, geoBl, rl, nil, nil, nil, nil)
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -192,7 +267,7 @@ func TestRateLimitReturns429(t *testing.T) {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: true, RequestsPerSecond: 1, Burst: 1})
 	defer rl.Stop()
 
-	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, nil, nil)
+	h := proxy.NewHandler(reg, engine, nil, db, ipbl, geoBl, rl, nil, nil, nil, nil)
 	e := echo.New()
 
 	sendReq := func() int {
@@ -233,7 +308,7 @@ func TestCFConnectingIPUsedAsRealIP(t *testing.T) {
 	defer rl.Stop()
 
 	_ = capturedRemote
-	h2 := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, nil, nil)
+	h2 := proxy.NewHandler(reg, engine, nil, db, ipbl, geoBl, rl, nil, nil, nil, nil)
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -271,7 +346,7 @@ func TestCFConnectingIPSpoofIgnored(t *testing.T) {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 
-	h2 := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, nil, nil)
+	h2 := proxy.NewHandler(reg, engine, nil, db, ipbl, geoBl, rl, nil, nil, nil, nil)
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -310,7 +385,7 @@ func TestForwardedHeadersIgnoredFromUntrustedSource(t *testing.T) {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 
-	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, nil, nil)
+	h := proxy.NewHandler(reg, engine, nil, db, ipbl, geoBl, rl, nil, nil, nil, nil)
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -346,7 +421,7 @@ func TestForwardedHeadersUsedFromTrustedProxy(t *testing.T) {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 
-	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, nil, nil, "198.51.100.0/24")
+	h := proxy.NewHandler(reg, engine, nil, db, ipbl, geoBl, rl, nil, nil, nil, nil, "198.51.100.0/24")
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -385,7 +460,7 @@ func TestRateLimitHeadersPresent(t *testing.T) {
 	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
 	defer rl.Stop()
 
-	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, nil, nil)
+	h := proxy.NewHandler(reg, engine, nil, db, ipbl, geoBl, rl, nil, nil, nil, nil)
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -483,7 +558,7 @@ func TestAdaptiveEnforcementTightensRateLimitForHighRiskIP(t *testing.T) {
 	}
 	adaptivePolicy := adaptive.New(db)
 
-	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, scorer, adaptivePolicy)
+	h := proxy.NewHandler(reg, engine, nil, db, ipbl, geoBl, rl, nil, nil, scorer, adaptivePolicy)
 	e := echo.New()
 
 	sendReq := func(ip string) int {
@@ -556,7 +631,7 @@ func TestAdaptiveEnforcementForcesChallengeForHighRiskIP(t *testing.T) {
 	}
 	adaptivePolicy := adaptive.New(db)
 
-	h := proxy.NewHandler(reg, engine, db, ipbl, geoBl, rl, nil, nil, scorer, adaptivePolicy)
+	h := proxy.NewHandler(reg, engine, nil, db, ipbl, geoBl, rl, nil, nil, scorer, adaptivePolicy)
 	// Threshold 1000: botAnalysis's own score can never trigger a challenge
 	// on its own — only the adaptive policy can, isolating what this test
 	// actually proves.
