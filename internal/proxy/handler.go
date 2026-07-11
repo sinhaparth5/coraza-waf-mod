@@ -37,7 +37,8 @@ const serverHeader = "Coraza WAF Mod"
 
 type Handler struct {
 	wafMu        sync.RWMutex
-	waf          *waf.Engine
+	wafDefault   *waf.Engine
+	wafByService map[string]*waf.Engine // service name -> engine with extra per-service SecRuleRemoveById; only populated for services with an exception
 	challengerMu sync.RWMutex
 	challenger   *challenge.Challenger // nil = bot protection disabled
 	ratelimitMu  sync.RWMutex
@@ -55,13 +56,32 @@ type Handler struct {
 	trustedProxies []*net.IPNet
 }
 
-// ReloadWAF swaps in a freshly built WAF engine without dropping in-flight
-// requests. Called from the SIGHUP handler in main.go.
-func (h *Handler) ReloadWAF(e *waf.Engine) {
+// ReloadWAF swaps in a freshly built default engine plus any per-service
+// override engines without dropping in-flight requests. Both are swapped
+// together under one lock so a reload is atomic — requests never see a
+// default engine from one generation paired with per-service engines from
+// another. Called from the SIGHUP handler in main.go and whenever WAF rule
+// exceptions (global or per-service) change from the admin UI.
+func (h *Handler) ReloadWAF(defaultEngine *waf.Engine, byService map[string]*waf.Engine) {
 	h.wafMu.Lock()
-	h.waf = e
+	h.wafDefault = defaultEngine
+	h.wafByService = byService
 	h.wafMu.Unlock()
 	log.Printf("WAF engine reloaded")
+}
+
+// wafEngineFor returns the per-service override engine for serviceName if
+// one was built (i.e. the service has at least one per-service rule
+// exception), otherwise the shared default engine.
+func (h *Handler) wafEngineFor(serviceName string) *waf.Engine {
+	h.wafMu.RLock()
+	defer h.wafMu.RUnlock()
+	if serviceName != "" {
+		if e, ok := h.wafByService[serviceName]; ok {
+			return e
+		}
+	}
+	return h.wafDefault
 }
 
 // ReloadBotProtection swaps the JS challenge configuration at runtime without
@@ -147,9 +167,10 @@ func (h *Handler) StopRateLimit() {
 
 // NewHandler builds the proxy pipeline. Pass nil for ch to disable bot
 // protection / JS challenge (the default when bot_protection.enabled = false).
-func NewHandler(registry *services.Registry, engine *waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, rl ratelimit.Backend, asnLookup *asn.Lookup, ch *challenge.Challenger, scorer *threatscore.Scorer, adaptivePolicy *adaptive.Policy, trustedProxyCIDRs ...string) *Handler {
+func NewHandler(registry *services.Registry, engine *waf.Engine, wafByService map[string]*waf.Engine, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, rl ratelimit.Backend, asnLookup *asn.Lookup, ch *challenge.Challenger, scorer *threatscore.Scorer, adaptivePolicy *adaptive.Policy, trustedProxyCIDRs ...string) *Handler {
 	return &Handler{
-		waf:            engine,
+		wafDefault:     engine,
+		wafByService:   wafByService,
 		db:             db,
 		ipbl:           ipbl,
 		geoBl:          geoBl,
@@ -337,10 +358,10 @@ func (h *Handler) Handle(c echo.Context) error {
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied", "country": country})
 	}
 
-	// 3. WAF — deep inspection of headers + body.
-	h.wafMu.RLock()
-	engine := h.waf
-	h.wafMu.RUnlock()
+	// 3. WAF — deep inspection of headers + body. Per-service override engine
+	// (if this service has its own rule exceptions) takes precedence over
+	// the shared default.
+	engine := h.wafEngineFor(appName)
 	result, err := engine.Check(r, clientIP)
 	if err != nil {
 		log.Printf("waf error: %v", err)

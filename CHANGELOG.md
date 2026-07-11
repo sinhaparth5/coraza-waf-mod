@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.8] - 2026-07-11
+
+### Added
+- **WAF Rules**: rule exceptions can now be scoped to a single service
+  instead of always applying globally. The disable form on the WAF Rules
+  page gets a Scope selector (Global vs a specific service); scoped
+  exceptions live in a new `waf_service_rule_exceptions` table and get their
+  own compiled engine layered on top of the shared default one — built
+  lazily, so services that never use this pay no extra memory for it. Fixes
+  the common case of CRS rule 911100 ("Method is not allowed by policy" —
+  CRS's default `allowed_methods` excludes PUT/PATCH/DELETE) blocking
+  legitimate REST/CRUD APIs: an admin can now disable 911100 for just the
+  one affected backend instead of losing HTTP method enforcement everywhere.
+- **Performance**: geo country lookups (`geo.Blocker.Check`) and ASN/org
+  lookups (`asn.Lookup.LookupForConn`) are now cached per TCP/TLS connection
+  instead of re-queried on every request, mirroring the existing JA3/JA4
+  per-connection cache. A keep-alive connection making many requests now
+  pays for one mmdb lookup instead of one per request. Each cached entry
+  also records the client IP it was computed for and is discarded on a
+  mismatch, since a reverse proxy that multiplexes several real clients over
+  one pooled connection to this origin (Cloudflare's connection pool
+  behaves this way) would otherwise leak one client's country/ASN onto
+  another's request sharing the same connection. Entries are cleared by the
+  same TLS `ConnState` hook as JA3/JA4 on connection close, plus a
+  background janitor (10-minute TTL) so plain-HTTP-only deployments — which
+  have no `ConnState` hook at all — don't grow the cache unbounded.
+
 ## [1.4.7] - 2026-07-09
 
 ### Added

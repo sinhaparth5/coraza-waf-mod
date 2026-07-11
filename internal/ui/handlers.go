@@ -293,6 +293,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.GET("/waf-rules", h.WAFRulesPage)
 	g.POST("/waf-rules/disable", h.DisableWAFRule)
 	g.DELETE("/waf-rules/:id", h.EnableWAFRule)
+	g.DELETE("/waf-rules/service/:id", h.EnableWAFRuleForService)
 	g.GET("/threat-intel", h.ThreatIntelPage)
 	g.POST("/threat-intel", h.AddThreatIntelSource)
 	g.DELETE("/threat-intel/:id", h.DeleteThreatIntelSource)
@@ -1232,39 +1233,62 @@ func (h *Handler) DeleteGeoRule(c echo.Context) error {
 
 // ── WAF Rules ─────────────────────────────────────────────────────────────────
 
-func (h *Handler) WAFRulesPage(c echo.Context) error {
+// wafRulesContentData gathers everything the waf_rules page (and its
+// waf-content partial) render: global disabled rules, per-service
+// exceptions, the top-firing rules table, and the service list for the
+// scope dropdown on the disable form.
+func (h *Handler) wafRulesContentData() (map[string]any, error) {
 	disabled, err := h.db.ListDisabledWAFRules()
 	if err != nil {
-		return err
+		return nil, err
+	}
+	serviceExceptions, err := h.db.ListWAFServiceExceptions()
+	if err != nil {
+		return nil, err
 	}
 	topRules, err := h.db.GetTopFiringRules(20)
 	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"Disabled":          disabled,
+		"ServiceExceptions": serviceExceptions,
+		"TopRules":          topRules,
+		"Services":          h.registry.List(),
+	}, nil
+}
+
+func (h *Handler) WAFRulesPage(c echo.Context) error {
+	data, err := h.wafRulesContentData()
+	if err != nil {
 		return err
 	}
-	return h.render(c, "waf_rules", map[string]any{
-		"Disabled": disabled,
-		"TopRules": topRules,
-	})
+	return h.render(c, "waf_rules", data)
 }
 
 func (h *Handler) DisableWAFRule(c echo.Context) error {
 	ruleIDStr := strings.TrimSpace(c.FormValue("rule_id"))
 	reason := strings.TrimSpace(c.FormValue("reason"))
+	service := strings.TrimSpace(c.FormValue("service"))
 
 	ruleID, err := strconv.Atoi(ruleIDStr)
 	if err != nil || ruleID <= 0 {
 		return c.String(http.StatusBadRequest, "invalid rule ID")
 	}
-	if err := h.db.DisableWAFRule(ruleID, reason); err != nil {
+	if service == "" {
+		err = h.db.DisableWAFRule(ruleID, reason)
+	} else {
+		err = h.db.DisableWAFRuleForService(service, ruleID, reason)
+	}
+	if err != nil {
 		return err
 	}
 	h.reloadWAF()
-	disabled, _ := h.db.ListDisabledWAFRules()
-	topRules, _ := h.db.GetTopFiringRules(20)
-	return h.renderPartial(c, "waf_rules", "waf-content", map[string]any{
-		"Disabled": disabled,
-		"TopRules": topRules,
-	})
+	data, err := h.wafRulesContentData()
+	if err != nil {
+		return err
+	}
+	return h.renderPartial(c, "waf_rules", "waf-content", data)
 }
 
 func (h *Handler) EnableWAFRule(c echo.Context) error {
@@ -1276,12 +1300,27 @@ func (h *Handler) EnableWAFRule(c echo.Context) error {
 		return err
 	}
 	h.reloadWAF()
-	disabled, _ := h.db.ListDisabledWAFRules()
-	topRules, _ := h.db.GetTopFiringRules(20)
-	return h.renderPartial(c, "waf_rules", "waf-content", map[string]any{
-		"Disabled": disabled,
-		"TopRules": topRules,
-	})
+	data, err := h.wafRulesContentData()
+	if err != nil {
+		return err
+	}
+	return h.renderPartial(c, "waf_rules", "waf-content", data)
+}
+
+func (h *Handler) EnableWAFRuleForService(c echo.Context) error {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		return c.String(http.StatusBadRequest, "invalid id")
+	}
+	if err := h.db.EnableWAFRuleForService(id); err != nil {
+		return err
+	}
+	h.reloadWAF()
+	data, err := h.wafRulesContentData()
+	if err != nil {
+		return err
+	}
+	return h.renderPartial(c, "waf_rules", "waf-content", data)
 }
 
 // ── Threat Intel ─────────────────────────────────────────────────────────────
