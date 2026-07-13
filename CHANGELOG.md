@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.4.10] - 2026-07-13
 
+### Changed
+- **Admin UI**: cleaned up the wording across the dashboard (`internal/ui`)
+  — status messages, error messages, form hints, and page titles now read as
+  plain sentences (e.g. "Settings saved and applied. No restart needed.",
+  "Copy this key now. It won't be shown again."), and page titles use the
+  `·` separator the UI already uses elsewhere. Code comments in the package
+  got the same pass. No behavior change; persisted values like the
+  `"Auto-banned — "` / `"Banned via API — "` note prefixes and the `—`
+  empty-cell placeholders are untouched.
+
 ### Fixed
 - **Bot protection / IP blocking**: a banned IP (or a geo-blocked country)
   could keep getting redirected to the JS challenge instead of receiving
