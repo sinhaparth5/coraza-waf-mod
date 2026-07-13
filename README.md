@@ -13,13 +13,9 @@
 
 A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraza](https://github.com/corazawaf/coraza) and the OWASP Core Rule Set, with a built-in admin dashboard. It uses one binary, one SQLite file, CLI flags for bootstrap settings, and dashboard-managed runtime settings. There is no config file, external database, or Node toolchain. Docker is available for local development but is not required.
 
-```
-[Client] → [Coraza WAF + Proxy] → [Backend App(s)]
-                  ↕
-            [SQLite DB]
-                  ↕
-           [Admin Dashboard]
-```
+<div align="center">
+  <img src="static/waf-flow-diagram.png" alt="Request flow: Client to Coraza WAF + Proxy to Backend App(s), with SQLite and the Admin Dashboard attached" width="760">
+</div>
 
 ## Features
 

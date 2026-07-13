@@ -5,23 +5,23 @@
       <stop offset="0%" stop-color="#2B5C74"/>
       <stop offset="100%" stop-color="#122732"/>
     </linearGradient>
-    <linearGradient id="shieldGrad" x1="60" y1="24" x2="60" y2="119" gradientUnits="userSpaceOnUse">
+    <linearGradient id="shieldGrad" x1="70" y1="24" x2="70" y2="119" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#9FE0B7"/>
       <stop offset="100%" stop-color="#2A9D8F"/>
     </linearGradient>
-    <linearGradient id="shieldHighlight" x1="60" y1="24" x2="60" y2="70" gradientUnits="userSpaceOnUse">
+    <linearGradient id="shieldHighlight" x1="70" y1="24" x2="70" y2="70" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#ffffff" stop-opacity="0.16"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
-    <linearGradient id="bar1" x1="34" y1="0" x2="86" y2="0" gradientUnits="userSpaceOnUse">
+    <linearGradient id="bar1" x1="44" y1="0" x2="96" y2="0" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#EAF7EE"/>
       <stop offset="100%" stop-color="#9FE0B7"/>
     </linearGradient>
-    <linearGradient id="bar2" x1="40" y1="0" x2="80" y2="0" gradientUnits="userSpaceOnUse">
+    <linearGradient id="bar2" x1="50" y1="0" x2="90" y2="0" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#9FE0B7"/>
       <stop offset="100%" stop-color="#76C893"/>
     </linearGradient>
-    <linearGradient id="bar3" x1="46" y1="0" x2="74" y2="0" gradientUnits="userSpaceOnUse">
+    <linearGradient id="bar3" x1="56" y1="0" x2="84" y2="0" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#76C893"/>
       <stop offset="100%" stop-color="#2A9D8F"/>
     </linearGradient>
@@ -45,16 +45,16 @@
     <rect x="11.5" y="11.5" width="117" height="117" rx="25.7" stroke="#3E6E85" stroke-width="1" opacity="0.5"/>
 
     <!-- Shield drop shadow -->
-    <path d="M60 26L26 40V66C26 92 40 109 60 118C80 109 94 92 94 66V40L60 26Z" fill="#000000" opacity="0.22"/>
+    <path d="M70 26L36 40V66C36 92 50 109 70 118C90 109 104 92 104 66V40L70 26Z" fill="#000000" opacity="0.22"/>
     <!-- Shield body -->
-    <path d="M60 24L24 38V64C24 90 39 108 60 117C81 108 96 90 96 64V38L60 24Z" fill="url(#shieldGrad)"/>
-    <path d="M60 24L24 38V64C24 90 39 108 60 117C81 108 96 90 96 64V38L60 24Z" fill="url(#shieldHighlight)"/>
-    <path d="M60 24L24 38V64C24 90 39 108 60 117C81 108 96 90 96 64V38L60 24Z" stroke="#DFF6E8" stroke-width="0.75" opacity="0.5"/>
+    <path d="M70 24L34 38V64C34 90 49 108 70 117C91 108 106 90 106 64V38L70 24Z" fill="url(#shieldGrad)"/>
+    <path d="M70 24L34 38V64C34 90 49 108 70 117C91 108 106 90 106 64V38L70 24Z" fill="url(#shieldHighlight)"/>
+    <path d="M70 24L34 38V64C34 90 49 108 70 117C91 108 106 90 106 64V38L70 24Z" stroke="#DFF6E8" stroke-width="0.75" opacity="0.5"/>
 
     <!-- Filtered-traffic bars -->
-    <rect x="34" y="52" width="52" height="9" rx="4.5" fill="url(#bar1)"/>
-    <rect x="40" y="67" width="40" height="9" rx="4.5" fill="url(#bar2)"/>
-    <rect x="46" y="82" width="28" height="9" rx="4.5" fill="url(#bar3)"/>
+    <rect x="44" y="52" width="52" height="9" rx="4.5" fill="url(#bar1)"/>
+    <rect x="50" y="67" width="40" height="9" rx="4.5" fill="url(#bar2)"/>
+    <rect x="56" y="82" width="28" height="9" rx="4.5" fill="url(#bar3)"/>
   </g>
 
   <!-- Wordmark -->
