@@ -1,6 +1,17 @@
-# Coraza WAF Mod
+<div align="center">
+  <img src="static/imgs/readme-logo.svg" alt="Coraza WAF Mod" width="480">
 
-A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraza](https://github.com/corazawaf/coraza) (OWASP CRS) with a built-in admin dashboard. No config file, no external database, no Node toolchain — one binary, one SQLite file, CLI flags for bootstrap settings, everything else from the dashboard. Docker is available for local development but isn't required.
+  <br><br>
+
+  [![Release](https://img.shields.io/github/v/release/sinhaparth5/coraza-waf-mod?label=release&color=2A9D8F)](https://github.com/sinhaparth5/coraza-waf-mod/releases/latest)
+  [![CI](https://img.shields.io/github/actions/workflow/status/sinhaparth5/coraza-waf-mod/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white&color=2A9D8F)](https://github.com/sinhaparth5/coraza-waf-mod/actions/workflows/ci.yml)
+  [![CodeQL](https://img.shields.io/github/actions/workflow/status/sinhaparth5/coraza-waf-mod/codeql.yml?branch=main&label=CodeQL&logo=github&logoColor=white&color=2A9D8F)](https://github.com/sinhaparth5/coraza-waf-mod/actions/workflows/codeql.yml)
+  [![Go Version](https://img.shields.io/github/go-mod/go-version/sinhaparth5/coraza-waf-mod?label=go&logo=go&logoColor=white&color=00ADD8)](go.mod)
+  [![License](https://img.shields.io/github/license/sinhaparth5/coraza-waf-mod?label=license&color=76C893)](LICENSE)
+  [![Go Report Card](https://goreportcard.com/badge/github.com/sinhaparth5/coraza-waf-mod)](https://goreportcard.com/report/github.com/sinhaparth5/coraza-waf-mod)
+</div>
+
+A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraza](https://github.com/corazawaf/coraza) and the OWASP Core Rule Set, with a built-in admin dashboard. It uses one binary, one SQLite file, CLI flags for bootstrap settings, and dashboard-managed runtime settings. There is no config file, external database, or Node toolchain. Docker is available for local development but is not required.
 
 ```
 [Client] → [Coraza WAF + Proxy] → [Backend App(s)]
@@ -12,23 +23,23 @@ A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraz
 
 ## Features
 
-- **WAF protection** — Coraza v3 with the OWASP Core Rule Set embedded in the binary. Blocks SQLi, XSS, RCE, path traversal, restricted file access, and known scanner user agents out of the box. Custom `.conf` rules can be loaded on top of CRS.
-- **Reverse proxy / multi-app routing** — route by Host header (virtual hosting) or by path prefix (with automatic prefix stripping, like nginx `location`), to as many backend apps as you need.
-- **IP & country blocking** — manual IP allow/block rules plus GeoIP2-based country blocking (MaxMind GeoLite2), with Cloudflare-aware real-IP extraction and opt-in trusted proxy CIDRs for `X-Forwarded-For` / `X-Real-IP`.
-- **TLS** — plain HTTP, automatic Let's Encrypt certificates, or your own cert/key — globally and/or per individual service (upload a cert or enable auto-issue per backend from the dashboard).
-- **Admin dashboard** — HTMX/Tailwind UI for live traffic & threat charts, filterable request logs with live tail, IP/geo rule management, and service (backend app) management — all changes apply immediately, no restart required.
-- **Prometheus metrics** — `/admin/metrics` exposes request volume, latency, and per-cause block counters (IP/geo/WAF) alongside Go runtime metrics. It sits behind the same session-cookie admin auth as the rest of the dashboard (not HTTP Basic Auth), so a scrape job needs a way to carry a logged-in session cookie rather than a plain username/password.
-- **Everything in SQLite** — request logs, IP/geo rules, services, and TLS state all live in one `waf.db` file. No Postgres/Redis/MySQL to stand up.
+- **WAF protection:** Coraza v3 with the OWASP Core Rule Set embedded in the binary. It blocks SQLi, XSS, RCE, path traversal, restricted file access, and known scanner user agents out of the box. Custom `.conf` rules can be loaded on top of CRS.
+- **Reverse proxy / multi-app routing:** route by Host header (virtual hosting) or by path prefix, with automatic prefix stripping like nginx `location`, to as many backend apps as you need.
+- **IP & country blocking:** manual IP allow/block rules plus GeoIP2-based country blocking (MaxMind GeoLite2), with Cloudflare-aware real-IP extraction and opt-in trusted proxy CIDRs for `X-Forwarded-For` / `X-Real-IP`.
+- **TLS:** plain HTTP, automatic Let's Encrypt certificates, or your own cert/key, globally or per service. Upload a cert or enable auto-issue for a backend from the dashboard.
+- **Admin dashboard:** HTMX/Tailwind UI for live traffic and threat charts, filterable request logs with live tail, IP/geo rule management, and service management. Changes apply immediately, with no restart.
+- **Prometheus metrics:** `/admin/metrics` exposes request volume, latency, and per-cause block counters (IP/geo/WAF) alongside Go runtime metrics. It sits behind the same session-cookie admin auth as the rest of the dashboard, not HTTP Basic Auth, so a scrape job needs a logged-in session cookie rather than a username/password pair.
+- **SQLite storage:** request logs, IP/geo rules, services, and TLS state all live in one `waf.db` file. No Postgres, Redis, or MySQL to run.
 
 ## Installing
 
-### Option A — native binary (recommended)
+### Option A: native binary
 
 ```bash
 curl -fsSL https://waf-install.astrareconslabs.com/coraza-waf-mod/install.sh | sudo bash
 ```
 
-This downloads the release binary for your architecture (amd64/arm64), verifies its SHA256 checksum, creates a dedicated non-root system user (`coraza-waf-mod`, granted only `CAP_NET_BIND_SERVICE` so it can bind ports 80/443 without running as root), interactively prompts for an admin email and password (or generates one) and seeds it into the database via `coraza-waf-mod setup`, installs a systemd unit that starts the binary with CLI flags, and starts the service.
+This downloads the release binary for your architecture (amd64/arm64), verifies its SHA256 checksum, creates a dedicated non-root system user, installs a systemd unit, and starts the service. The user is named `coraza-waf-mod` and is granted only `CAP_NET_BIND_SERVICE`, so it can bind ports 80/443 without running as root. The installer prompts for an admin email and password, or generates credentials, then seeds them into the database with `coraza-waf-mod setup`.
 
 Check it's running:
 
@@ -37,7 +48,7 @@ sudo systemctl status coraza-waf-mod
 sudo journalctl -u coraza-waf-mod -f
 ```
 
-There is no config file to edit — everything the installer set up is either a flag baked into the systemd unit (`sudo systemctl cat coraza-waf-mod` to see it) or a setting stored in the database and managed from the dashboard. Data, certs, and `waf.db` live under `/var/lib/coraza-waf-mod/`.
+There is no config file to edit. Installer settings are either flags in the systemd unit (`sudo systemctl cat coraza-waf-mod`) or database values managed from the dashboard. Data, certs, and `waf.db` live under `/var/lib/coraza-waf-mod/`.
 
 #### Upgrading
 
@@ -47,9 +58,9 @@ Re-run the same command:
 curl -fsSL https://waf-install.astrareconslabs.com/coraza-waf-mod/install.sh | sudo bash
 ```
 
-The installer detects the existing binary at `/usr/local/bin/coraza-waf-mod` and switches to upgrade mode: it downloads and verifies the latest release, replaces the binary, rewrites the systemd units, and restarts the service — skipping the interactive prompts entirely. Admin credentials and TLS certificates are never touched on upgrade. Pin a specific version instead of always taking latest with `curl -fsSL ... | sudo CORAZA_VERSION=v1.2.3 bash`.
+The installer detects the existing binary at `/usr/local/bin/coraza-waf-mod` and switches to upgrade mode. It downloads and verifies the latest release, replaces the binary, rewrites the systemd units, and restarts the service. It skips the interactive prompts. Admin credentials and TLS certificates are never touched on upgrade. Pin a specific version with `curl -fsSL ... | sudo CORAZA_VERSION=v1.2.3 bash`.
 
-### Option B — build from source
+### Option B: build from source
 
 Requires Go 1.25+.
 
@@ -64,32 +75,32 @@ echo "your-password" | ./coraza-waf-mod setup --admin-email you@example.com
 ./coraza-waf-mod   # defaults: --listen :8080 --db waf.db --certs ./certs
 ```
 
-`make run` builds and runs in one step (run `setup` first, at least once, so you can log in). Pure Go all the way through (the SQLite driver is `modernc.org/sqlite`, no CGO), so this builds cleanly with nothing but a Go toolchain. See `./coraza-waf-mod --help`-equivalent flags in `main.go`, or the flag table in `CLAUDE.md`, for every bootstrap option (`--listen-tls`, `--waf-rules`, `--geo-db`, `--retention`, `--tls-cert`/`--tls-key`, `--trusted-proxies`).
+`make run` builds and runs in one step. Run `setup` first, at least once, so you can log in. The project uses Go only; the SQLite driver is `modernc.org/sqlite`, with no CGO. See the flags in `main.go`, or the flag table in `CLAUDE.md`, for every bootstrap option (`--listen-tls`, `--waf-rules`, `--geo-db`, `--retention`, `--tls-cert`/`--tls-key`, `--trusted-proxies`).
 
-### Option C — cross-compiled release binaries
+### Option C: cross-compiled release binaries
 
 ```bash
 make dist        # cross-compiles Linux amd64/arm64 and Windows amd64 binaries, CGO_ENABLED=0
 make checksums   # writes dist/checksums.txt
 ```
 
-### Option D — Docker (local development)
+### Option D: Docker for local development
 
 ```bash
 docker compose run --rm waf setup --db /data/waf.db --admin-email you@example.com
 docker compose up --build
 ```
 
-`Dockerfile` (multi-stage, `scratch` final image) and `docker-compose.yml` are for local container development only — not the recommended production path (see Option A).
+`Dockerfile` (multi-stage, `scratch` final image) and `docker-compose.yml` are for local container development only. Use Option A for systemd-based installs.
 
 ## Usage
 
-1. Start the server (see Installing above) — there is no config file, only CLI flags for bootstrap settings.
+1. Start the server. There is no config file, only CLI flags for bootstrap settings.
 2. Before first login, seed an admin account with `coraza-waf-mod setup --admin-email you@example.com` (password read from stdin). `install.sh` does this for you interactively.
 3. Open the admin dashboard at `http://<host>:<port>/admin` (the path is currently fixed at `/admin`) and log in with that email and password.
-4. Add backend apps from **Services**: give it a name, a match rule (Host or path Prefix), and a backend URL. The wizard checks the backend is reachable before saving. Services live entirely in the database — there's no config-file seeding step.
-5. Manage IP rules, country blocking, and request logs from their respective dashboard pages — everything takes effect immediately.
-6. Optionally enable TLS per service from the **Manage** button on its row (upload a cert, or turn on auto-issue — set an ACME contact email from the Settings page, or pass `--domain`/`--acme-email` to `coraza-waf-mod setup`).
+4. Add backend apps from **Services**: give each service a name, a match rule (Host or path Prefix), and a backend URL. The wizard checks that the backend is reachable before saving. Services live in the database, with no config-file seeding step.
+5. Manage IP rules, country blocking, and request logs from their dashboard pages. Changes take effect immediately.
+6. Optionally enable TLS per service from the **Manage** button on its row. Upload a cert, or turn on auto-issue after setting an ACME contact email from the Settings page or passing `--domain`/`--acme-email` to `coraza-waf-mod setup`.
 
 ### GeoIP setup (optional)
 
