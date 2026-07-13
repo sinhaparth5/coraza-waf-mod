@@ -19,8 +19,8 @@ import (
 )
 
 // apiKeyTouchThrottle bounds how often a successful auth writes last_used_at
-// back to SQLite — a scripted client hitting the API repeatedly shouldn't
-// turn into a write-per-request on the single SQLite writer.
+// back to SQLite, so a scripted client hammering the API doesn't turn into
+// a write per request on the single SQLite writer.
 const apiKeyTouchThrottle = time.Minute
 
 // newAPIKey generates a bearer token of the form "cwaf_<40 hex chars>"
@@ -32,7 +32,7 @@ func newAPIKey() (raw, prefix, hash string, err error) {
 		return "", "", "", err
 	}
 	raw = "cwaf_" + hex.EncodeToString(b)
-	prefix = raw[:13] // "cwaf_" + 8 hex chars — enough to tell keys apart, not enough to guess
+	prefix = raw[:13] // "cwaf_" + 8 hex chars: enough to tell keys apart, not enough to guess
 	sum := sha256.Sum256([]byte(raw))
 	hash = hex.EncodeToString(sum[:])
 	return raw, prefix, hash, nil
@@ -40,9 +40,8 @@ func newAPIKey() (raw, prefix, hash string, err error) {
 
 // apiKeyAuth authenticates /api/v1/* requests via "Authorization: Bearer
 // <key>" instead of the session cookie. It never redirects (there's no login
-// page for an API client to be sent to) and is not behind csrfProtect — a
-// bearer token carried in a header, not a cookie, isn't subject to the
-// cross-site request forgery that middleware exists to stop.
+// page for an API client to be sent to) and skips csrfProtect: a bearer
+// token lives in a header, not a cookie, so CSRF doesn't apply to it.
 func (h *Handler) apiKeyAuth(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		ip := h.clientIP(c.Request())
@@ -91,7 +90,7 @@ func (h *Handler) apiKeyAuth(next echo.HandlerFunc) echo.HandlerFunc {
 
 // RegisterAPI mounts the bearer-token-authenticated REST API at
 // {admin.path}/api/v1/*, as a sibling to (not nested inside) the
-// session-cookie-authenticated group Register builds — see apiKeyAuth for
+// session-cookie-authenticated group Register builds; see apiKeyAuth for
 // why it skips sessionAuth/csrfProtect. hostGuard runs first, same as the
 // admin UI group, so this API is likewise unreachable on a service's own
 // domain (see hostGuard in handlers.go).
@@ -163,7 +162,7 @@ func (h *Handler) APICreateService(c echo.Context) error {
 		return apiError(c, http.StatusBadRequest, err.Error())
 	}
 	if err := services.Probe(req.Backend); err != nil {
-		return apiError(c, http.StatusBadRequest, err.Error()+" — fix the backend or try again before adding.")
+		return apiError(c, http.StatusBadRequest, err.Error()+". Fix the backend and try again.")
 	}
 	if req.RPS < 0 {
 		req.RPS = 0
@@ -295,7 +294,7 @@ func (h *Handler) APIDeleteService(c echo.Context) error {
 // ── IP rules ─────────────────────────────────────────────────────────────────
 
 // normalizeIPOrCIDR accepts a plain IP or CIDR range and returns its
-// canonical string form — the same normalization AddIPRule (ui/handlers.go)
+// canonical string form, the same normalization AddIPRule (ui/handlers.go)
 // applies, kept here so both the HTMX and REST paths agree on stored form.
 func normalizeIPOrCIDR(ip string) (string, error) {
 	if _, network, err := net.ParseCIDR(ip); err == nil {
@@ -334,7 +333,7 @@ func (h *Handler) APICreateIPRule(c echo.Context) error {
 	}
 	ip, err := normalizeIPOrCIDR(strings.TrimSpace(req.IP))
 	if err != nil {
-		return apiError(c, http.StatusBadRequest, "invalid IP or CIDR — send 1.2.3.4, ::1, or 10.0.0.0/8")
+		return apiError(c, http.StatusBadRequest, "invalid IP or CIDR (e.g. 1.2.3.4, ::1, or 10.0.0.0/8)")
 	}
 	if err := h.db.AddIPRule(req.AppName, ip, req.RuleType); err != nil {
 		return apiError(c, http.StatusInternalServerError, err.Error())
@@ -366,9 +365,9 @@ func (h *Handler) APIDeleteIPRule(c echo.Context) error {
 // These endpoints are a filtered, purpose-named view over the same CRUD as
 // the IP-rules endpoints above, not a distinct subsystem.
 
-// apiBanNotePrefix distinguishes API-initiated bans from autoban's own
-// "Auto-banned — " prefix (autoban/autoban.go) so the two sources stay
-// distinguishable in the existing IP Rules page's "Auto" badge logic.
+// apiBanNotePrefix marks API-initiated bans. Autoban writes its own
+// "Auto-banned — " prefix (autoban/autoban.go), so the IP Rules page's
+// "Auto" badge logic can still tell the two sources apart.
 const apiBanNotePrefix = "Banned via API — "
 
 func (h *Handler) APIListBans(c echo.Context) error {
@@ -397,7 +396,7 @@ func (h *Handler) APICreateBan(c echo.Context) error {
 	}
 	ip, err := normalizeIPOrCIDR(strings.TrimSpace(req.IP))
 	if err != nil {
-		return apiError(c, http.StatusBadRequest, "invalid IP or CIDR — send 1.2.3.4, ::1, or 10.0.0.0/8")
+		return apiError(c, http.StatusBadRequest, "invalid IP or CIDR (e.g. 1.2.3.4, ::1, or 10.0.0.0/8)")
 	}
 	reason := strings.TrimSpace(req.Reason)
 	if reason == "" {
@@ -412,7 +411,7 @@ func (h *Handler) APICreateBan(c echo.Context) error {
 	return c.JSON(http.StatusCreated, map[string]string{"ip": ip, "note": apiBanNotePrefix + reason})
 }
 
-// APIDeleteBan unbans by ip_rules row id — identical to deleting any other
+// APIDeleteBan unbans by ip_rules row id. It's identical to deleting any other
 // IP rule (auto-banned or manual), since that's literally what unban is
 // today on the IP Rules page.
 func (h *Handler) APIDeleteBan(c echo.Context) error {

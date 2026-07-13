@@ -76,8 +76,8 @@ func TestIPRulesTemplateRendersAutobanAndNotes(t *testing.T) {
 		t.Errorf("Auto badge count = %d, want 1", got)
 	}
 	// The card-header badge must show the true total row count, not just how
-	// many rows are on the current page (they're equal here, single page —
-	// TestIPRulesRowsPagination below checks the case where they diverge).
+	// many rows are on the current page. They're equal here, single page;
+	// TestIPRulesRowsPagination below checks the case where they diverge.
 	if !strings.Contains(page, "2 rules") {
 		t.Error(`card-header badge missing "2 rules" (must use .Total, not len(.Rules))`)
 	}
@@ -98,7 +98,7 @@ func TestIPRulesTemplateRendersAutobanAndNotes(t *testing.T) {
 // TestIPRulesRowsPagination renders the ip-rules-rows partial directly (the
 // same one AddIPRule/DeleteIPRule/IPRulesRows re-render) across a few page
 // positions and checks the Prev/Next controls, the revoke URL's ?page=
-// carry-through, and the total-count text — the parts a "CurPage" vs "Page"
+// carry-through, and the total-count text: the parts a "CurPage" vs "Page"
 // key mixup (h.render overwrites "Page" with the template name) would break.
 func TestIPRulesRowsPagination(t *testing.T) {
 	h := &Handler{}

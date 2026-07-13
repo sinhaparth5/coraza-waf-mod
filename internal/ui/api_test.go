@@ -18,8 +18,8 @@ import (
 )
 
 // newTestAPIHandler builds a Handler backed by a real (temp-file) SQLite DB,
-// services.Registry, and blocklist.IPBlocklist — the same trio api.go's
-// handlers touch — and registers the /api/v1 group on a real Echo instance,
+// services.Registry, and blocklist.IPBlocklist (the same trio api.go's
+// handlers touch) and registers the /api/v1 group on a real Echo instance,
 // so requests exercise the full auth-middleware-to-DB path via httptest
 // rather than a server process (see CLAUDE.md: don't start the server to verify).
 func newTestAPIHandler(t *testing.T) (*Handler, *echo.Echo) {
@@ -185,7 +185,7 @@ func TestAPIServiceCRUD(t *testing.T) {
 	}
 
 	// Partial update: only "name" is sent. Backend/rate-limit/bot-mode must
-	// survive untouched — this is the pointer-fields-mean-omitted contract.
+	// survive untouched; this is the pointer-fields-mean-omitted contract.
 	rec = apiRequest(e, http.MethodPut, fmt.Sprintf("/admin/api/v1/services/%d", created.ID), key, map[string]any{
 		"name": "svc1-renamed",
 	})

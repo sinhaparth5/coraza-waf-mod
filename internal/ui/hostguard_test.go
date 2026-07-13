@@ -17,12 +17,11 @@ import (
 // TestHostGuardBlocksAdminOnServiceDomain reproduces a reported bug: with a
 // service configured for "example-api.com", requesting
 // "example-api.com/admin/login" opened the WAF's own admin login page,
-// because Echo's router matches routes purely by path with no notion of
-// Host — the admin group had no way to tell it wasn't being reached via the
-// server's own management address. hostGuard must hand any request whose
-// Host matches a configured service straight to the reverse-proxy pipeline
-// instead, and must leave the admin UI reachable on any Host nothing
-// claims (e.g. the server's bare listen IP).
+// because Echo routes purely by path and the admin group had no way to tell
+// it wasn't being reached via the server's own management address.
+// hostGuard must hand any request whose Host matches a configured service
+// straight to the reverse-proxy pipeline instead, and must leave the admin
+// UI reachable on any Host nothing claims (e.g. the server's bare listen IP).
 func TestHostGuardBlocksAdminOnServiceDomain(t *testing.T) {
 	db, err := storage.Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -70,7 +69,7 @@ func TestHostGuardBlocksAdminOnServiceDomain(t *testing.T) {
 		t.Fatalf("proxyHandle called %d time(s) for host %q, want exactly once for example-api.com", proxyCalls, proxiedHost)
 	}
 
-	// The fix must not break the admin UI on a Host nothing claims — e.g.
+	// The fix must not break the admin UI on a Host nothing claims, e.g.
 	// this server's bare listen IP.
 	req = httptest.NewRequest(http.MethodGet, "/admin/login", nil)
 	req.Host = "192.168.1.1"

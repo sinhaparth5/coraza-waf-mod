@@ -53,7 +53,7 @@ func TestCSRFTokenDerivation(t *testing.T) {
 }
 
 func TestCSRFAllowsSafeMethods(t *testing.T) {
-	// No token anywhere — GET must still pass (read-only).
+	// No token anywhere; GET must still pass (read-only).
 	req := withSession(httptest.NewRequest(http.MethodGet, "/admin/logs", nil))
 	if reached, _ := runCSRF(t, req); !reached {
 		t.Error("GET without token must not be blocked")
@@ -89,7 +89,7 @@ func TestCSRFAcceptsFormToken(t *testing.T) {
 }
 
 func TestCSRFRejectsWrongOrForeignToken(t *testing.T) {
-	// Token derived from a *different* session — what an attacker who has
+	// Token derived from a *different* session, i.e. what an attacker with
 	// their own account/session could compute.
 	req := withSession(httptest.NewRequest(http.MethodPost, "/admin/services", nil))
 	req.Header.Set(csrfHeader, csrfToken("some-other-session"))

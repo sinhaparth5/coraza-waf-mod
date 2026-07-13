@@ -21,8 +21,8 @@ const (
 // hash of the session cookie value: it can't be forged without the cookie
 // (256-bit random, HttpOnly) and, being non-invertible, embedding it in
 // page HTML doesn't expose the session itself. Deriving instead of storing
-// keeps this stateless — no extra table, survives restarts, and rotates
-// automatically with every new session.
+// keeps this stateless: no extra table, it survives restarts, and it rotates
+// with every new session.
 func csrfToken(sessionValue string) string {
 	sum := sha256.Sum256([]byte("cz-csrf:" + sessionValue))
 	return hex.EncodeToString(sum[:])
@@ -60,7 +60,7 @@ func (h *Handler) csrfProtect(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 		if expected == "" || !hmac.Equal([]byte(expected), []byte(got)) {
 			return echo.NewHTTPError(http.StatusForbidden,
-				"invalid or missing CSRF token — reload the page and try again")
+				"invalid or missing CSRF token; reload the page and try again")
 		}
 		return next(c)
 	}

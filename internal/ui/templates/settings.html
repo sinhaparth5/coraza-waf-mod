@@ -55,7 +55,7 @@
   <!-- ── Database backup ───────────────────────────────────────────────────── -->
   <div class="card p-6">
     <h2 class="text-[15px] font-bold text-slate-800 mb-1">Database backup</h2>
-    <p class="text-[13px] text-slate-500 mb-4">Downloads a consistent snapshot of <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded">waf.db</code> — all request logs, services, IP/geo rules, and settings. Safe to run while the WAF is live.</p>
+    <p class="text-[13px] text-slate-500 mb-4">Downloads a consistent snapshot of <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded">waf.db</code>: all request logs, services, IP/geo rules, and settings. Safe to run while the WAF is live.</p>
     <form action="{{.AdminPath}}/settings/backup" method="POST">
       <input type="hidden" name="_csrf" value="{{.CSRF}}">
       <button type="submit"
@@ -78,7 +78,7 @@
     <h2 class="text-[15px] font-bold text-slate-800 mb-1">WAF rules</h2>
     <p class="text-[13px] text-slate-500 mb-1">To reload custom WAF rules from <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded">rules_dir</code> without restarting, send SIGHUP to the process:</p>
     <pre class="mt-3 bg-slate-900 text-green-400 text-[12px] font-mono rounded-lg px-4 py-3 overflow-x-auto">kill -HUP $(pidof coraza-waf-mod)</pre>
-    <p class="mt-2 text-[12px] text-slate-400">The engine swaps in-place — in-flight requests complete with the old ruleset, new requests use the reloaded one.</p>
+    <p class="mt-2 text-[12px] text-slate-400">The engine swaps in place: in-flight requests finish on the old ruleset, new requests use the reloaded one.</p>
   </div>
 
 </div>
@@ -90,7 +90,7 @@
   <p class="text-[13px] text-slate-500 mb-5">JS proof-of-work challenge for suspicious clients. Browsers solve it silently in under a second; scanners and headless bots cannot. Per-service overrides are available on the <a href="{{.AdminPath}}/services" class="text-brand underline">Services</a> page.</p>
 
   {{if .BotSaveOK}}
-  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Settings saved and applied — no restart needed.</div>
+  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Settings saved and applied. No restart needed.</div>
   {{end}}
 
   <form hx-post="{{.AdminPath}}/settings/bot" hx-target="#bot-card" hx-swap="outerHTML" class="flex flex-col gap-4">
@@ -135,10 +135,10 @@
 {{define "varnish-card"}}
 <div class="card p-6" id="varnish-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">Varnish Cache</h2>
-  <p class="text-[13px] text-slate-500 mb-5">Accelerate static assets and cache-eligible endpoints through a local Varnish daemon. Traffic is WAF-inspected first, then handed to Varnish with spoofable host headers scrubbed; cache misses return to the WAF, which routes them to the right backend automatically — the Varnish config never needs editing when services change. Just enable caching per service on the <a href="{{.AdminPath}}/services" class="text-brand underline">Services</a> page. Varnish is set up by the installer (or see <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded">deploy/varnish/README.md</code>).</p>
+  <p class="text-[13px] text-slate-500 mb-5">Accelerate static assets and cache-eligible endpoints through a local Varnish daemon. Traffic is WAF-inspected first, then handed to Varnish with spoofable host headers scrubbed; cache misses return to the WAF, which routes them to the right backend automatically, so the Varnish config never needs editing when services change. Just enable caching per service on the <a href="{{.AdminPath}}/services" class="text-brand underline">Services</a> page. Varnish is set up by the installer (or see <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded">deploy/varnish/README.md</code>).</p>
 
   {{if .VarnishSaveOK}}
-  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Settings saved and applied — no restart needed.</div>
+  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Settings saved and applied. No restart needed.</div>
   {{end}}
   {{if .VarnishError}}
   <div class="rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px] px-4 py-3 mb-4">{{.VarnishError}}</div>
@@ -178,10 +178,10 @@
 {{define "webhook-card"}}
 <div class="card p-6" id="webhook-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">Webhook / SIEM Export</h2>
-  <p class="text-[13px] text-slate-500 mb-5">Push security events to any HTTP endpoint in real-time — Splunk HEC, Elastic, Loki, or a custom receiver. Logs can also be downloaded as NDJSON from the <a href="{{.AdminPath}}/logs" class="text-brand underline">Logs</a> page.</p>
+  <p class="text-[13px] text-slate-500 mb-5">Push security events to any HTTP endpoint in real time: Splunk HEC, Elastic, Loki, or a custom receiver. Logs can also be downloaded as NDJSON from the <a href="{{.AdminPath}}/logs" class="text-brand underline">Logs</a> page.</p>
 
   {{if .WebhookSaveOK}}
-  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Webhook saved — changes take effect immediately.</div>
+  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Webhook saved. Changes take effect immediately.</div>
   {{end}}
   {{if .WebhookSaveErr}}
   <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.WebhookSaveErr}}</div>
@@ -239,10 +239,10 @@
 {{define "email-card"}}
 <div class="card p-6" id="email-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">Email Alerts</h2>
-  <p class="text-[13px] text-slate-500 mb-5">Every night just after midnight, a summary of the previous day — blocked requests, 403 responses, and a per-stage breakdown — is emailed to the recipients below via Cloudflare Email Service.</p>
+  <p class="text-[13px] text-slate-500 mb-5">Every night just after midnight, a summary of the previous day (blocked requests, 403 responses, and a per-stage breakdown) is emailed to the recipients below via Cloudflare Email Service.</p>
 
   {{if .EmailSaveOK}}
-  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Email settings saved — the next report goes out after midnight.</div>
+  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Email settings saved. The next report goes out after midnight.</div>
   {{end}}
   {{if .EmailSaveErr}}
   <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.EmailSaveErr}}</div>
@@ -265,7 +265,7 @@
     <div>
       <label class="block text-[13px] font-semibold text-slate-700 mb-1">Sender</label>
       <p class="text-[13px] text-slate-500 bg-surface border border-line rounded-lg px-3 py-2 font-mono">{{.EmailSender}}</p>
-      <p class="text-[11px] text-slate-400 mt-1">Fixed — reports are delivered through Cloudflare Email Service.</p>
+      <p class="text-[11px] text-slate-400 mt-1">Fixed: reports are delivered through Cloudflare Email Service.</p>
     </div>
 
     <div>
@@ -276,10 +276,10 @@
     </div>
 
     <div>
-      <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="email_token">Cloudflare API token{{if .EmailTokenSet}} <span class="font-normal text-slate-400">(saved — leave blank to keep)</span>{{end}}</label>
+      <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="email_token">Cloudflare API token{{if .EmailTokenSet}} <span class="font-normal text-slate-400">(saved; leave blank to keep)</span>{{end}}</label>
       <input id="email_token" name="email_token" type="password" autocomplete="off" placeholder="{{if .EmailTokenSet}}••••••••••••••••{{else}}Token with Email Sending: Edit permission{{end}}"
              class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition"/>
-      <p class="text-[11px] text-slate-400 mt-1">Stored only in <code class="font-mono text-[11px]">waf.db</code> on this server — never in config files or releases, and never shown here again.</p>
+      <p class="text-[11px] text-slate-400 mt-1">Stored only in <code class="font-mono text-[11px]">waf.db</code> on this server, never in config files or releases, and never shown here again.</p>
     </div>
 
     <div class="pt-1 flex items-center gap-3">
@@ -294,7 +294,7 @@
       </button>
       <span id="email-test-result" class="text-[13px]"></span>
     </div>
-    <p class="text-[11px] text-slate-400 -mt-2">The test uses the <em>saved</em> settings and covers the last 24 hours — save first, then test.</p>
+    <p class="text-[11px] text-slate-400 -mt-2">The test uses the <em>saved</em> settings and covers the last 24 hours, so save first, then test.</p>
   </form>
 </div>
 {{end}}
@@ -302,11 +302,11 @@
 {{define "api-keys-card"}}
 <div class="card p-6" id="api-keys-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">API Keys</h2>
-  <p class="text-[13px] text-slate-500 mb-5">Bearer tokens for programmatic management of services, IP rules, and bans at <code class="font-mono text-[11px] bg-surface px-1 py-0.5 rounded">{{.AdminPath}}/api/v1/*</code> — <code class="font-mono text-[11px]">Authorization: Bearer &lt;key&gt;</code>, no session cookie or CSRF token needed. Each key can do everything the admin session can (all-or-nothing in this version — no read-only keys yet).</p>
+  <p class="text-[13px] text-slate-500 mb-5">Bearer tokens for programmatic management of services, IP rules, and bans at <code class="font-mono text-[11px] bg-surface px-1 py-0.5 rounded">{{.AdminPath}}/api/v1/*</code>. Send <code class="font-mono text-[11px]">Authorization: Bearer &lt;key&gt;</code>; no session cookie or CSRF token needed. Each key can do everything the admin session can (all-or-nothing in this version, no read-only keys yet).</p>
 
   {{if .NewAPIKey}}
   <div class="rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[13px] px-4 py-3 mb-4">
-    <p class="font-semibold mb-1">Copy this key now — it won't be shown again.</p>
+    <p class="font-semibold mb-1">Copy this key now. It won't be shown again.</p>
     <div class="flex items-center gap-2 mt-1">
       <code class="flex-1 min-w-0 font-mono text-[12px] bg-white border border-amber-200 rounded-lg px-3 py-2 select-all break-all">{{.NewAPIKey}}</code>
       <button type="button" data-copy-value="{{.NewAPIKey}}"
@@ -359,7 +359,7 @@
   <p class="text-[13px] text-slate-500 mb-5">Global per-IP token-bucket limiter, applied to every request before the WAF. Per-service limits are set on the <a href="{{.AdminPath}}/services" class="text-brand underline">Services</a> page. The default <strong>Memory + SQLite</strong> backend persists bucket state across restarts; <strong>Redis</strong> enables shared state across multiple WAF nodes.</p>
 
   {{if .RLSaveOK}}
-  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Settings saved and applied — no restart needed.</div>
+  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Settings saved and applied. No restart needed.</div>
   {{end}}
   {{if .RLError}}
   <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.RLError}}</div>

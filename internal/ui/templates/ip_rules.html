@@ -129,7 +129,7 @@
   <p class="text-[12px] text-slate-500 mb-4">Repeat offenders and severe attacks (SQL injection, RCE, XSS classes) are banned permanently once they cross the score below. Bans appear in the list as <span class="font-semibold text-slate-600">Auto</span> rules and can be removed like any other.</p>
 
   {{if .AutobanSaveOK}}
-  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Saved — automatic banning settings applied.</div>
+  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Saved. Automatic banning settings applied.</div>
   {{end}}
   {{if .AutobanSaveErr}}
   <div class="rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px] px-4 py-3 mb-4">{{.AutobanSaveErr}}</div>
@@ -175,10 +175,10 @@
     </div>
     <h2 class="text-[17px] font-bold text-slate-900">Adaptive enforcement</h2>
   </div>
-  <p class="text-[12px] text-slate-500 mb-4">Scales the global rate limit and can force a bot challenge based on each client's current <span class="font-semibold text-slate-600">threat score</span> (shown per-row above) — tighter for high-risk IPs, relaxed for low-risk ones. Reversible: every request re-checks the live score, so this never permanently blocks anyone the way Automatic banning does.</p>
+  <p class="text-[12px] text-slate-500 mb-4">Scales the global rate limit and can force a bot challenge based on each client's current <span class="font-semibold text-slate-600">threat score</span> (shown per row above): tighter for high-risk IPs, relaxed for low-risk ones. Reversible: every request re-checks the live score, so this never permanently blocks anyone the way Automatic banning does.</p>
 
   {{if .AdaptiveSaveOK}}
-  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Saved — adaptive enforcement settings applied.</div>
+  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Saved. Adaptive enforcement settings applied.</div>
   {{end}}
   {{if .AdaptiveSaveErr}}
   <div class="rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px] px-4 py-3 mb-4">{{.AdaptiveSaveErr}}</div>
@@ -221,7 +221,7 @@
           class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
       </div>
     </div>
-    <p class="text-[12px] text-slate-500 -mt-1">Rate scale multiplies the global limit's rate and burst — 0.3 means 30% of normal for high-risk IPs, 1.5 means 150% of normal for low-risk ones. Blocked/challenged rows from adaptive enforcement show up in Logs tagged <span class="mono">:adaptive</span>.</p>
+    <p class="text-[12px] text-slate-500 -mt-1">Rate scale multiplies the global limit's rate and burst: 0.3 means 30% of normal for high-risk IPs, 1.5 means 150% of normal for low-risk ones. Blocked/challenged rows from adaptive enforcement show up in Logs tagged <span class="mono">:adaptive</span>.</p>
 
     <button type="submit" class="btn-primary w-full flex items-center justify-center gap-2">
       <i class="hgi hgi-stroke hgi-rounded hgi-checkmark-circle-02 text-sm"></i>

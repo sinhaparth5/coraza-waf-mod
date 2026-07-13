@@ -22,7 +22,7 @@ const (
 
 // loginLimiter throttles credential guessing per client IP. In-process state
 // is enough here: there is a single admin account and a single WAF process,
-// and bcrypt already caps the verify rate — this exists to turn "slow" into
+// and bcrypt already caps the verify rate. This exists to turn "slow" into
 // "stopped" and to give lockouts a clear audit trail.
 type loginLimiter struct {
 	mu      sync.Mutex
@@ -108,7 +108,7 @@ func parseTrustedNets(cidrs []string) []*net.IPNet {
 
 // clientIP resolves the real client IP for login throttling. Forwarding
 // headers are honored only when the connection itself comes from a configured
-// trusted proxy — echo's c.RealIP() trusts X-Forwarded-For unconditionally,
+// trusted proxy. Echo's c.RealIP() trusts X-Forwarded-For unconditionally,
 // which would let an attacker rotate fake IPs to dodge the lockout.
 func (h *Handler) clientIP(r *http.Request) string {
 	remote := r.RemoteAddr
@@ -143,7 +143,7 @@ func (h *Handler) clientIP(r *http.Request) string {
 // secureCookie reports whether session cookies should carry the Secure flag.
 // True when the request arrived over TLS directly or, behind a TLS-terminating
 // proxy, via X-Forwarded-Proto (spoofing that header can only *add* the flag,
-// which locks the spoofer out of plain HTTP — never the reverse).
+// which locks the spoofer out of plain HTTP, never the reverse).
 func secureCookie(c echo.Context) bool {
 	return c.Scheme() == "https"
 }

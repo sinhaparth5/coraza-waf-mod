@@ -147,7 +147,7 @@ type atAGlanceCard struct {
 // served under /<admin_path>/static/js/. imgsFS must contain
 // "static/imgs/*"; it's served under /<admin_path>/static/imgs/. proxyHandle
 // is the reverse-proxy pipeline's own route handler (proxy.Handler.Handle,
-// the same func registered for the catch-all "/*" route in main.go) — see
+// the same func registered for the catch-all "/*" route in main.go); see
 // hostGuard for why the admin/API routes need to be able to hand a request
 // off to it.
 func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error, reloadAutoban func(), scorer *threatscore.Scorer, reloadAdaptive func(), proxyHandle echo.HandlerFunc) (*Handler, error) {
@@ -167,7 +167,7 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 }
 
 func (h *Handler) parseTemplates() error {
-	// Standalone login page — does not use base.html.
+	// Standalone login page, doesn't use base.html.
 	login, err := template.New("login").Funcs(funcs).ParseFS(templateFS, "templates/login.html")
 	if err != nil {
 		return fmt.Errorf("parse template login: %w", err)
@@ -223,18 +223,16 @@ func (h *Handler) sessionAuth(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 // hostGuard keeps the admin dashboard and REST API from being reachable on
-// a service's own domain. Echo's router matches routes purely by path with
-// no notion of Host, so without this check a request for
-// "https://example-api.com/admin/login" would hit this exact same route
-// (and get served the admin login page) just because example-api.com's DNS
-// happens to point at this server — even though example-api.com is
-// configured as a completely unrelated proxied service. Any request whose
-// Host matches a configured service is instead handed to the normal
-// reverse-proxy pipeline (registry.IsServiceHost), so it's routed — and
-// WAF/rate-limit/logged — exactly like every other request to that
-// service, landing on the real backend's own /admin/login if it has one.
-// The admin UI and API stay reachable on any Host nothing else claims,
-// e.g. this server's bare listen IP.
+// a service's own domain. Echo routes purely by path and knows nothing
+// about Host, so without this check "https://example-api.com/admin/login"
+// would serve the WAF's own login page whenever example-api.com's DNS
+// points at this server, even though it's configured as an unrelated
+// proxied service. Any request whose Host matches a configured service is
+// handed to the reverse-proxy pipeline instead (registry.IsServiceHost),
+// where it gets routed, WAF-checked, rate-limited, and logged like any
+// other request to that service, landing on the real backend's own
+// /admin/login if it has one. The admin UI and API stay reachable on any
+// Host nothing else claims, e.g. this server's bare listen IP.
 func (h *Handler) hostGuard(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if h.registry.IsServiceHost(c.Request().Host) {
@@ -257,11 +255,11 @@ func (h *Handler) Register(e *echo.Echo) {
 	bodyLimit := middleware.BodyLimit("1M")
 
 	// admin is the parent group for every route under cfg.Admin.Path.
-	// hostGuard runs first for all of them, public or not — see hostGuard.
+	// hostGuard runs first for all of them, public or not; see hostGuard.
 	admin := e.Group(base)
 	admin.Use(h.hostGuard)
 
-	// Public routes — no session required.
+	// Public routes, no session required.
 	admin.GET("/login", h.LoginPage)
 	admin.POST("/login", h.LoginPost, bodyLimit)
 	// Static assets are public so the login page can load spirals/JS before auth.
@@ -379,7 +377,7 @@ func (h *Handler) LoginPost(c echo.Context) error {
 
 	token, err := h.db.CreateSession()
 	if err != nil {
-		return h.renderLogin(c, "Internal error — please try again.")
+		return h.renderLogin(c, "Internal error. Please try again.")
 	}
 	log.Printf("admin login: successful login from %s", ip)
 
@@ -751,7 +749,7 @@ func (h *Handler) ThreatsSeries(c echo.Context) error {
 const logsPageSize = 50
 
 // accessLogHistoryWindow/accessLogHistoryLimit bound how much history the
-// access-log terminal panel preloads on page load — otherwise it starts
+// access-log terminal panel preloads on page load; otherwise it starts
 // empty ("Waiting for requests…") until new live traffic happens to arrive.
 // Limit matches the client-side cap (accessLogMaxLines in logs.js) so the
 // initial render and the steady-state line count agree.
@@ -800,7 +798,7 @@ func (h *Handler) Logs(c echo.Context) error {
 		return err
 	}
 
-	// Preload the access-log terminal panel with recent history — it only
+	// Preload the access-log terminal panel with recent history. It only
 	// makes sense in live mode, same as the panel itself.
 	var accessLogRecent []string
 	if live {
@@ -868,8 +866,8 @@ func (h *Handler) LogsStream(c echo.Context) error {
 	}
 }
 
-// AccessLogStream is an SSE endpoint mirroring LogsStream — same broadcaster
-// subscription, same connection lifecycle — but emits a single plain-text
+// AccessLogStream is an SSE endpoint like LogsStream (same broadcaster
+// subscription, same connection lifecycle) but emits a single plain-text
 // nginx-combined-format line per event instead of an HTML fragment, powering
 // the dashboard's terminal-style live panel. It's independent of whether the
 // --access-log file is enabled: this reads from the in-memory broadcaster,
@@ -928,7 +926,7 @@ func (h *Handler) LogDetail(c echo.Context) error {
 		}
 	}
 
-	// Unified threat score (issue #12) — absent until the log-worker's
+	// Unified threat score (issue #12), absent until the log-worker's
 	// threat-score hook has processed at least one event for this IP.
 	threat, hasThreat, err := h.db.GetIPThreatScore(d.RealIP)
 	if err != nil {
@@ -977,8 +975,8 @@ func (h *Handler) LogDetail(c echo.Context) error {
 // ── IP Rules ───────────────────────────────────────────────────────────────────
 
 // ipRulesPageSize caps how many rows the IP Rules admin page pulls into
-// memory per request — autoban can grow ip_rules into the thousands, and the
-// page previously loaded the whole table on every view and every add/delete.
+// memory per request. Autoban can grow ip_rules into the thousands, and the
+// page used to load the whole table on every view and every add/delete.
 const ipRulesPageSize = 16
 
 // ipRulesRowsData fetches one page of rules for the ip-rules-rows partial,
@@ -1003,7 +1001,7 @@ func (h *Handler) ipRulesRowsData(page int) (map[string]any, error) {
 	}
 
 	// Bulk-fetch this page's threat scores in one query rather than one
-	// lookup per row — see internal/security/threatscore.
+	// lookup per row; see internal/security/threatscore.
 	ips := make([]string, len(rules))
 	for i, r := range rules {
 		ips[i] = r.IP
@@ -1017,7 +1015,7 @@ func (h *Handler) ipRulesRowsData(page int) (map[string]any, error) {
 		"AdminPath":    h.cfg.Admin.Path,
 		"Rules":        rules,
 		"ThreatScores": threatScores,
-		"CurPage":      page, // named to match the Logs page's pagination fields (not "Page" — h.render overwrites that key with the template name for nav highlighting)
+		"CurPage":      page, // matches the Logs page's pagination fields; can't use "Page" because h.render overwrites that key with the template name for nav highlighting
 		"TotalPages":   totalPages,
 		"Total":        total,
 	}, nil
@@ -1062,7 +1060,7 @@ func (h *Handler) IPRulesPage(c echo.Context) error {
 	return h.render(c, "ip_rules", data)
 }
 
-// IPRulesRows renders just the paginated rows partial — the Prev/Next
+// IPRulesRows renders just the paginated rows partial. The Prev/Next
 // buttons hx-get this so paging never reloads the whole page.
 func (h *Handler) IPRulesRows(c echo.Context) error {
 	page, _ := strconv.Atoi(c.QueryParam("page"))
@@ -1158,7 +1156,7 @@ func (h *Handler) AddIPRule(c echo.Context) error {
 			ip = parsed.String()
 		}
 	} else {
-		return c.String(http.StatusBadRequest, "invalid IP or CIDR — enter 1.2.3.4, ::1, or 10.0.0.0/8")
+		return c.String(http.StatusBadRequest, "invalid IP or CIDR (e.g. 1.2.3.4, ::1, or 10.0.0.0/8)")
 	}
 
 	if err := h.db.AddIPRule(appName, ip, ruleType); err != nil {
@@ -1167,8 +1165,8 @@ func (h *Handler) AddIPRule(c echo.Context) error {
 	if err := h.ipbl.Reload(h.db); err != nil {
 		return err
 	}
-	// A new rule sorts newest-first, so it always lands on page 1 — show that
-	// page regardless of where the admin's list view happened to be scrolled.
+	// A new rule sorts newest-first, so it always lands on page 1. Show that
+	// page regardless of where the admin's list view happened to be.
 	data, err := h.ipRulesRowsData(1)
 	if err != nil {
 		return err
@@ -1188,7 +1186,7 @@ func (h *Handler) DeleteIPRule(c echo.Context) error {
 		return err
 	}
 	// Stay on whichever page the admin was viewing (carried as ?page= on the
-	// delete URL — see the remove-btn call in ip-rules-rows); ipRulesRowsData
+	// delete URL, see the remove-btn call in ip-rules-rows); ipRulesRowsData
 	// clamps back a page if this delete just emptied the last one.
 	page, _ := strconv.Atoi(c.QueryParam("page"))
 	data, err := h.ipRulesRowsData(page)
@@ -1385,7 +1383,7 @@ func (h *Handler) ThreatIntelPage(c echo.Context) error {
 
 // validateOutboundURL checks an admin-supplied URL that the server itself
 // will fetch (webhook endpoint, threat-intel source): absolute, http or
-// https only — never a scheme like file: or gopher:. Private/loopback hosts
+// https only, never a scheme like file: or gopher:. Private/loopback hosts
 // are deliberately allowed: SIEM webhooks and intel mirrors commonly live on
 // the LAN, and the admin can already reach any internal address by pointing
 // a service backend at it, so blocking them here would only break legitimate
@@ -1516,15 +1514,15 @@ func sanitizeHost(h string) string {
 		h = h[i+3:]
 	}
 	h = strings.TrimRight(h, "/")
-	// Strip port only if it matches the default (80/443) — non-standard ports
+	// Strip port only if it matches the default (80/443); non-standard ports
 	// are kept because they're meaningful for matching.
 	return h
 }
 
 // AddService creates a new backend service from the add-service wizard.
-// matchType picks which of host/prefix gets saved — the wizard only ever
-// collects one of the two from the user. The backend must respond to a live
-// reachability probe before it's saved — an unreachable backend is rejected.
+// matchType picks which of host/prefix gets saved; the wizard only ever
+// collects one of the two from the user. The backend must pass a live
+// reachability probe before it's saved.
 func (h *Handler) AddService(c echo.Context) error {
 	name := strings.TrimSpace(c.FormValue("name"))
 	matchType := c.FormValue("match_type") // "host" | "prefix"
@@ -1538,7 +1536,7 @@ func (h *Handler) AddService(c echo.Context) error {
 		return h.wizardError(c, err.Error())
 	}
 	if err := services.Probe(backend); err != nil {
-		return h.wizardError(c, err.Error()+" — fix the backend or try again before adding.")
+		return h.wizardError(c, err.Error()+". Fix the backend and try again.")
 	}
 
 	var host, prefix string
@@ -1639,7 +1637,7 @@ func (h *Handler) AddCertificate(c echo.Context) error {
 	}
 
 	// Cert files are commonly saved under generic names (cert.pem/cert.key),
-	// and the Name field autofills from the filename — so a second upload
+	// and the Name field autofills from the filename, so a second upload
 	// would collide with the UNIQUE name column. Prefer a name derived from
 	// the cert's own domains over failing.
 	if existing, err := h.db.ListCertificates(); err == nil {
@@ -1650,7 +1648,7 @@ func (h *Handler) AddCertificate(c echo.Context) error {
 	id, err := h.db.AddCertificate(name, strings.Join(domains, ", "), expiresAt.UTC().Format(time.RFC3339), "", "")
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
-			return h.certError(c, fmt.Sprintf("a certificate named %q already exists — choose a different name", name))
+			return h.certError(c, fmt.Sprintf("a certificate named %q already exists; choose a different name", name))
 		}
 		return h.certError(c, "save: "+err.Error())
 	}
@@ -1736,7 +1734,7 @@ func (h *Handler) AssignPoolCert(c echo.Context) error {
 	if err != nil {
 		return h.tlsModalError(c, "read certificate: "+err.Error())
 	}
-	// Reject assigning a cert that doesn't cover this service's domain —
+	// Reject assigning a cert that doesn't cover this service's domain:
 	// serving it would fail browser validation and Cloudflare Full (strict).
 	if err := services.CertCoversHost(certPEM, svc.Host); err != nil {
 		return h.tlsModalError(c, err.Error())
@@ -1811,8 +1809,8 @@ func (h *Handler) UploadServiceTLS(c echo.Context) error {
 
 // EnableServiceAutoTLS marks a service for on-demand Let's Encrypt issuance.
 // If no ACME email is stored in the DB yet, it fires a need-acme-email event
-// so the UI can prompt the user before proceeding — without an email Let's
-// Encrypt cannot register an account and cert issuance will always fail.
+// so the UI can prompt the user first; without an email Let's Encrypt
+// cannot register an account and cert issuance will always fail.
 func (h *Handler) EnableServiceAutoTLS(c echo.Context) error {
 	id, err := strconv.Atoi(c.FormValue("service_id"))
 	if err != nil {
@@ -1831,7 +1829,7 @@ func (h *Handler) EnableServiceAutoTLS(c echo.Context) error {
 		return err
 	}
 	if email == "" {
-		// No email yet — ask the UI to collect it before proceeding.
+		// No email yet, so ask the UI to collect it first.
 		c.Response().Header().Set("HX-Trigger",
 			fmt.Sprintf(`{"need-acme-email":{"service_id":%d}}`, id))
 		return c.String(http.StatusOK, "")
@@ -1972,7 +1970,7 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 }
 
 // CreateAPIKey generates a new bearer token for the REST API and shows it to
-// the admin exactly once — only its SHA-256 hash and a display prefix are
+// the admin exactly once; only its SHA-256 hash and a display prefix are
 // persisted (see newAPIKey, ui/api.go).
 func (h *Handler) CreateAPIKey(c echo.Context) error {
 	name := strings.TrimSpace(c.FormValue("name"))
@@ -2010,7 +2008,7 @@ func (h *Handler) CreateAPIKey(c echo.Context) error {
 	})
 }
 
-// DeleteAPIKey revokes a key by deleting its row — any request already using
+// DeleteAPIKey revokes a key by deleting its row. Any request already using
 // it fails its next auth check immediately, no cache or TTL to wait out.
 func (h *Handler) DeleteAPIKey(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
@@ -2176,9 +2174,8 @@ func (h *Handler) SetServiceCacheTuning(c echo.Context) error {
 
 // PurgeServiceCache invalidates every object Varnish holds for one service,
 // e.g. right after deploying new content to its backend. Returns a small
-// status fragment rather than the services list — purging doesn't change any
-// row's displayed state, only what's asked for by name is stripped out of
-// Varnish's cache.
+// status fragment rather than the services list, since purging doesn't
+// change any row's displayed state.
 func (h *Handler) PurgeServiceCache(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id < 1 {
@@ -2214,10 +2211,10 @@ func (h *Handler) SaveVarnishConfig(c echo.Context) error {
 	if host, _, err := net.SplitHostPort(addr); err != nil {
 		vErr = "Address must be host:port, e.g. 127.0.0.1:6081."
 	} else if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
-		vErr = "Varnish must listen on a loopback address — anything else would let clients bypass the WAF and reach the cache directly."
+		vErr = "Varnish must listen on a loopback address, otherwise clients could bypass the WAF and reach the cache directly."
 	}
 	if vErr == "" {
-		// Preserve the stored cache-return address — it's not exposed on the
+		// Preserve the stored cache-return address: it's not exposed on the
 		// form (it must match the installed VCL, and the listener binds it at
 		// startup), so a save must never reset it.
 		stored, _ := h.db.GetVarnishConfig()
@@ -2321,7 +2318,7 @@ func (h *Handler) SaveWebhookConfig(c echo.Context) error {
 	url := strings.TrimSpace(c.FormValue("webhook_url"))
 	secret := strings.TrimSpace(c.FormValue("webhook_secret"))
 	enabled := c.FormValue("webhook_enabled") == "1"
-	// webhook_events is a multi-value checkbox — collect all checked values.
+	// webhook_events is a multi-value checkbox; collect all checked values.
 	eventVals := c.Request().PostForm["webhook_events"]
 	events := strings.Join(eventVals, ",")
 	if events == "" {
@@ -2351,7 +2348,7 @@ func (h *Handler) SaveWebhookConfig(c echo.Context) error {
 }
 
 // SaveEmailSettings persists the daily-report email settings (recipients and
-// Cloudflare API token — everything else is hardcoded in the mailer package).
+// Cloudflare API token; everything else is hardcoded in the mailer package).
 // A blank token field keeps the stored token, so re-saving other fields never
 // wipes the credential, and the token is never echoed back into the page.
 func (h *Handler) SaveEmailSettings(c echo.Context) error {
@@ -2401,7 +2398,7 @@ func (h *Handler) TestEmailReport(c echo.Context) error {
 			`<span class="text-red-600 text-[13px]">Send failed: `+template.HTMLEscapeString(err.Error())+`</span>`)
 	}
 	return c.HTML(http.StatusOK,
-		`<span class="text-brand text-[13px] font-medium">Report sent — check the inbox.</span>`)
+		`<span class="text-brand text-[13px] font-medium">Report sent. Check the inbox.</span>`)
 }
 
 // ExportLogs streams the filtered request log as NDJSON (one JSON object per
@@ -2488,9 +2485,9 @@ func (h *Handler) ChangeCredentials(c echo.Context) error {
 		return renderErr("New password must be at least 8 characters.")
 	}
 	if err := h.db.UpdateAdminCredentials(newEmail, newPassword); err != nil {
-		return renderErr("Failed to update credentials — please try again.")
+		return renderErr("Failed to update credentials. Please try again.")
 	}
-	// Credentials changed — force re-login.
+	// Credentials changed, force re-login.
 	if cookie, err := c.Cookie(sessionCookie); err == nil {
 		h.db.DeleteSession(cookie.Value) //nolint
 	}
@@ -2545,14 +2542,14 @@ func (h *Handler) render(c echo.Context, page string, data map[string]any) error
 	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
 	// no-store keeps these pages out of the browser's back/forward cache.
 	// Without it, navigating away leaves the previous page (and its live
-	// notifications/logs EventSource — see app.js and logs.html) frozen in
+	// notifications/logs EventSource, see app.js and logs.html) frozen in
 	// bfcache instead of torn down, so each connection stays open for as long
 	// as that bfcache entry survives. A few quick page navigations can pile
 	// up more open SSE connections than Chrome's ~6-per-origin HTTP/1.1 limit
 	// allows, stalling every other request behind them for as long as it
 	// takes bfcache to evict an old entry. It's also the right call for an
-	// authenticated admin panel regardless — these pages shouldn't be
-	// restorable from cache after logout.
+	// authenticated admin panel anyway: these pages shouldn't be restorable
+	// from cache after logout.
 	c.Response().Header().Set("Cache-Control", "no-store")
 	return t.ExecuteTemplate(c.Response().Writer, "base", data)
 }

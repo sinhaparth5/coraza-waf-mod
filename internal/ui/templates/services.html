@@ -111,7 +111,7 @@
 <div id="svc-modal-overlay" class="hidden flex fixed inset-0 bg-slate-900/[.45] z-[200] items-center justify-center">
   <div class="card w-[480px] max-h-[88vh] overflow-y-auto p-6">
     <div class="flex items-center justify-between mb-4">
-      <h2 class="text-[17px] font-bold text-slate-900">Edit — <span id="svc-modal-service-name" class="text-brand"></span></h2>
+      <h2 class="text-[17px] font-bold text-slate-900">Edit <span id="svc-modal-service-name" class="text-brand"></span></h2>
       <button type="button" id="svc-modal-close" class="bg-none border-none cursor-pointer text-slate-500 text-lg leading-none">&times;</button>
     </div>
 
@@ -199,7 +199,7 @@
 
       <div class="border-t border-canvas mt-5 pt-4">
         <form id="svc-cache-session-form" hx-post="{{.AdminPath}}/services/cache-session/0" hx-target="#services-body" hx-swap="innerHTML" data-admin-path="{{.AdminPath}}">
-          <p class="text-[12px] text-slate-500 mb-4 leading-[1.5]">Also cache logged-in traffic, partitioned per session — each session gets its own cached copy instead of Varnish refusing to cache any request that carries a cookie. Off by default; short TTL (10s) once enabled.</p>
+          <p class="text-[12px] text-slate-500 mb-4 leading-[1.5]">Also cache logged-in traffic, partitioned per session: each session gets its own cached copy instead of Varnish refusing to cache any request that carries a cookie. Off by default; short TTL (10s) once enabled.</p>
           <label class="flex items-center justify-between cursor-pointer py-2 mb-3">
             <span class="text-[13px] font-semibold text-slate-700">Cache by session</span>
             <span class="relative inline-block">
@@ -249,7 +249,7 @@
       </div>
 
       <div class="border-t border-canvas mt-5 pt-4">
-        <p class="text-[12px] text-slate-500 mb-3 leading-[1.5]">Immediately evict everything Varnish has cached for this service — useful right after deploying new content to its backend.</p>
+        <p class="text-[12px] text-slate-500 mb-3 leading-[1.5]">Immediately evict everything Varnish has cached for this service. Useful right after deploying new content to its backend.</p>
         <form id="svc-cache-purge-form" hx-post="{{.AdminPath}}/services/cache-purge/0" hx-target="#svc-cache-purge-status" hx-swap="innerHTML" data-admin-path="{{.AdminPath}}">
           <button type="submit" class="w-full py-[10px] rounded-full border border-line bg-white text-slate-700 text-[13px] font-medium cursor-pointer font-sans hover:border-slate-400 transition-colors duration-150">
             Purge cached content
@@ -366,7 +366,7 @@
   <div class="relative w-10 h-10 rounded-full bg-brand-tint flex items-center justify-center shrink-0">
     <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01 text-base text-brand-dark"></i>
     <span class="absolute -bottom-px -right-px w-3 h-3 rounded-full border-2 border-white {{if not .Known}}bg-slate-300{{else if .Healthy}}bg-brand{{else}}bg-red-500{{end}}"
-      title="{{if not .Known}}no traffic seen yet — health unknown{{else if .Healthy}}reachable (last real request succeeded){{else}}unreachable (last real request failed){{end}}"></span>
+      title="{{if not .Known}}no traffic seen yet, health unknown{{else if .Healthy}}reachable (last real request succeeded){{else}}unreachable (last real request failed){{end}}"></span>
   </div>
   <div class="flex-1 min-w-0">
     <div class="flex items-center gap-2">

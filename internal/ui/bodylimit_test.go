@@ -14,7 +14,7 @@ import (
 
 // TestAdminBodyLimit checks the 1 MiB body cap is wired onto both the
 // unauthenticated login POST and the admin group, and that it fires before
-// session auth (413, not a login redirect) — the WAF's SecRequestBodyLimit
+// session auth (413, not a login redirect). The WAF's SecRequestBodyLimit
 // never covers these routes, so this middleware is the only guard.
 func TestAdminBodyLimit(t *testing.T) {
 	e := echo.New()

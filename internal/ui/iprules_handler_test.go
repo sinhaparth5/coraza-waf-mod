@@ -8,7 +8,7 @@ import (
 	"coraza-waf-mod/internal/storage"
 )
 
-// TestIPRulesRowsDataClamping exercises ipRulesRowsData's page-clamping —
+// TestIPRulesRowsDataClamping exercises ipRulesRowsData's page-clamping,
 // the logic DeleteIPRule relies on so deleting the last row on a page (or an
 // admin's browser holding a stale ?page= after other rows were removed)
 // falls back to the new last page instead of rendering an empty one.

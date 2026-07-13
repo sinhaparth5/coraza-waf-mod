@@ -45,8 +45,8 @@ func TestAPIKeysCardRenders(t *testing.T) {
 			t.Errorf("api-keys-card output missing %q", want)
 		}
 	}
-	// The raw secret appears exactly twice by design — the visible <code> and
-	// the copy button's data-copy-value — and never a third time; a third
+	// The raw secret appears exactly twice by design (the visible <code> and
+	// the copy button's data-copy-value) and never a third time; a third
 	// occurrence would mean it leaked somewhere else in a later re-render.
 	if n := strings.Count(out, "cwaf_full_secret_value_shown_once"); n != 2 {
 		t.Errorf("raw key must appear exactly twice (display + copy button), got %d occurrences", n)
@@ -71,7 +71,7 @@ func TestAPIKeysCardRenders(t *testing.T) {
 }
 
 // TestAPIKeysRowsRevokeURL checks the standalone rows partial DeleteAPIKey
-// re-renders — it's invoked with a plain {AdminPath, Keys} map rather than
+// re-renders. It's invoked with a plain {AdminPath, Keys} map rather than
 // the full settings-page data, so a "$.AdminPath" scoping mistake inside a
 // {{range}} would silently produce an empty/broken revoke URL instead of a
 // template error.

@@ -52,15 +52,15 @@ func TestLogsPageLiveViewHasTerminalToggle(t *testing.T) {
 		t.Error(`live logs page must not mention "nginx-style"`)
 	}
 	if strings.Contains(page, "text-green-400") {
-		t.Error("access log panel must use white text, not green — text-green-400 still present")
+		t.Error("access log panel must use white text, not green (text-green-400 still present)")
 	}
 	// The old combined class ("whitespace-pre-wrap break-all", soft-wrapping)
-	// was unique to the access-log-feed div — break-all alone is legitimately
+	// was unique to the access-log-feed div. break-all alone is legitimately
 	// reused elsewhere on this page (the log-detail modal's User-Agent,
 	// Request ID, etc.), so only the exact old combo is checked, not either
 	// class in isolation.
 	if strings.Contains(page, "whitespace-pre-wrap break-all") {
-		t.Error("access log panel must not soft-wrap lines (whitespace-pre-wrap break-all) — horizontal scroll instead")
+		t.Error("access log panel must not soft-wrap lines (whitespace-pre-wrap break-all); it should scroll horizontally")
 	}
 }
 
@@ -104,7 +104,7 @@ func TestLogsPageAccessLogRecentPreload(t *testing.T) {
 
 // TestLogsPageHistoryViewHasNoTerminalToggle checks the filtered/paginated
 // history view (which has no live stream at all) never renders the
-// table/terminal toggle or the access-log panel — those only make sense
+// table/terminal toggle or the access-log panel; those only make sense
 // alongside a live SSE connection.
 func TestLogsPageHistoryViewHasNoTerminalToggle(t *testing.T) {
 	h := &Handler{}
