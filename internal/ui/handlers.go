@@ -112,11 +112,13 @@ type Handler struct {
 	reloadWAF       func()
 	syncThreatIntel func(id int64)
 	sendReportNow   func() error
+	sendLoginCode   func(code string) error
 	reloadAutoban   func()
 	reloadAdaptive  func()
 	scorer          *threatscore.Scorer
 	loginLimiter    *loginLimiter
 	apiKeyLimiter   *loginLimiter
+	twoFA           *twoFAStore
 	trustedNets     []*net.IPNet
 	proxyHandle     echo.HandlerFunc
 }
@@ -150,7 +152,7 @@ type atAGlanceCard struct {
 // the same func registered for the catch-all "/*" route in main.go); see
 // hostGuard for why the admin/API routes need to be able to hand a request
 // off to it.
-func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error, reloadAutoban func(), scorer *threatscore.Scorer, reloadAdaptive func(), proxyHandle echo.HandlerFunc) (*Handler, error) {
+func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error, sendLoginCode func(string) error, reloadAutoban func(), scorer *threatscore.Scorer, reloadAdaptive func(), proxyHandle echo.HandlerFunc) (*Handler, error) {
 	sub, err := fs.Sub(jsFS, "static/js/dist")
 	if err != nil {
 		return nil, fmt.Errorf("sub static/js/dist: %w", err)
@@ -159,7 +161,7 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 	if err != nil {
 		return nil, fmt.Errorf("sub static/imgs: %w", err)
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, reloadAutoban: reloadAutoban, scorer: scorer, reloadAdaptive: reloadAdaptive, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), trustedNets: parseTrustedNets(cfg.TrustedProxies), proxyHandle: proxyHandle}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, sendLoginCode: sendLoginCode, reloadAutoban: reloadAutoban, scorer: scorer, reloadAdaptive: reloadAdaptive, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), twoFA: newTwoFAStore(), trustedNets: parseTrustedNets(cfg.TrustedProxies), proxyHandle: proxyHandle}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -262,6 +264,9 @@ func (h *Handler) Register(e *echo.Echo) {
 	// Public routes, no session required.
 	admin.GET("/login", h.LoginPage)
 	admin.POST("/login", h.LoginPost, bodyLimit)
+	// Second login step when 2FA is on: code entry + emailed recovery code.
+	admin.POST("/login/totp", h.LoginTOTPPost, bodyLimit)
+	admin.POST("/login/totp/email", h.LoginTOTPEmail, bodyLimit)
 	// Static assets are public so the login page can load spirals/JS before auth.
 	admin.StaticFS("/static/js", h.staticJS)
 	admin.StaticFS("/static/imgs", h.staticImgs)
@@ -331,6 +336,9 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/threat-intel/:id/sync", h.SyncThreatIntelSource)
 	g.GET("/settings", h.SettingsPage)
 	g.POST("/settings/credentials", h.ChangeCredentials)
+	g.POST("/settings/2fa/start", h.StartTOTPEnrollment)
+	g.POST("/settings/2fa/confirm", h.ConfirmTOTPEnrollment)
+	g.POST("/settings/2fa/disable", h.DisableTOTP)
 	// POST, not GET: this streams the full DB (admin hash, challenge secret),
 	// so it must never be reachable via cross-site top-level navigation.
 	g.POST("/settings/backup", h.BackupDB)
@@ -373,14 +381,24 @@ func (h *Handler) LoginPost(c echo.Context) error {
 		log.Printf("admin login: failed attempt from %s", ip)
 		return h.renderLogin(c, "Invalid email or password.")
 	}
-	h.loginLimiter.success(ip)
+	// Password OK. With 2FA enabled, park the login and ask for a code —
+	// without resetting the limiter yet (see beginTOTPStage).
+	if enabled, _ := h.db.TOTPEnabled(); enabled {
+		return h.beginTOTPStage(c)
+	}
 
+	h.loginLimiter.success(ip)
+	log.Printf("admin login: successful login from %s", ip)
+	return h.issueSession(c)
+}
+
+// issueSession creates the session row, sets the cookie, and lands on the
+// dashboard — the final step of both the password-only and the 2FA flow.
+func (h *Handler) issueSession(c echo.Context) error {
 	token, err := h.db.CreateSession()
 	if err != nil {
 		return h.renderLogin(c, "Internal error. Please try again.")
 	}
-	log.Printf("admin login: successful login from %s", ip)
-
 	c.SetCookie(&http.Cookie{
 		Name:     sessionCookie,
 		Value:    token,
@@ -1945,8 +1963,10 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 	ec, _ := h.db.GetEmailConfig()
 	vc, _ := h.db.GetVarnishConfig()
 	apiKeys, _ := h.db.ListAPIKeys()
+	totpEnabled, _ := h.db.TOTPEnabled()
 	return h.render(c, "settings", map[string]any{
 		"AdminEmail":     email,
+		"TOTPEnabled":    totpEnabled,
 		"BotEnabled":     botEnabled,
 		"BotThreshold":   botThreshold,
 		"BotTTL":         botTTL,

@@ -17,6 +17,14 @@ This product includes the IP to ASN Lite database by DB-IP
 and licensed under Creative Commons Attribution 4.0 International
 (CC BY 4.0).
 
+## go-qrcode
+
+This product includes the go-qrcode library
+([https://github.com/skip2/go-qrcode](https://github.com/skip2/go-qrcode)),
+Copyright (c) 2014 Tom Harwood, licensed under the MIT License. It renders
+the QR code shown once during two-factor authentication enrollment on the
+admin Settings page.
+
 ## FingerprintJS
 
 This product includes FingerprintJS

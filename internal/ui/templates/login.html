@@ -51,8 +51,13 @@
           <!-- Brand (desktop only; mobile shows it on the art banner instead) -->
           <p class="hidden lg:block text-brand-dark text-sm font-bold tracking-wide mb-2">Coraza WAF</p>
 
+          {{if .TOTPStage}}
+          <h1 class="text-slate-900 text-3xl sm:text-4xl font-extrabold leading-tight mb-2">Two-factor authentication</h1>
+          <p class="text-slate-500 text-sm sm:text-base mb-8">Enter the 6-digit code from your authenticator app, or one of your backup codes.</p>
+          {{else}}
           <h1 class="text-slate-900 text-3xl sm:text-4xl font-extrabold leading-tight mb-2">Welcome back</h1>
           <p class="text-slate-500 text-sm sm:text-base mb-8">Sign in to manage your services, rules, and traffic.</p>
+          {{end}}
 
           <!-- Error message -->
           {{if .Error}}
@@ -62,7 +67,52 @@
             {{.Error}}
           </div>
           {{end}}
+          {{if .Notice}}
+          <div class="mb-5 rounded-xl text-green-700 text-sm px-4 py-3"
+               style="background: #f0fdf4; border: 1px solid #bbf7d0;"
+               role="status" aria-live="polite">
+            {{.Notice}}
+          </div>
+          {{end}}
 
+          {{if .TOTPStage}}
+          <form action="{{.AdminPath}}/login/totp" method="POST" novalidate>
+            <div class="mb-2">
+              <label class="block text-slate-700 text-sm font-semibold mb-2" for="login-code">Authentication code</label>
+              <input
+                id="login-code"
+                name="code"
+                type="text"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                placeholder="123456"
+                autofocus
+                required
+                class="w-full rounded-[10px] border border-slate-200 bg-white
+                       text-slate-800 placeholder-slate-400 text-lg tracking-[0.25em] text-center
+                       px-4 py-3.5 outline-none transition
+                       focus:border-brand focus:ring-2 focus:ring-brand/20"/>
+            </div>
+            <button type="submit"
+                    class="mt-6 w-full rounded-[10px] bg-brand text-white text-base font-bold
+                           py-3.5 hover:bg-brand-dark active:scale-[0.98] transition-all duration-150
+                           shadow-md shadow-brand/25">
+              Verify
+            </button>
+          </form>
+
+          {{if .EmailAvailable}}
+          <form action="{{.AdminPath}}/login/totp/email" method="POST" class="mt-5 text-center">
+            <button type="submit" class="text-brand-dark text-sm font-semibold hover:underline cursor-pointer bg-transparent border-none">
+              Email me a recovery code
+            </button>
+          </form>
+          {{end}}
+          <p class="mt-4 text-center">
+            <a href="{{.AdminPath}}/login" class="text-slate-400 text-xs hover:text-slate-600">Back to sign in</a>
+          </p>
+
+          {{else}}
           <form action="{{.AdminPath}}/login" method="POST" novalidate>
 
             <!-- Email -->
@@ -121,6 +171,7 @@
             </button>
 
           </form>
+          {{end}}
         </div>
       </div>
     </div><!-- /form column -->

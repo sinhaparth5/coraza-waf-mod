@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Admin login: TOTP two-factor authentication.** Sign-in can now require a
+  6-digit authenticator code (RFC 6238, pure Go — works with Google
+  Authenticator, Aegis, 1Password, etc.; codes are verified locally with no
+  external service). Enrollment lives in a new "Two-Factor Authentication"
+  card on the Settings page: it shows a QR code (plus a manual-entry key),
+  requires a working code before 2FA is enforced, and then hands out ten
+  one-time backup codes, shown once and stored only as SHA-256 hashes. With
+  2FA on, the password step parks the login behind a short-lived (5-minute)
+  pending cookie and asks for a code before any session cookie is issued;
+  used TOTP codes can't be replayed within their 30-second window, and
+  disabling 2FA requires a current code — a stolen session cookie alone
+  can't turn it off. As a last resort, "Email me a recovery code" sends a
+  single-use 6-digit code (10-minute expiry, one send per minute) through
+  the existing Cloudflare Email Service mailer; the option only appears when
+  email is configured. The existing per-IP login throttling counts failed
+  codes exactly like failed passwords — and deliberately isn't reset by the
+  password step, so re-posting a known-correct password can't launder code
+  guesses — keeping 2FA from becoming a new brute-force surface.
+
 ## [1.4.10] - 2026-07-13
 
 ### Changed
