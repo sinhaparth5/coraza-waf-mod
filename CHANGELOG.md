@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.11] - 2026-07-13
+
+### Changed
+- **Admin UI restyle, round two: branding, components, and more motion.**
+  The bundled shield logo (`static/imgs/logo.svg`) is now the favicon and the
+  sidebar brand mark on every admin page and the login page (the challenge
+  page already used it). Markup repeated across templates was extracted into
+  shared components (`toggle-switch`, `panel-header`, `rule-ring-row`,
+  `rule-type-badge` in `templates/components/`), and the former `app.js` was
+  split into purpose-specific files: `toast.js`, `notify.js`, `clipboard.js`,
+  `motion.js`. New restrained motion: the request-breakdown donut and the
+  block/allow rings sweep in, sparklines draw themselves, "At a glance" tiles
+  stagger in, new live-log rows flash briefly, the terminal view has a
+  blinking caret, and the Bot Shield icon bobs on hover — plus a second
+  hidden touch: click the donut and it redraws itself. The challenge page
+  picked up the same green palette and a staggered entrance, and its WAF
+  config now ships in a JSON script tag instead of a JS template splice. The
+  login page kept its layout but gained quiet echoes of the new language:
+  the logo in the wordmark, dark-green buttons that pass contrast, flatter
+  corners, and a soft rise-in. All motion honors `prefers-reduced-motion`.
+- **Admin UI restyle: flat, tight, differentiated.** The dashboard's floating
+  28px-radius cards, pill buttons, and 40px-blur shadows are gone. Cards are
+  now flat white with an 8px radius, a visible 1px border, and a hairline
+  shadow; buttons and inputs are rectangular (6px); badges are 4px chips.
+  `brand.dark` changed from teal `#2A9D8F` to a true dark green `#2E7D5B`
+  (primary buttons now pass WCAG contrast), the page background darkened
+  slightly, and borders darkened so blocks visibly separate. The sidebar is
+  attached to the screen edge instead of floating, card headers gained a
+  bottom border, table headers a tinted background, spacing tightened
+  throughout, and section kickers are small uppercase labels. The confirm
+  modal and toasts dropped their glassmorphism/shimmer for plain bordered
+  white. The login page is untouched. Restrained motion was added on top:
+  cards rise in with a short stagger on page load, dashboard stat numbers
+  count up, the "WAF Active" dot pulses, primary buttons compress slightly
+  on press, arrow links nudge on hover, and modals scale in from their
+  trigger — all guarded by `prefers-reduced-motion`. One hidden touch:
+  click the sidebar shield five times quickly.
+
 ### Added
 - **Admin login: TOTP two-factor authentication.** Sign-in can now require a
   6-digit authenticator code (RFC 6238, pure Go — works with Google

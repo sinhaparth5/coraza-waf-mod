@@ -1,29 +1,24 @@
 {{define "content"}}
-<div class="grid grid-cols-[300px_1fr] gap-6">
+<div class="grid grid-cols-[300px_1fr] gap-4">
 
   <!-- ── Left sidebar: disable form ── -->
   <div class="flex flex-col gap-4">
-    <div class="card p-6">
-      <div class="flex items-center gap-[10px] mb-6">
-        <div class="w-8 h-8 rounded-full bg-brand-tint flex items-center justify-center">
-          <i class="hgi hgi-stroke hgi-rounded hgi-security-block text-[14px] text-brand-dark"></i>
-        </div>
-        <h2 class="text-[17px] font-bold text-slate-900">Disable Rule</h2>
-      </div>
+    <div class="card p-5">
+      {{template "panel-header" (map "Icon" "hgi-security-block" "Title" "Disable Rule")}}
 
       <form hx-post="/admin/waf-rules/disable" hx-target="#waf-content" hx-swap="innerHTML" class="flex flex-col gap-4">
 
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">CRS Rule ID</label>
           <input name="rule_id" type="number" placeholder="e.g. 942100" required
-            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] font-mono outline-none transition-[border] duration-150 text-slate-800 bg-white"
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] font-mono outline-none transition-[border] duration-150 text-slate-800 bg-white"
           />
         </div>
 
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Scope</label>
           <select name="service"
-            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white">
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white">
             <option value="">Global (all services)</option>
             {{range .Services}}
             <option value="{{.Name}}">{{.Name}}</option>
@@ -34,7 +29,7 @@
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Reason <span class="text-slate-400">(optional)</span></label>
           <input name="reason" type="text" placeholder="e.g. false positive on login form"
-            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"
           />
         </div>
 
@@ -70,7 +65,7 @@
       {{if .TopRules}}
       <table class="w-full text-[13px]">
         <thead>
-          <tr class="text-slate-400 text-[11px] font-semibold uppercase tracking-wide">
+          <tr class="text-slate-400 text-[11px] font-semibold uppercase tracking-wide bg-surface">
             <th class="px-4 py-2 text-left">Rule ID</th>
             <th class="px-4 py-2 text-right">Hits</th>
             <th class="px-4 py-2 text-left">Last seen</th>
@@ -86,9 +81,9 @@
             <td class="px-4 py-3 text-slate-500">{{fmtTime .LastSeen}}</td>
             <td class="px-4 py-3">
               {{if .Disabled}}
-              <span class="text-[11px] font-semibold px-[10px] py-1 rounded-full bg-amber-100 text-amber-700">Disabled</span>
+              <span class="text-[11px] font-semibold px-[10px] py-1 rounded bg-amber-100 text-amber-700">Disabled</span>
               {{else}}
-              <span class="text-[11px] font-semibold px-[10px] py-1 rounded-full bg-green-100 text-green-700">Active</span>
+              <span class="text-[11px] font-semibold px-[10px] py-1 rounded bg-green-100 text-green-700">Active</span>
               {{end}}
             </td>
             <td class="px-4 py-3 text-right">
@@ -119,8 +114,8 @@
     <div class="flex flex-col gap-1 px-2 pb-2">
       {{if .Disabled}}
       {{range .Disabled}}
-      <div class="flex items-center gap-3 p-3 rounded-2xl hover:bg-surface transition-colors duration-150">
-        <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-amber-50">
+      <div class="flex items-center gap-3 p-3 rounded-lg hover:bg-surface transition-colors duration-150">
+        <div class="w-10 h-10 rounded-md flex items-center justify-center shrink-0 bg-amber-50">
           <i class="hgi hgi-stroke hgi-rounded hgi-security-block text-base text-amber-500"></i>
         </div>
         <div class="flex-1 min-w-0">
@@ -144,14 +139,14 @@
     <div class="flex flex-col gap-1 px-2 pb-2">
       {{if .ServiceExceptions}}
       {{range .ServiceExceptions}}
-      <div class="flex items-center gap-3 p-3 rounded-2xl hover:bg-surface transition-colors duration-150">
-        <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-brand-tint">
+      <div class="flex items-center gap-3 p-3 rounded-lg hover:bg-surface transition-colors duration-150">
+        <div class="w-10 h-10 rounded-md flex items-center justify-center shrink-0 bg-brand-tint">
           <i class="hgi hgi-stroke hgi-rounded hgi-security-block text-base text-brand-dark"></i>
         </div>
         <div class="flex-1 min-w-0">
           <div class="font-mono text-[14px] font-semibold text-slate-900">
             Rule {{.RuleID}}
-            <span class="ml-1 font-sans text-[11px] font-semibold px-[8px] py-[2px] rounded-full bg-brand-tint text-brand-dark">{{.ServiceName}}</span>
+            <span class="ml-1 font-sans text-[11px] font-semibold px-[8px] py-[2px] rounded bg-brand-tint text-brand-dark">{{.ServiceName}}</span>
           </div>
           <div class="text-[12px] text-slate-500 truncate">
             {{if .Reason}}{{.Reason}}{{else}}No reason given{{end}} · {{fmtTime .CreatedAt}}

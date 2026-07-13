@@ -1,0 +1,8 @@
+{{define "panel-header"}}
+<div class="flex items-center gap-[10px] {{if .Mb}}{{.Mb}}{{else}}mb-6{{end}}">
+  <div class="w-8 h-8 rounded-md {{if .Tint}}{{.Tint}}{{else}}bg-brand-tint{{end}} flex items-center justify-center">
+    <i class="hgi hgi-stroke hgi-rounded {{.Icon}} text-[14px] {{if .Color}}{{.Color}}{{else}}text-brand-dark{{end}}"></i>
+  </div>
+  <h2 class="text-[16px] font-bold text-slate-900">{{.Title}}</h2>
+</div>
+{{end}}

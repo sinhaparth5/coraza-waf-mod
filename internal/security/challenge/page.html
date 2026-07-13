@@ -12,9 +12,9 @@
       --ink: #232323;
       --muted: #595959;
       --faint: #8a8f8a;
-      --line: #e3e6e3;
-      --green: #3aab6a;
-      --green-dark: #2f8f57;
+      --line: #d9dee3;
+      --green: #2e7d5b;
+      --green-dark: #276c4e;
       --red: #c2452d;
     }
     @media (prefers-color-scheme: dark) {
@@ -100,9 +100,16 @@
     .widget[data-state="fail"] p { color: var(--red); }
     @keyframes spin { to { transform: rotate(360deg); } }
     @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .wordmark, h1, .sub, .widget, .hint { animation: rise .35s cubic-bezier(.16, 1, .3, 1) backwards; }
+    h1 { animation-delay: .05s; }
+    .sub { animation-delay: .1s; }
+    .widget { animation-delay: .15s; }
+    .hint { animation-delay: .2s; }
     @media (prefers-reduced-motion: reduce) {
       .spinner { animation: none; }
       .widget[data-state="ok"] .check { animation: none; }
+      .wordmark, h1, .sub, .widget, .hint { animation: none; }
     }
     .hint {
       font-size: 14px;
@@ -168,9 +175,10 @@
 </div>
 
 <script src="/_cz/fp.js"></script>
+<script type="application/json" id="cz-config">{{.ConfigJSON}}</script>
 <script>
 (function () {
-  var cfg = {{.ConfigJSON}};
+  var cfg = JSON.parse(document.getElementById('cz-config').textContent);
   var widget = document.getElementById('widget');
   var msg = document.getElementById('widget-msg');
   var hint = document.getElementById('hint');

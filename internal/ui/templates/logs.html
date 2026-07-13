@@ -1,20 +1,20 @@
 {{define "actions"}}
 {{if not .History}}
 <button id="pause-btn"
-  class="flex items-center gap-[6px] border border-line bg-white rounded-full px-4 py-2 text-[14px] font-medium text-slate-500 cursor-pointer font-sans">
+  class="flex items-center gap-[6px] border border-line bg-white rounded-md px-4 py-2 text-[14px] font-medium text-slate-500 cursor-pointer font-sans">
   <i id="pause-icon" class="hgi hgi-stroke hgi-rounded hgi-pause text-[13px]"></i>
   <span id="pause-label">Pause</span>
 </button>
 {{else}}
 <a href="{{$.AdminPath}}/logs"
-  class="flex items-center gap-[6px] border border-line bg-white rounded-full px-4 py-2 text-[14px] font-medium text-slate-500 cursor-pointer no-underline">
+  class="flex items-center gap-[6px] border border-line bg-white rounded-md px-4 py-2 text-[14px] font-medium text-slate-500 cursor-pointer no-underline">
   <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02 text-[13px] text-brand"></i>
   Back to live
 </a>
 {{end}}
 <a id="export-link"
    href="{{$.AdminPath}}/logs/export{{if or .FilterApp .FilterStatus .FilterFrom .FilterTo}}?app={{.FilterApp}}&status={{.FilterStatus}}&from={{.FilterFrom}}&to={{.FilterTo}}{{end}}"
-   class="flex items-center gap-[6px] border border-line bg-white rounded-full px-4 py-2 text-[14px] font-medium text-slate-500 hover:text-slate-700 no-underline transition-colors">
+   class="flex items-center gap-[6px] border border-line bg-white rounded-md px-4 py-2 text-[14px] font-medium text-slate-500 hover:text-slate-700 no-underline transition-colors">
   <i class="hgi hgi-stroke hgi-rounded hgi-download-02 text-[13px]"></i>
   Export NDJSON
 </a>
@@ -30,7 +30,7 @@
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">From</label>
     <input type="hidden" name="from" id="filter-from" value="{{.FilterFrom}}">
     <button type="button" id="filter-from-btn"
-      class="flex items-center gap-2 border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[210px] hover:border-slate-300 focus:outline-none transition-colors">
+      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[210px] hover:border-slate-300 focus:outline-none transition-colors">
       <i class="hgi hgi-stroke hgi-rounded hgi-calendar-02 text-[14px] text-slate-400 shrink-0"></i>
       <span id="filter-from-display" class="flex-1 text-left text-slate-400">Any date</span>
     </button>
@@ -41,7 +41,7 @@
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">To</label>
     <input type="hidden" name="to" id="filter-to" value="{{.FilterTo}}">
     <button type="button" id="filter-to-btn"
-      class="flex items-center gap-2 border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[210px] hover:border-slate-300 focus:outline-none transition-colors">
+      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[210px] hover:border-slate-300 focus:outline-none transition-colors">
       <i class="hgi hgi-stroke hgi-rounded hgi-calendar-02 text-[14px] text-slate-400 shrink-0"></i>
       <span id="filter-to-display" class="flex-1 text-left text-slate-400">Any date</span>
     </button>
@@ -52,12 +52,12 @@
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">App</label>
     <input type="hidden" name="app" id="filter-app" value="{{.FilterApp}}">
     <button type="button" id="filter-app-btn"
-      class="flex items-center gap-2 border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[145px] hover:border-slate-300 focus:outline-none transition-colors">
+      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[145px] hover:border-slate-300 focus:outline-none transition-colors">
       <span id="filter-app-display" class="flex-1 text-left text-slate-700">All apps</span>
       <i class="hgi hgi-stroke hgi-rounded hgi-arrow-down-01 text-[11px] text-slate-400 shrink-0"></i>
     </button>
     <div id="filter-app-dropdown"
-      class="hidden absolute top-full left-0 mt-1 z-50 bg-white border border-line rounded-[12px] py-1 min-w-full"
+      class="hidden absolute top-full left-0 mt-1 z-50 bg-white border border-line rounded-md py-1 min-w-full"
       style="box-shadow:0 8px 28px rgba(0,0,0,.10);">
       <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="" data-label="All apps">All apps</button>
       {{range .Apps}}
@@ -71,12 +71,12 @@
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">Status</label>
     <input type="hidden" name="status" id="filter-status" value="{{.FilterStatus}}">
     <button type="button" id="filter-status-btn"
-      class="flex items-center gap-2 border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[155px] hover:border-slate-300 focus:outline-none transition-colors">
+      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[155px] hover:border-slate-300 focus:outline-none transition-colors">
       <span id="filter-status-display" class="flex-1 text-left text-slate-700">All statuses</span>
       <i class="hgi hgi-stroke hgi-rounded hgi-arrow-down-01 text-[11px] text-slate-400 shrink-0"></i>
     </button>
     <div id="filter-status-dropdown"
-      class="hidden absolute top-full left-0 mt-1 z-50 bg-white border border-line rounded-[12px] py-1 min-w-[170px]"
+      class="hidden absolute top-full left-0 mt-1 z-50 bg-white border border-line rounded-md py-1 min-w-[170px]"
       style="box-shadow:0 8px 28px rgba(0,0,0,.10);">
       <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="" data-label="All statuses">All statuses</button>
       <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="blocked" data-label="Blocked only">Blocked only</button>
@@ -114,14 +114,14 @@
   <span class="w-px h-4 bg-line block"></span>
   <span class="text-[12px] text-slate-500">New entries appear at the top</span>
   <span class="flex-1"></span>
-  <div class="inline-flex items-center rounded-full border border-line p-1 bg-surface" role="tablist" aria-label="Log view">
+  <div class="inline-flex items-center rounded-md border border-line p-1 bg-surface" role="tablist" aria-label="Log view">
     <button type="button" id="view-table-btn" role="tab" aria-selected="true"
-      class="flex items-center gap-[6px] px-3 py-[6px] text-[12px] font-medium rounded-full bg-white text-slate-800 shadow-sm cursor-pointer transition-colors duration-150">
+      class="flex items-center gap-[6px] px-3 py-[6px] text-[12px] font-medium rounded bg-white text-slate-800 shadow-sm cursor-pointer transition-colors duration-150">
       <i class="hgi hgi-stroke hgi-rounded hgi-menu-square text-[12px]"></i>
       Table
     </button>
     <button type="button" id="view-terminal-btn" role="tab" aria-selected="false"
-      class="flex items-center gap-[6px] px-3 py-[6px] text-[12px] font-medium rounded-full text-slate-500 cursor-pointer transition-colors duration-150">
+      class="flex items-center gap-[6px] px-3 py-[6px] text-[12px] font-medium rounded text-slate-500 cursor-pointer transition-colors duration-150">
       <i class="hgi hgi-stroke hgi-rounded hgi-code text-[12px]"></i>
       Terminal
     </button>
@@ -192,12 +192,12 @@
 <div class="flex items-center justify-center gap-3 mt-4">
   {{if gt .CurPage 1}}
   <a href="?from={{.FilterFrom}}&to={{.FilterTo}}&app={{.FilterApp}}&status={{.FilterStatus}}&mode=history&page={{sub .CurPage 1}}"
-     class="text-[13px] text-slate-500 border border-line rounded-full px-4 py-2 no-underline">← Prev</a>
+     class="text-[13px] text-slate-500 border border-line rounded-md px-4 py-2 no-underline">← Prev</a>
   {{end}}
   <span class="text-[13px] text-slate-500">Page {{.CurPage}} of {{.TotalPages}}</span>
   {{if lt .CurPage .TotalPages}}
   <a href="?from={{.FilterFrom}}&to={{.FilterTo}}&app={{.FilterApp}}&status={{.FilterStatus}}&mode=history&page={{add .CurPage 1}}"
-     class="text-[13px] text-slate-500 border border-line rounded-full px-4 py-2 no-underline">Next →</a>
+     class="text-[13px] text-slate-500 border border-line rounded-md px-4 py-2 no-underline">Next →</a>
   {{end}}
 </div>
 {{else}}
@@ -216,7 +216,7 @@
      class="hidden fixed inset-0 z-[300] flex items-center justify-center p-4"
      style="background:rgba(15,23,42,.45);backdrop-filter:blur(4px);">
   <div id="log-detail-modal"
-       class="bg-white rounded-[28px] border border-line w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden"
+       class="bg-white rounded-lg border border-line w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden"
        style="box-shadow:0 24px 80px rgba(0,0,0,.18);">
 
     <!-- Modal header bar -->
@@ -225,7 +225,7 @@
       <span id="ld-path"   class="mono text-[13px] text-slate-700 flex-1 truncate min-w-0"></span>
       <span id="ld-status" class="font-bold text-[15px] shrink-0 tabular-nums"></span>
       <button id="log-detail-close"
-              class="w-8 h-8 flex items-center justify-center rounded-full bg-surface border border-line text-slate-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors cursor-pointer shrink-0 ml-1">
+              class="w-8 h-8 flex items-center justify-center rounded-md bg-surface border border-line text-slate-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors cursor-pointer shrink-0 ml-1">
         <i class="hgi hgi-stroke hgi-rounded hgi-cancel-01 text-[13px]"></i>
       </button>
     </div>
@@ -273,12 +273,12 @@
       <div>
         <p class="ld-section-title">IP Addresses</p>
         <div class="grid grid-cols-2 gap-3">
-          <div class="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+          <div class="bg-amber-50 border border-amber-100 rounded-lg p-4">
             <p class="text-[10px] text-amber-600 font-semibold uppercase tracking-[.06em] mb-2">Real Client IP</p>
             <p id="ld-real-ip" class="mono text-[15px] font-bold text-amber-700 break-all"></p>
             <p class="text-[11px] text-amber-400 mt-1">CF-Connecting-IP / X-Forwarded-For</p>
           </div>
-          <div class="bg-slate-50 border border-line rounded-2xl p-4">
+          <div class="bg-slate-50 border border-line rounded-lg p-4">
             <p class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.06em] mb-2">Proxy / CDN IP</p>
             <p id="ld-proxy-ip" class="mono text-[15px] font-bold text-slate-600 break-all"></p>
             <p class="text-[11px] text-slate-400 mt-1">direct TCP connection source</p>
@@ -289,7 +289,7 @@
       <!-- ③ Network (ASN / ISP) -->
       <div>
         <p class="ld-section-title">Network</p>
-        <div class="bg-surface border border-line rounded-2xl overflow-hidden">
+        <div class="bg-surface border border-line rounded-lg overflow-hidden">
           <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
             <i class="hgi hgi-stroke hgi-rounded hgi-wifi-router-01 text-slate-400 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
@@ -310,7 +310,7 @@
       <!-- ④ Connection (protocol + TLS) -->
       <div>
         <p class="ld-section-title">Connection</p>
-        <div class="bg-surface border border-line rounded-2xl overflow-hidden">
+        <div class="bg-surface border border-line rounded-lg overflow-hidden">
           <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
             <i class="hgi hgi-stroke hgi-rounded hgi-layers-01 text-slate-400 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
@@ -338,7 +338,7 @@
       <!-- ⑤ Bot Analysis (hidden when no data) -->
       <div id="ld-bot-section" class="hidden">
         <p class="ld-section-title">Bot Analysis</p>
-        <div class="bg-surface border border-line rounded-2xl overflow-hidden">
+        <div class="bg-surface border border-line rounded-lg overflow-hidden">
           <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
             <i class="hgi hgi-stroke hgi-rounded hgi-bot text-slate-400 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
@@ -373,7 +373,7 @@
       <!-- ⑤.5 Threat Score (hidden until this IP has a recorded score) -->
       <div id="ld-threat-section" class="hidden">
         <p class="ld-section-title">Threat Score</p>
-        <div class="bg-surface border border-line rounded-2xl overflow-hidden">
+        <div class="bg-surface border border-line rounded-lg overflow-hidden">
           <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
             <i class="hgi hgi-stroke hgi-rounded hgi-shield-energy text-slate-400 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
@@ -394,7 +394,7 @@
       <!-- ⑥ Security (only when blocked) -->
       <div id="ld-security" class="hidden">
         <p class="ld-section-title">Security Decision</p>
-        <div class="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-start gap-3">
+        <div class="bg-red-50 border border-red-100 rounded-lg p-4 flex items-start gap-3">
           <i class="hgi hgi-stroke hgi-rounded hgi-shield-minus text-red-500 text-[22px] shrink-0 mt-[1px]"></i>
           <div>
             <p class="text-[13px] font-semibold text-red-700">Request Blocked</p>
@@ -406,7 +406,7 @@
       <!-- ⑥ Request Headers -->
       <div>
         <p class="ld-section-title">Request Headers</p>
-        <div id="ld-headers" class="bg-surface rounded-2xl border border-line overflow-hidden text-[12px]"></div>
+        <div id="ld-headers" class="bg-surface rounded-lg border border-line overflow-hidden text-[12px]"></div>
       </div>
 
     </div><!-- /body -->

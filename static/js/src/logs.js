@@ -36,8 +36,8 @@
     self.isOpen = false;
 
     self.pop = document.createElement('div');
-    self.pop.className = 'fixed z-[250] bg-white border border-line rounded-[18px] select-none overflow-hidden';
-    self.pop.style.cssText = 'display:none;box-shadow:0 8px 40px rgba(0,0,0,.15);width:272px;';
+    self.pop.className = 'fixed z-[250] bg-white border border-line rounded-lg select-none overflow-hidden';
+    self.pop.style.cssText = 'display:none;box-shadow:0 4px 12px rgba(16,24,40,.10);width:272px;';
     self.pop.__dp = self;
     document.body.appendChild(self.pop);
 
@@ -159,15 +159,15 @@
     // ── Time ──
     html += '<div class="flex items-center gap-2 mt-3 pt-3 border-t border-line">';
     html += '<i class="hgi hgi-stroke hgi-rounded hgi-clock-01 text-slate-400 text-[13px] shrink-0"></i>';
-    html += '<input class="dp-hour border border-line rounded-[8px] w-11 text-center text-[13px] py-[5px] outline-none text-slate-700 tabular-nums focus:border-brand" type="number" min="0" max="23" value="' + selH + '">';
+    html += '<input class="dp-hour border border-line rounded-md w-11 text-center text-[13px] py-[5px] outline-none text-slate-700 tabular-nums focus:border-brand" type="number" min="0" max="23" value="' + selH + '">';
     html += '<span class="text-slate-400 text-[14px] font-semibold select-none">:</span>';
-    html += '<input class="dp-min border border-line rounded-[8px] w-11 text-center text-[13px] py-[5px] outline-none text-slate-700 tabular-nums focus:border-brand" type="number" min="0" max="59" value="' + selMi + '">';
+    html += '<input class="dp-min border border-line rounded-md w-11 text-center text-[13px] py-[5px] outline-none text-slate-700 tabular-nums focus:border-brand" type="number" min="0" max="59" value="' + selMi + '">';
     html += '<span class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider ml-1 select-none">UTC</span>';
     html += '</div>';
     // ── Actions ──
     html += '<div class="flex items-center justify-between mt-3">';
     html += '<button type="button" class="dp-clear text-[12px] text-slate-400 hover:text-slate-600 cursor-pointer py-1">Clear</button>';
-    html += '<button type="button" class="dp-apply text-[13px] font-semibold text-white bg-brand px-4 py-[7px] rounded-[9px] cursor-pointer">Apply</button>';
+    html += '<button type="button" class="dp-apply text-[13px] font-semibold text-white bg-brand-dark px-4 py-[7px] rounded-md cursor-pointer">Apply</button>';
     html += '</div></div>';
 
     self.pop.innerHTML = html;

@@ -45,7 +45,7 @@ func TestDashboardTemplateRendersAtAGlanceCards(t *testing.T) {
 
 // TestBaseTemplateCarriesCSRF renders a full page and checks the CSRF token
 // lands where the clients pick it up: hx-headers on <body> (HTMX requests),
-// data-csrf (fetch calls in app.js), and the logout form's hidden input.
+// data-csrf (fetch calls in clipboard.js/notify.js), and the logout form's hidden input.
 func TestBaseTemplateCarriesCSRF(t *testing.T) {
 	h := &Handler{}
 	if err := h.parseTemplates(); err != nil {

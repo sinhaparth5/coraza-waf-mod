@@ -2562,7 +2562,7 @@ func (h *Handler) render(c echo.Context, page string, data map[string]any) error
 	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
 	// no-store keeps these pages out of the browser's back/forward cache.
 	// Without it, navigating away leaves the previous page (and its live
-	// notifications/logs EventSource, see app.js and logs.html) frozen in
+	// notifications/logs EventSource, see notify.js and logs.html) frozen in
 	// bfcache instead of torn down, so each connection stays open for as long
 	// as that bfcache entry survives. A few quick page navigations can pile
 	// up more open SSE connections than Chrome's ~6-per-origin HTTP/1.1 limit

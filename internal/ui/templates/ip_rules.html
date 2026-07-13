@@ -1,29 +1,24 @@
 {{define "content"}}
-<div class="grid grid-cols-[300px_1fr] gap-6">
+<div class="grid grid-cols-[300px_1fr] gap-4">
 
   <!-- ── Left sidebar: form + overview + activity ── -->
   <div class="flex flex-col gap-4">
-    <div class="card p-6">
-      <div class="flex items-center gap-[10px] mb-6">
-        <div class="w-8 h-8 rounded-full bg-brand-tint flex items-center justify-center">
-          <i class="hgi hgi-stroke hgi-rounded hgi-add-circle text-[14px] text-brand-dark"></i>
-        </div>
-        <h2 class="text-[17px] font-bold text-slate-900">Add IP Rule</h2>
-      </div>
+    <div class="card p-5">
+      {{template "panel-header" (map "Icon" "hgi-add-circle" "Title" "Add IP Rule")}}
 
       <form hx-post="/admin/ip-rules" hx-target="#ip-rules-body" hx-swap="innerHTML" class="flex flex-col gap-4">
 
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">IP Address</label>
           <input name="ip" type="text" placeholder="1.2.3.4 or 10.0.0.0/8" required
-            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] font-mono outline-none transition-[border] duration-150 text-slate-800 bg-white"
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] font-mono outline-none transition-[border] duration-150 text-slate-800 bg-white"
             />
         </div>
 
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Scope</label>
           <select name="app_name"
-            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white transition-[border] duration-150"
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white transition-[border] duration-150"
             >
             <option value="">Global (all apps)</option>
             {{range .Apps}}<option value="{{.Name}}">{{.Name}} only</option>{{end}}
@@ -53,11 +48,11 @@
       <div class="mt-5 pt-4 border-t border-canvas">
         <div class="flex flex-col gap-2">
           <div class="flex items-center gap-2 text-[12px] text-slate-500">
-            <span class="bg-red-100 text-red-600 px-2 py-[2px] rounded-full font-semibold text-[11px]">Block</span>
+            <span class="bg-red-100 text-red-600 px-2 py-[2px] rounded font-semibold text-[11px]">Block</span>
             deny all requests from this IP
           </div>
           <div class="flex items-center gap-2 text-[12px] text-slate-500">
-            <span class="bg-green-100 text-green-600 px-2 py-[2px] rounded-full font-semibold text-[11px]">Allow</span>
+            <span class="bg-green-100 text-green-600 px-2 py-[2px] rounded font-semibold text-[11px]">Allow</span>
             whitelist, bypasses other blocks
           </div>
           <p class="text-[12px] text-slate-500 mt-[2px]">Per-app rules take priority over global. CIDR ranges (e.g. 10.0.0.0/8) are supported.</p>
@@ -69,40 +64,12 @@
     {{template "adaptive-card" .}}
 
     <!-- Rules overview -->
-    <div class="rounded-[28px] bg-navy p-6 flex flex-col gap-2">
+    <div class="rounded-lg bg-navy p-6 flex flex-col gap-2">
       <p class="text-[12px] text-white/50 mb-1">Rules overview</p>
 
-      <div class="flex items-center gap-3 rounded-2xl border border-white/10 px-4 py-3">
-        <div class="relative w-10 h-10 shrink-0">
-          <svg viewBox="0 0 40 40" class="w-10 h-10 -rotate-90">
-            <circle cx="20" cy="20" r="16" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
-            <circle cx="20" cy="20" r="16" fill="none" stroke="#FF8B8B" stroke-width="4" pathLength="100"
-              stroke-dasharray="{{.BlockPct}} 100" stroke-linecap="round"/>
-          </svg>
-          <span class="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-white">{{.BlockPct}}%</span>
-        </div>
-        <div class="flex-1 min-w-0">
-          <p class="text-[13px] font-semibold text-white">Block rules</p>
-          <p class="text-[11px] text-white/50">deny matching traffic</p>
-        </div>
-        <span class="text-[11px] font-semibold bg-white/10 text-white px-[10px] py-1 rounded-full shrink-0">{{.BlockCount}} rules</span>
-      </div>
+      {{template "rule-ring-row" (map "Color" "#FF8B8B" "Pct" .BlockPct "Title" "Block rules" "Sub" "deny matching traffic" "Count" .BlockCount)}}
 
-      <div class="flex items-center gap-3 rounded-2xl border border-white/10 px-4 py-3">
-        <div class="relative w-10 h-10 shrink-0">
-          <svg viewBox="0 0 40 40" class="w-10 h-10 -rotate-90">
-            <circle cx="20" cy="20" r="16" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
-            <circle cx="20" cy="20" r="16" fill="none" stroke="#76C893" stroke-width="4" pathLength="100"
-              stroke-dasharray="{{.AllowPct}} 100" stroke-linecap="round"/>
-          </svg>
-          <span class="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-white">{{.AllowPct}}%</span>
-        </div>
-        <div class="flex-1 min-w-0">
-          <p class="text-[13px] font-semibold text-white">Allow rules</p>
-          <p class="text-[11px] text-white/50">whitelist, bypasses other blocks</p>
-        </div>
-        <span class="text-[11px] font-semibold bg-white/10 text-white px-[10px] py-1 rounded-full shrink-0">{{.AllowCount}} rules</span>
-      </div>
+      {{template "rule-ring-row" (map "Color" "#76C893" "Pct" .AllowPct "Title" "Allow rules" "Sub" "whitelist, bypasses other blocks" "Count" .AllowCount)}}
     </div>
 
   </div>
@@ -119,42 +86,33 @@
 {{end}}
 
 {{define "autoban-card"}}
-<div class="card p-6" id="autoban-card">
-  <div class="flex items-center gap-[10px] mb-2">
-    <div class="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center">
-      <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-[14px] text-red-500"></i>
-    </div>
-    <h2 class="text-[17px] font-bold text-slate-900">Automatic banning</h2>
-  </div>
+<div class="card p-5" id="autoban-card">
+  {{template "panel-header" (map "Icon" "hgi-cancel-circle" "Title" "Automatic banning" "Tint" "bg-red-50" "Color" "text-red-500" "Mb" "mb-2")}}
   <p class="text-[12px] text-slate-500 mb-4">Repeat offenders and severe attacks (SQL injection, RCE, XSS classes) are banned permanently once they cross the score below. Bans appear in the list as <span class="font-semibold text-slate-600">Auto</span> rules and can be removed like any other.</p>
 
   {{if .AutobanSaveOK}}
-  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Saved. Automatic banning settings applied.</div>
+  <div class="rounded-md bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Saved. Automatic banning settings applied.</div>
   {{end}}
   {{if .AutobanSaveErr}}
-  <div class="rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px] px-4 py-3 mb-4">{{.AutobanSaveErr}}</div>
+  <div class="rounded-md bg-red-50 border border-red-200 text-red-600 text-[13px] px-4 py-3 mb-4">{{.AutobanSaveErr}}</div>
   {{end}}
 
   <form hx-post="/admin/ip-rules/autoban" hx-target="#autoban-card" hx-swap="outerHTML" class="flex flex-col gap-4">
     <label class="flex items-center justify-between cursor-pointer">
       <span class="text-[13px] font-medium text-slate-700">Ban IPs automatically</span>
-      <span class="relative inline-block">
-        <input type="checkbox" name="autoban_enabled" value="1" class="peer sr-only" {{if .AutobanEnabled}}checked{{end}}/>
-        <span class="block w-10 h-6 bg-slate-200 peer-checked:bg-brand rounded-full transition-colors duration-200 peer-focus:outline-none"></span>
-        <span class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-4"></span>
-      </span>
+      {{template "toggle-switch" (map "Name" "autoban_enabled" "Checked" .AutobanEnabled)}}
     </label>
 
     <div class="grid grid-cols-2 gap-3">
       <div>
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Ban score</label>
         <input name="autoban_threshold" type="number" min="1" max="1000" value="{{.AutobanThresh}}"
-          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
       </div>
       <div>
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Window (min)</label>
         <input name="autoban_window" type="number" min="1" max="1440" value="{{.AutobanWindow}}"
-          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
       </div>
     </div>
     <p class="text-[12px] text-slate-500 -mt-1">Scoring inside the window: critical WAF hit = 5, other WAF hit = 2, rate-limited = 1, unsolved bot challenge = 1. Private and allow-listed IPs are never banned.</p>
@@ -168,57 +126,48 @@
 {{end}}
 
 {{define "adaptive-card"}}
-<div class="card p-6" id="adaptive-card">
-  <div class="flex items-center gap-[10px] mb-2">
-    <div class="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center">
-      <i class="hgi hgi-stroke hgi-rounded hgi-shield-energy text-[14px] text-amber-600"></i>
-    </div>
-    <h2 class="text-[17px] font-bold text-slate-900">Adaptive enforcement</h2>
-  </div>
+<div class="card p-5" id="adaptive-card">
+  {{template "panel-header" (map "Icon" "hgi-shield-energy" "Title" "Adaptive enforcement" "Tint" "bg-amber-50" "Color" "text-amber-600" "Mb" "mb-2")}}
   <p class="text-[12px] text-slate-500 mb-4">Scales the global rate limit and can force a bot challenge based on each client's current <span class="font-semibold text-slate-600">threat score</span> (shown per row above): tighter for high-risk IPs, relaxed for low-risk ones. Reversible: every request re-checks the live score, so this never permanently blocks anyone the way Automatic banning does.</p>
 
   {{if .AdaptiveSaveOK}}
-  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Saved. Adaptive enforcement settings applied.</div>
+  <div class="rounded-md bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Saved. Adaptive enforcement settings applied.</div>
   {{end}}
   {{if .AdaptiveSaveErr}}
-  <div class="rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px] px-4 py-3 mb-4">{{.AdaptiveSaveErr}}</div>
+  <div class="rounded-md bg-red-50 border border-red-200 text-red-600 text-[13px] px-4 py-3 mb-4">{{.AdaptiveSaveErr}}</div>
   {{end}}
 
   <form hx-post="/admin/ip-rules/adaptive" hx-target="#adaptive-card" hx-swap="outerHTML" class="flex flex-col gap-4">
     <label class="flex items-center justify-between cursor-pointer">
       <span class="text-[13px] font-medium text-slate-700">Adjust enforcement automatically</span>
-      <span class="relative inline-block">
-        <input type="checkbox" name="adaptive_enabled" value="1" class="peer sr-only" {{if .AdaptiveEnabled}}checked{{end}}/>
-        <span class="block w-10 h-6 bg-slate-200 peer-checked:bg-brand rounded-full transition-colors duration-200 peer-focus:outline-none"></span>
-        <span class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-4"></span>
-      </span>
+      {{template "toggle-switch" (map "Name" "adaptive_enabled" "Checked" .AdaptiveEnabled)}}
     </label>
 
     <div class="grid grid-cols-2 gap-3">
       <div>
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">High-risk threshold (score ≥)</label>
         <input name="adaptive_high_threshold" type="number" min="1" max="100" value="{{.AdaptiveHighThresh}}"
-          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
       </div>
       <div>
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Low-risk threshold (score ≤)</label>
         <input name="adaptive_low_threshold" type="number" min="0" max="99" value="{{.AdaptiveLowThresh}}"
-          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
       </div>
       <div>
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">High-risk rate scale</label>
         <input name="adaptive_high_rate_scale" type="number" min="0.05" max="1" step="0.05" value="{{.AdaptiveHighScale}}"
-          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
       </div>
       <div>
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Low-risk rate scale</label>
         <input name="adaptive_low_rate_scale" type="number" min="1" max="5" step="0.05" value="{{.AdaptiveLowScale}}"
-          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
       </div>
       <div class="col-span-2">
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Force bot challenge (score ≥)</label>
         <input name="adaptive_force_challenge_threshold" type="number" min="1" max="100" value="{{.AdaptiveForceChallenge}}"
-          class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
       </div>
     </div>
     <p class="text-[12px] text-slate-500 -mt-1">Rate scale multiplies the global limit's rate and burst: 0.3 means 30% of normal for high-risk IPs, 1.5 means 150% of normal for low-risk ones. Blocked/challenged rows from adaptive enforcement show up in Logs tagged <span class="mono">:adaptive</span>.</p>
@@ -233,8 +182,8 @@
 
 {{define "ip-rules-rows"}}
 {{range .Rules}}
-<div class="flex items-center gap-3 p-3 rounded-2xl hover:bg-surface transition-colors duration-150">
-  <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0 {{if eq .RuleType "block"}}bg-red-50{{else}}bg-brand-tint{{end}}">
+<div class="flex items-center gap-3 p-3 rounded-lg hover:bg-surface transition-colors duration-150">
+  <div class="w-10 h-10 rounded-md flex items-center justify-center shrink-0 {{if eq .RuleType "block"}}bg-red-50{{else}}bg-brand-tint{{end}}">
     {{if eq .RuleType "block"}}
     <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-base text-red-500"></i>
     {{else}}
@@ -246,14 +195,14 @@
     <div class="text-[12px] text-slate-500 truncate">{{if .AppName}}{{.AppName}}{{else}}Global{{end}} · {{fmtTime .CreatedAt}}{{if .Note}} · {{.Note}}{{end}}</div>
   </div>
   {{if .Auto}}
-  <span class="text-[12px] font-semibold px-[10px] py-1 rounded-full shrink-0 bg-amber-100 text-amber-700">Auto</span>
+  <span class="text-[12px] font-semibold px-[10px] py-1 rounded shrink-0 bg-amber-100 text-amber-700">Auto</span>
   {{end}}
   {{$score := 0}}
   {{if $.ThreatScores}}{{$score = index $.ThreatScores .IP}}{{end}}
-  <span class="text-[12px] font-semibold px-[10px] py-1 rounded-full shrink-0 bg-slate-100 text-slate-600" title="Composite threat score (0-100)">
+  <span class="text-[12px] font-semibold px-[10px] py-1 rounded shrink-0 bg-slate-100 text-slate-600" title="Composite threat score (0-100)">
     {{if gt $score 0}}Score {{$score}}{{else}}Score —{{end}}
   </span>
-  <span class="text-[12px] font-semibold px-[10px] py-1 rounded-full shrink-0 {{if eq .RuleType "block"}}bg-red-100 text-red-600{{else}}bg-green-100 text-green-600{{end}}">{{if eq .RuleType "block"}}Block{{else}}Allow{{end}}</span>
+  {{template "rule-type-badge" .RuleType}}
   {{template "remove-btn" (map "URL" (printf "%s/ip-rules/%d?page=%d" $.AdminPath .ID $.CurPage) "Target" "#ip-rules-body" "Confirm" (printf "Remove rule for %s?" .IP))}}
 </div>
 {{else}}
@@ -264,17 +213,17 @@
   <button type="button"
           {{if gt $.CurPage 1}}
           hx-get="{{$.AdminPath}}/ip-rules/rows?page={{sub $.CurPage 1}}" hx-target="#ip-rules-body" hx-swap="innerHTML"
-          class="text-[13px] font-medium rounded-full px-4 py-2 border border-line text-slate-600 hover:bg-surface transition-colors duration-150 cursor-pointer"
+          class="text-[13px] font-medium rounded-md px-4 py-2 border border-line text-slate-600 hover:bg-surface transition-colors duration-150 cursor-pointer"
           {{else}}
-          disabled class="text-[13px] font-medium rounded-full px-4 py-2 border border-line text-slate-300 cursor-not-allowed"
+          disabled class="text-[13px] font-medium rounded-md px-4 py-2 border border-line text-slate-300 cursor-not-allowed"
           {{end}}>← Prev</button>
   <span class="text-[13px] text-slate-500">Page {{$.CurPage}} of {{$.TotalPages}} · {{$.Total}} rules</span>
   <button type="button"
           {{if lt $.CurPage $.TotalPages}}
           hx-get="{{$.AdminPath}}/ip-rules/rows?page={{add $.CurPage 1}}" hx-target="#ip-rules-body" hx-swap="innerHTML"
-          class="text-[13px] font-medium rounded-full px-4 py-2 border border-line text-slate-600 hover:bg-surface transition-colors duration-150 cursor-pointer"
+          class="text-[13px] font-medium rounded-md px-4 py-2 border border-line text-slate-600 hover:bg-surface transition-colors duration-150 cursor-pointer"
           {{else}}
-          disabled class="text-[13px] font-medium rounded-full px-4 py-2 border border-line text-slate-300 cursor-not-allowed"
+          disabled class="text-[13px] font-medium rounded-md px-4 py-2 border border-line text-slate-300 cursor-not-allowed"
           {{end}}>Next →</button>
 </div>
 {{end}}

@@ -1,15 +1,10 @@
 {{define "content"}}
-<div class="grid grid-cols-2 gap-6">
+<div class="grid grid-cols-2 gap-4">
 
   <!-- ── Left: upload form ── -->
   <div class="flex flex-col gap-4">
-    <div class="card p-6">
-      <div class="flex items-center gap-[10px] mb-6">
-        <div class="w-8 h-8 rounded-full bg-brand-tint flex items-center justify-center">
-          <i class="hgi hgi-stroke hgi-rounded hgi-certificate-01 text-[14px] text-brand-dark"></i>
-        </div>
-        <h2 class="text-[17px] font-bold text-slate-900">Add Certificate</h2>
-      </div>
+    <div class="card p-5">
+      {{template "panel-header" (map "Icon" "hgi-certificate-01" "Title" "Add Certificate")}}
 
       <form id="cert-upload-form"
             hx-post="{{.AdminPath}}/certificates"
@@ -24,7 +19,7 @@
           </label>
           <input id="cert-name" name="name" type="text"
             placeholder="e.g. cloudflare-example-com"
-            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
         </div>
 
         <div>
@@ -42,7 +37,7 @@
             data-fills="cert-pem" data-names="cert-name"/>
           <textarea id="cert-pem" name="cert_pem" rows="5"
             placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
-            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[12px] font-mono outline-none text-slate-800 bg-white resize-y"></textarea>
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[12px] font-mono outline-none text-slate-800 bg-white resize-y"></textarea>
         </div>
 
         <div>
@@ -60,7 +55,7 @@
             data-fills="key-pem"/>
           <textarea id="key-pem" name="key_pem" rows="5"
             placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
-            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[12px] font-mono outline-none text-slate-800 bg-white resize-y"></textarea>
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[12px] font-mono outline-none text-slate-800 bg-white resize-y"></textarea>
         </div>
 
         <div id="cert-error" class="text-[12px] text-red-500 -mt-1"></div>
@@ -89,7 +84,7 @@
     <div class="px-6 pb-6">
       <table class="w-full border-collapse text-[13px]">
         <thead>
-          <tr class="border-b border-canvas">
+          <tr class="border-b border-canvas bg-surface">
             <th class="text-left pb-3 pr-6 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Name</th>
             <th class="text-left pb-3 pr-6 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Domains covered</th>
             <th class="text-left pb-3 pr-6 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Expires</th>
@@ -170,7 +165,7 @@
     {{if .Domains}}
     <div class="flex flex-wrap gap-[6px]">
       {{range (splitComma .Domains)}}
-      <span class="text-[11px] font-mono bg-canvas border border-line rounded-[6px] px-[8px] py-[3px] text-slate-600">{{.}}</span>
+      <span class="text-[11px] font-mono bg-canvas border border-line rounded px-[8px] py-[3px] text-slate-600">{{.}}</span>
       {{end}}
     </div>
     {{else}}

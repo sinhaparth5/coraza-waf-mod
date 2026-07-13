@@ -1,7 +1,15 @@
 # Admin UI redesign plan (internal/ui)
 
-Status: **planned, nothing edited yet**. All findings below come from a survey of the
-current templates; no template, JS, or Go file has been changed for this redesign.
+Status: **implemented (2026-07-13), round two also done, not yet committed**.
+Tasks 1-5 below are complete, plus a second pass: shared components extracted
+(`toggle-switch`, `panel-header`, `rule-ring-row`, `rule-type-badge`), app.js
+split into toast/notify/clipboard/motion.js, logo.svg as favicon + sidebar
+brand, more motion (donut/ring sweep-in, sparkline draw, glance-tile stagger,
+live-row flash, terminal caret, Bot Shield hover bob; hidden: donut click
+replays, shield x5 salutes the nav), challenge page aligned (JSON config tag
+fixes the editor error), and the login page — with the user's explicit OK this
+round — got restrained hints only (logo wordmark, dark-green buttons, flatter
+corners, rise-in). All motion is `prefers-reduced-motion`-guarded.
 
 ## What the user asked for (2026-07-13)
 

@@ -5,6 +5,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Coraza WAF Mod · {{.Heading}}</title>
+  <link rel="icon" type="image/svg+xml" href="{{.AdminPath}}/static/imgs/logo.svg"/>
 
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
@@ -14,12 +15,12 @@
       theme: {
         extend: {
           colors: {
-            brand: { DEFAULT: '#76C893', dark: '#2A9D8F', light: '#9FE0B7', tint: '#EAF7EE' },
+            brand: { DEFAULT: '#76C893', dark: '#2E7D5B', light: '#9FE0B7', tint: '#EAF7EE' },
             navy: '#2B5C74',
             slateblue: '#4A7B96',
-            canvas: '#EAEBED',
-            surface: '#F4F7F9',
-            line: '#E2E5EA',
+            canvas: '#E7E9EC',
+            surface: '#F4F6F8',
+            line: '#D9DEE3',
           },
           fontFamily: {
             sans: ['Plus Jakarta Sans', 'system-ui', '-apple-system', 'sans-serif'],
@@ -37,62 +38,94 @@
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    .card { background: #fff; border-radius: 28px; border: 1px solid #EEF1F3; box-shadow: 0px 10px 40px rgba(0,0,0,0.03); }
-    .btn-primary { background: #76C893; color: #fff; border: none; cursor: pointer; border-radius: 999px; padding: 7px 20px; font-size: 14px; font-weight: 500; font-family: inherit; transition: opacity .15s; }
-    .btn-primary:hover { opacity: .88; }
+    :root { --ease-out: cubic-bezier(.16, 1, .3, 1); --dur-fast: 150ms; --dur-base: 220ms; }
+    .card { background: #fff; border-radius: 8px; border: 1px solid #D8DDE3; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+    .btn-primary { background: #2E7D5B; color: #fff; border: none; cursor: pointer; border-radius: 6px; padding: 7px 16px; font-size: 14px; font-weight: 600; font-family: inherit; transition: background-color var(--dur-fast) ease, transform 100ms ease; }
+    .btn-primary:hover { background: #276C4E; }
+    .btn-primary:active { transform: scale(.97); }
     input, select { font-family: inherit; }
     .focus-green { transition: border-color .15s; }
-    .focus-green:focus { border-color: #76C893 !important; }
+    .focus-green:focus { border-color: #2E7D5B !important; }
+    @keyframes rise-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .anim-in { animation: rise-in var(--dur-base) var(--ease-out) both; }
+    @keyframes modal-pop { from { opacity: 0; transform: scale(.96) translateY(4px); } to { opacity: 1; transform: none; } }
+    .modal-pop { animation: modal-pop 180ms var(--ease-out) both; }
+    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+    .fade-in { animation: fade-in 150ms ease-out both; }
+    @keyframes arc-465 { from { stroke-dasharray: 0 465; } }
+    .donut-arc { animation: arc-465 .8s var(--ease-out); }
+    @keyframes arc-100 { from { stroke-dasharray: 0 100; } }
+    .ring-arc { animation: arc-100 .7s var(--ease-out); }
+    @keyframes spark-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+    .spark-line { stroke-dasharray: 1; animation: spark-draw .9s var(--ease-out); }
+    @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+    .bot-icon:hover svg { animation: bob .5s ease-in-out; }
+    .nudge { animation: shield-nudge .45s var(--ease-out); }
+    @keyframes row-flash { from { background-color: #E2E8F0; } }
+    #log-feed[data-live-stream] > :first-child { animation: row-flash 1.1s ease-out; }
+    @keyframes caret-blink { 50% { opacity: 0; } }
+    #access-log-feed::after { content: "▊"; color: #76C893; animation: caret-blink 1.1s steps(2, start) infinite; }
+    @keyframes dot-pulse { 0% { box-shadow: 0 0 0 0 rgba(118,200,147,.5); } 70% { box-shadow: 0 0 0 6px rgba(118,200,147,0); } 100% { box-shadow: 0 0 0 0 rgba(118,200,147,0); } }
+    .live-dot { animation: dot-pulse 2.4s ease-out infinite; }
+    @keyframes shield-nudge { 0%,100% { transform: rotate(0); } 30% { transform: rotate(-7deg); } 60% { transform: rotate(5deg); } }
+    #brand-logo:hover img { animation: shield-nudge .45s var(--ease-out); }
+    @keyframes shield-guard { 0% { transform: scale(1); } 35% { transform: scale(1.18); } 100% { transform: scale(1); } }
+    #brand-logo.guard { animation: shield-guard .5s var(--ease-out); }
+    #brand-logo.guard::after { content: ""; position: absolute; inset: -4px; border-radius: 10px; border: 2px solid #76C893; opacity: 0; animation: guard-ring .5s var(--ease-out); }
+    @keyframes guard-ring { 0% { opacity: .8; transform: scale(.8); } 100% { opacity: 0; transform: scale(1.35); } }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
   </style>
 </head>
 <body class="min-h-screen bg-canvas text-slate-800 font-sans text-[14px]" data-admin-path="{{.AdminPath}}" data-csrf="{{.CSRF}}" hx-headers='{"X-CSRF-Token":"{{.CSRF}}"}'>
 
 <!-- ── Sidebar Navigation ─────────────────────────────────── -->
-<aside class="fixed left-4 top-4 bottom-4 w-[264px] bg-white rounded-2xl border border-line flex flex-col z-50">
+<aside class="fixed left-0 top-0 bottom-0 w-[264px] bg-white border-r border-line flex flex-col z-50">
 
   <!-- Brand -->
   <div class="flex items-center gap-[10px] px-5 py-5 shrink-0">
-    <div class="w-9 h-9 rounded-full bg-brand flex items-center justify-center shrink-0">
-      <i class="hgi hgi-stroke hgi-rounded hgi-shield-01 text-base text-white"></i>
+    <div id="brand-logo" class="relative w-9 h-9 shrink-0 cursor-pointer select-none">
+      <img src="{{.AdminPath}}/static/imgs/logo.svg" alt="Coraza WAF logo" class="w-9 h-9 block"/>
     </div>
     <span class="font-bold text-[15px] text-slate-800 truncate">Coraza WAF</span>
   </div>
 
   <!-- Nav links -->
   <nav class="flex-1 flex flex-col gap-1 px-3 pt-1 overflow-y-auto">
-    <a href="/admin" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "dashboard"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin" class="flex items-center gap-3 px-4 py-[9px] rounded-md text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "dashboard"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-dashboard-square-01 text-base"></i>
       Dashboard
     </a>
-    <a href="/admin/logs" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "logs"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin/logs" class="flex items-center gap-3 px-4 py-[9px] rounded-md text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "logs"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-activity-01 text-base"></i>
       Live Logs
     </a>
-    <a href="/admin/ip-rules" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "ip_rules"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin/ip-rules" class="flex items-center gap-3 px-4 py-[9px] rounded-md text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "ip_rules"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-base"></i>
       IP Rules
     </a>
-    <a href="/admin/geo-rules" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "geo_rules"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin/geo-rules" class="flex items-center gap-3 px-4 py-[9px] rounded-md text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "geo_rules"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-earth text-base"></i>
       Geo Rules
     </a>
-    <a href="/admin/services" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "services"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin/services" class="flex items-center gap-3 px-4 py-[9px] rounded-md text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "services"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-settings-01 text-base"></i>
       Services
     </a>
-    <a href="/admin/certificates" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "certificates"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin/certificates" class="flex items-center gap-3 px-4 py-[9px] rounded-md text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "certificates"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-certificate-01 text-base"></i>
       Certificates
     </a>
-    <a href="/admin/waf-rules" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "waf_rules"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin/waf-rules" class="flex items-center gap-3 px-4 py-[9px] rounded-md text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "waf_rules"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-security-block text-base"></i>
       WAF Rules
     </a>
-    <a href="/admin/threat-intel" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "threat_intel"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin/threat-intel" class="flex items-center gap-3 px-4 py-[9px] rounded-md text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "threat_intel"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-database-01 text-base"></i>
       Threat Intel
     </a>
-    <a href="/admin/settings" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "settings"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin/settings" class="flex items-center gap-3 px-4 py-[9px] rounded-md text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "settings"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-user-account text-base"></i>
       Settings
     </a>
@@ -108,18 +141,18 @@
       <form action="{{.AdminPath}}/logout" method="POST" class="contents">
         <input type="hidden" name="_csrf" value="{{.CSRF}}">
         <button type="submit" title="Sign out"
-                class="w-8 h-8 rounded-full bg-surface border border-line flex items-center justify-center text-slate-500 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors cursor-pointer">
+                class="w-8 h-8 rounded-md bg-surface border border-line flex items-center justify-center text-slate-500 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors cursor-pointer">
           <i class="hgi hgi-stroke hgi-rounded hgi-logout-02 text-[14px]"></i>
         </button>
       </form>
       <div class="relative shrink-0">
-        <button id="notif-btn" class="w-8 h-8 rounded-full bg-surface border border-line flex items-center justify-center text-slate-500 cursor-pointer relative">
+        <button id="notif-btn" class="w-8 h-8 rounded-md bg-surface border border-line flex items-center justify-center text-slate-500 cursor-pointer relative">
           <i class="hgi hgi-stroke hgi-rounded hgi-notification-03 text-[14px]"></i>
           {{if gt .AlertCount 0}}
           <span id="notif-badge" class="absolute -top-[3px] -right-[3px] bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[17px] h-[17px] flex items-center justify-center px-[3px] border-2 border-white">{{if gt .AlertCount 9}}9+{{else}}{{.AlertCount}}{{end}}</span>
           {{end}}
         </button>
-        <div id="notif-panel" class="hidden absolute bottom-10 left-0 w-[300px] bg-white border border-line rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,.12)] z-[100]"></div>
+        <div id="notif-panel" class="hidden absolute bottom-10 left-0 w-[300px] bg-white border border-line rounded-lg shadow-[0_2px_8px_rgba(16,24,40,.08)] z-[100]"></div>
       </div>
       </div><!-- end flex gap-1 -->
     </div>
@@ -127,14 +160,14 @@
 </aside>
 
 <!-- ── Page body ──────────────────────────────────────── -->
-<div class="flex min-h-screen ml-[288px]">
+<div class="flex min-h-screen ml-[264px]">
 
-  <main class="flex-1 p-7 min-w-0">
+  <main class="flex-1 p-6 min-w-0">
     <!-- Page header -->
-    <div class="flex items-start justify-between mb-7">
+    <div class="flex items-start justify-between mb-6">
       <div>
-        <p class="text-[12px] text-slate-500 mb-1">Admin › {{.Heading}}</p>
-        <h1 class="text-[28px] font-extrabold text-slate-900 leading-[1.2]">{{.Heading}}</h1>
+        <p class="text-[11px] uppercase tracking-[0.08em] text-slate-500 font-medium mb-1">Admin › {{.Heading}}</p>
+        <h1 class="text-[22px] font-bold text-slate-900 leading-[1.2]">{{.Heading}}</h1>
       </div>
       <div class="flex items-center gap-3 shrink-0">
         <div class="flex items-center gap-2 bg-surface border border-line rounded-lg px-3 py-2 text-[13px] text-slate-700">
@@ -152,7 +185,10 @@
 
 </div>
 
-<script src="{{.AdminPath}}/static/js/app.min.js" defer></script>
+<script src="{{.AdminPath}}/static/js/toast.min.js" defer></script>
+<script src="{{.AdminPath}}/static/js/notify.min.js" defer></script>
+<script src="{{.AdminPath}}/static/js/clipboard.min.js" defer></script>
+<script src="{{.AdminPath}}/static/js/motion.min.js" defer></script>
 {{block "scripts" .}}{{end}}
 <div id="toast-container" class="fixed top-6 right-6 z-[400] flex flex-col gap-3 w-[340px] pointer-events-none"></div>
 {{template "confirm-modal" .}}

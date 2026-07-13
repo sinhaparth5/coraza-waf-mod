@@ -1,0 +1,10 @@
+{{define "toggle-switch"}}
+<span class="relative inline-block">
+  <input type="checkbox" name="{{.Name}}" value="1" class="peer sr-only"
+         {{- if .ID}} id="{{.ID}}"{{end}}
+         {{- if .Checked}} checked{{end}}
+         {{- if .Controls}} onchange="this.form.querySelector('{{.Controls}}').classList.toggle('hidden', !this.checked)"{{end}}/>
+  <span class="block w-10 h-6 bg-slate-200 peer-checked:bg-brand rounded-full transition-colors duration-200 peer-focus:outline-none"></span>
+  <span class="absolute left-1 top-1 w-4 h-4 peer-active:w-5 bg-white rounded-full shadow transition-all duration-200 peer-checked:translate-x-4"></span>
+</span>
+{{end}}

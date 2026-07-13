@@ -1,16 +1,16 @@
 {{template "base" .}}
 
 {{define "content"}}
-<div class="max-w-[640px] flex flex-col gap-6">
+<div class="max-w-[640px] flex flex-col gap-4">
 
   {{if .CredentialErr}}
-  <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3">
+  <div class="rounded-md bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3">
     {{.CredentialErr}}
   </div>
   {{end}}
 
   <!-- ── Account credentials ──────────────────────────────────────────────── -->
-  <div class="card p-6">
+  <div class="card p-5">
     <h2 class="text-[15px] font-bold text-slate-800 mb-1">Account</h2>
     <p class="text-[13px] text-slate-500 mb-5">Change your login email or password. You will be signed out after saving.</p>
 
@@ -55,13 +55,13 @@
   {{template "twofa-card" .}}
 
   <!-- ── Database backup ───────────────────────────────────────────────────── -->
-  <div class="card p-6">
+  <div class="card p-5">
     <h2 class="text-[15px] font-bold text-slate-800 mb-1">Database backup</h2>
     <p class="text-[13px] text-slate-500 mb-4">Downloads a consistent snapshot of <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded">waf.db</code>: all request logs, services, IP/geo rules, and settings. Safe to run while the WAF is live.</p>
     <form action="{{.AdminPath}}/settings/backup" method="POST">
       <input type="hidden" name="_csrf" value="{{.CSRF}}">
       <button type="submit"
-              class="inline-flex items-center gap-2 rounded-full bg-surface border border-line text-slate-700 text-[13px] font-medium px-5 py-2 hover:bg-canvas transition-colors cursor-pointer">
+              class="inline-flex items-center gap-2 rounded-md bg-surface border border-line text-slate-700 text-[13px] font-medium px-5 py-2 hover:bg-canvas transition-colors cursor-pointer">
         <i class="hgi hgi-stroke hgi-rounded hgi-download-02 text-base text-slate-500"></i>
         Download waf.db
       </button>
@@ -76,7 +76,7 @@
   {{template "api-keys-card" .}}
 
   <!-- ── WAF hot-reload ────────────────────────────────────────────────────── -->
-  <div class="card p-6">
+  <div class="card p-5">
     <h2 class="text-[15px] font-bold text-slate-800 mb-1">WAF rules</h2>
     <p class="text-[13px] text-slate-500 mb-1">To reload custom WAF rules from <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded">rules_dir</code> without restarting, send SIGHUP to the process:</p>
     <pre class="mt-3 bg-slate-900 text-green-400 text-[12px] font-mono rounded-lg px-4 py-3 overflow-x-auto">kill -HUP $(pidof coraza-waf-mod)</pre>
@@ -87,12 +87,12 @@
 {{end}}
 
 {{define "bot-card"}}
-<div class="card p-6" id="bot-card">
+<div class="card p-5" id="bot-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">Bot Protection</h2>
   <p class="text-[13px] text-slate-500 mb-5">JS proof-of-work challenge for suspicious clients. Browsers solve it silently in under a second; scanners and headless bots cannot. Per-service overrides are available on the <a href="{{.AdminPath}}/services" class="text-brand underline">Services</a> page.</p>
 
   {{if .BotSaveOK}}
-  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Settings saved and applied. No restart needed.</div>
+  <div class="rounded-md bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Settings saved and applied. No restart needed.</div>
   {{end}}
 
   <form hx-post="{{.AdminPath}}/settings/bot" hx-target="#bot-card" hx-swap="outerHTML" class="flex flex-col gap-4">
@@ -103,10 +103,7 @@
         <p class="text-[12px] text-slate-400 mt-[2px]">Challenges clients whose anomaly score reaches the threshold below.</p>
       </div>
       <label class="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
-        <input type="checkbox" name="bot_enabled" value="1" class="sr-only peer" {{if .BotEnabled}}checked{{end}}
-               onchange="this.form.querySelector('#bot-fields').classList.toggle('hidden', !this.checked)">
-        <div class="w-10 h-6 bg-slate-200 peer-checked:bg-brand rounded-full transition-colors duration-200 peer-focus:outline-none"></div>
-        <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-4"></div>
+        {{template "toggle-switch" (map "Name" "bot_enabled" "Checked" .BotEnabled "Controls" "#bot-fields")}}
       </label>
     </div>
 
@@ -135,15 +132,15 @@
 {{end}}
 
 {{define "varnish-card"}}
-<div class="card p-6" id="varnish-card">
+<div class="card p-5" id="varnish-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">Varnish Cache</h2>
   <p class="text-[13px] text-slate-500 mb-5">Accelerate static assets and cache-eligible endpoints through a local Varnish daemon. Traffic is WAF-inspected first, then handed to Varnish with spoofable host headers scrubbed; cache misses return to the WAF, which routes them to the right backend automatically, so the Varnish config never needs editing when services change. Just enable caching per service on the <a href="{{.AdminPath}}/services" class="text-brand underline">Services</a> page. Varnish is set up by the installer (or see <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded">deploy/varnish/README.md</code>).</p>
 
   {{if .VarnishSaveOK}}
-  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Settings saved and applied. No restart needed.</div>
+  <div class="rounded-md bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Settings saved and applied. No restart needed.</div>
   {{end}}
   {{if .VarnishError}}
-  <div class="rounded-xl bg-red-50 border border-red-200 text-red-600 text-[13px] px-4 py-3 mb-4">{{.VarnishError}}</div>
+  <div class="rounded-md bg-red-50 border border-red-200 text-red-600 text-[13px] px-4 py-3 mb-4">{{.VarnishError}}</div>
   {{end}}
 
   <form hx-post="{{.AdminPath}}/settings/varnish" hx-target="#varnish-card" hx-swap="outerHTML" class="flex flex-col gap-4">
@@ -154,10 +151,7 @@
         <p class="text-[12px] text-slate-400 mt-[2px]">Off = every service proxies straight to its backend, even those marked cacheable.</p>
       </div>
       <label class="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
-        <input type="checkbox" name="varnish_enabled" value="1" class="sr-only peer" {{if .VarnishEnabled}}checked{{end}}
-               onchange="this.form.querySelector('#varnish-fields').classList.toggle('hidden', !this.checked)">
-        <div class="w-10 h-6 bg-slate-200 peer-checked:bg-brand rounded-full transition-colors duration-200 peer-focus:outline-none"></div>
-        <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-4"></div>
+        {{template "toggle-switch" (map "Name" "varnish_enabled" "Checked" .VarnishEnabled "Controls" "#varnish-fields")}}
       </label>
     </div>
 
@@ -178,15 +172,15 @@
 {{end}}
 
 {{define "webhook-card"}}
-<div class="card p-6" id="webhook-card">
+<div class="card p-5" id="webhook-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">Webhook / SIEM Export</h2>
   <p class="text-[13px] text-slate-500 mb-5">Push security events to any HTTP endpoint in real time: Splunk HEC, Elastic, Loki, or a custom receiver. Logs can also be downloaded as NDJSON from the <a href="{{.AdminPath}}/logs" class="text-brand underline">Logs</a> page.</p>
 
   {{if .WebhookSaveOK}}
-  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Webhook saved. Changes take effect immediately.</div>
+  <div class="rounded-md bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Webhook saved. Changes take effect immediately.</div>
   {{end}}
   {{if .WebhookSaveErr}}
-  <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.WebhookSaveErr}}</div>
+  <div class="rounded-md bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.WebhookSaveErr}}</div>
   {{end}}
 
   <form hx-post="{{.AdminPath}}/settings/webhook" hx-target="#webhook-card" hx-swap="outerHTML" class="flex flex-col gap-4">
@@ -197,9 +191,7 @@
         <p class="text-[12px] text-slate-400 mt-[2px]">POST each matching event as JSON. Disabled automatically if URL is empty.</p>
       </div>
       <label class="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
-        <input type="checkbox" name="webhook_enabled" value="1" class="sr-only peer" {{if .WebhookEnabled}}checked{{end}}>
-        <div class="w-10 h-6 bg-slate-200 peer-checked:bg-brand rounded-full transition-colors duration-200 peer-focus:outline-none"></div>
-        <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-4"></div>
+        {{template "toggle-switch" (map "Name" "webhook_enabled" "Checked" .WebhookEnabled)}}
       </label>
     </div>
 
@@ -239,15 +231,15 @@
 {{end}}
 
 {{define "email-card"}}
-<div class="card p-6" id="email-card">
+<div class="card p-5" id="email-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">Email Alerts</h2>
   <p class="text-[13px] text-slate-500 mb-5">Every night just after midnight, a summary of the previous day (blocked requests, 403 responses, and a per-stage breakdown) is emailed to the recipients below via Cloudflare Email Service.</p>
 
   {{if .EmailSaveOK}}
-  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Email settings saved. The next report goes out after midnight.</div>
+  <div class="rounded-md bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Email settings saved. The next report goes out after midnight.</div>
   {{end}}
   {{if .EmailSaveErr}}
-  <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.EmailSaveErr}}</div>
+  <div class="rounded-md bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.EmailSaveErr}}</div>
   {{end}}
 
   <form hx-post="{{.AdminPath}}/settings/email" hx-target="#email-card" hx-swap="outerHTML" class="flex flex-col gap-4">
@@ -258,9 +250,7 @@
         <p class="text-[12px] text-slate-400 mt-[2px]">Sends once per day, shortly after midnight server time.</p>
       </div>
       <label class="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
-        <input type="checkbox" name="email_enabled" value="1" class="sr-only peer" {{if .EmailEnabled}}checked{{end}}>
-        <div class="w-10 h-6 bg-slate-200 peer-checked:bg-brand rounded-full transition-colors duration-200 peer-focus:outline-none"></div>
-        <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-4"></div>
+        {{template "toggle-switch" (map "Name" "email_enabled" "Checked" .EmailEnabled)}}
       </label>
     </div>
 
@@ -290,7 +280,7 @@
               hx-post="{{.AdminPath}}/settings/email/test"
               hx-target="#email-test-result"
               hx-swap="innerHTML"
-              class="inline-flex items-center gap-2 rounded-full border border-line bg-surface text-slate-700 text-[13px] font-medium px-4 py-1.5 hover:bg-canvas transition-colors cursor-pointer">
+              class="inline-flex items-center gap-2 rounded-md border border-line bg-surface text-slate-700 text-[13px] font-medium px-4 py-1.5 hover:bg-canvas transition-colors cursor-pointer">
         <i class="hgi hgi-stroke hgi-rounded hgi-mail-01 text-base"></i>
         Send test report
       </button>
@@ -302,12 +292,12 @@
 {{end}}
 
 {{define "api-keys-card"}}
-<div class="card p-6" id="api-keys-card">
+<div class="card p-5" id="api-keys-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">API Keys</h2>
   <p class="text-[13px] text-slate-500 mb-5">Bearer tokens for programmatic management of services, IP rules, and bans at <code class="font-mono text-[11px] bg-surface px-1 py-0.5 rounded">{{.AdminPath}}/api/v1/*</code>. Send <code class="font-mono text-[11px]">Authorization: Bearer &lt;key&gt;</code>; no session cookie or CSRF token needed. Each key can do everything the admin session can (all-or-nothing in this version, no read-only keys yet).</p>
 
   {{if .NewAPIKey}}
-  <div class="rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[13px] px-4 py-3 mb-4">
+  <div class="rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[13px] px-4 py-3 mb-4">
     <p class="font-semibold mb-1">Copy this key now. It won't be shown again.</p>
     <div class="flex items-center gap-2 mt-1">
       <code class="flex-1 min-w-0 font-mono text-[12px] bg-white border border-amber-200 rounded-lg px-3 py-2 select-all break-all">{{.NewAPIKey}}</code>
@@ -320,14 +310,14 @@
   </div>
   {{end}}
   {{if .APIKeySaveErr}}
-  <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.APIKeySaveErr}}</div>
+  <div class="rounded-md bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.APIKeySaveErr}}</div>
   {{end}}
 
   <form hx-post="{{.AdminPath}}/settings/api-keys" hx-target="#api-keys-card" hx-swap="outerHTML" class="flex items-end gap-3 mb-5">
     <div class="flex-1">
       <label class="block text-[12px] text-slate-500 mb-[6px] font-medium" for="api_key_name">Key name</label>
       <input id="api_key_name" name="name" type="text" placeholder="ci-deploy, terraform, ..." required
-        class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+        class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
     </div>
     <button type="submit" class="btn-primary px-6 shrink-0">Generate key</button>
   </form>
@@ -340,8 +330,8 @@
 
 {{define "api-keys-rows"}}
 {{range .Keys}}
-<div class="flex items-center gap-3 p-3 rounded-2xl hover:bg-surface transition-colors duration-150 border border-line">
-  <div class="w-10 h-10 rounded-full bg-brand-tint flex items-center justify-center shrink-0">
+<div class="flex items-center gap-3 p-3 rounded-lg hover:bg-surface transition-colors duration-150 border border-line">
+  <div class="w-10 h-10 rounded-md bg-brand-tint flex items-center justify-center shrink-0">
     <i class="hgi hgi-stroke hgi-rounded hgi-key-01 text-base text-brand-dark"></i>
   </div>
   <div class="flex-1 min-w-0">
@@ -356,15 +346,15 @@
 {{end}}
 
 {{define "ratelimit-card"}}
-<div class="card p-6" id="ratelimit-card">
+<div class="card p-5" id="ratelimit-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">Rate Limiting</h2>
   <p class="text-[13px] text-slate-500 mb-5">Global per-IP token-bucket limiter, applied to every request before the WAF. Per-service limits are set on the <a href="{{.AdminPath}}/services" class="text-brand underline">Services</a> page. The default <strong>Memory + SQLite</strong> backend persists bucket state across restarts; <strong>Redis</strong> enables shared state across multiple WAF nodes.</p>
 
   {{if .RLSaveOK}}
-  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Settings saved and applied. No restart needed.</div>
+  <div class="rounded-md bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Settings saved and applied. No restart needed.</div>
   {{end}}
   {{if .RLError}}
-  <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.RLError}}</div>
+  <div class="rounded-md bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.RLError}}</div>
   {{end}}
 
   <form id="rl-form" hx-post="{{.AdminPath}}/settings/ratelimit" hx-target="#ratelimit-card" hx-swap="outerHTML" class="flex flex-col gap-5">
@@ -375,9 +365,7 @@
         <p class="text-[12px] text-slate-400 mt-[2px]">Off = no global per-IP limit; per-service limits and auto-banning still apply.</p>
       </div>
       <label class="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
-        <input type="checkbox" name="rl_enabled" value="1" class="sr-only peer" {{if .RLEnabled}}checked{{end}}>
-        <div class="w-10 h-6 bg-slate-200 peer-checked:bg-brand rounded-full transition-colors duration-200 peer-focus:outline-none"></div>
-        <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-4"></div>
+        {{template "toggle-switch" (map "Name" "rl_enabled" "Checked" .RLEnabled)}}
       </label>
     </div>
 
@@ -395,7 +383,7 @@
     </div>
 
     <div class="flex gap-3">
-      <label class="flex-1 flex items-start gap-3 rounded-xl border p-4 cursor-pointer transition-colors
+      <label class="flex-1 flex items-start gap-3 rounded-md border p-4 cursor-pointer transition-colors
                     {{if ne .RLBackend "redis"}}border-brand bg-[#F0FBF4]{{else}}border-line bg-white hover:bg-surface{{end}}">
         <input type="radio" name="rl_backend" value="memory" class="mt-0.5 accent-brand"
                {{if ne .RLBackend "redis"}}checked{{end}}
@@ -405,7 +393,7 @@
           <p class="text-[12px] text-slate-500 mt-0.5">In-process, state persisted to <code class="font-mono text-[11px]">waf.db</code> every 10 s. Single-node only.</p>
         </div>
       </label>
-      <label class="flex-1 flex items-start gap-3 rounded-xl border p-4 cursor-pointer transition-colors
+      <label class="flex-1 flex items-start gap-3 rounded-md border p-4 cursor-pointer transition-colors
                     {{if eq .RLBackend "redis"}}border-brand bg-[#F0FBF4]{{else}}border-line bg-white hover:bg-surface{{end}}">
         <input type="radio" name="rl_backend" value="redis" class="mt-0.5 accent-brand"
                {{if eq .RLBackend "redis"}}checked{{end}}
@@ -434,7 +422,7 @@
                 hx-include="#rl-form"
                 hx-target="#redis-test-result"
                 hx-swap="innerHTML"
-                class="inline-flex items-center gap-2 rounded-full border border-line bg-surface text-slate-700 text-[13px] font-medium px-4 py-1.5 hover:bg-canvas transition-colors">
+                class="inline-flex items-center gap-2 rounded-md border border-line bg-surface text-slate-700 text-[13px] font-medium px-4 py-1.5 hover:bg-canvas transition-colors">
           <i class="hgi hgi-stroke hgi-wifi text-base"></i>
           Test connection
         </button>
@@ -450,17 +438,17 @@
 {{end}}
 
 {{define "twofa-card"}}
-<div class="card p-6" id="twofa-card">
+<div class="card p-5" id="twofa-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">Two-Factor Authentication</h2>
   <p class="text-[13px] text-slate-500 mb-4">Adds a one-time code (TOTP) to admin sign-in. Works with Google Authenticator, Aegis, 1Password, and any other RFC 6238 app; codes are checked locally, no external service involved.</p>
 
   {{if .CardErr}}
-  <div class="rounded-xl bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.CardErr}}</div>
+  <div class="rounded-md bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.CardErr}}</div>
   {{end}}
 
   {{if .BackupCodes}}
-  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Two-factor authentication is now on. The next sign-in will ask for a code.</div>
-  <div class="rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[13px] px-4 py-3">
+  <div class="rounded-md bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Two-factor authentication is now on. The next sign-in will ask for a code.</div>
+  <div class="rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[13px] px-4 py-3">
     <p class="font-semibold mb-1">Save these backup codes now. They won't be shown again.</p>
     <p class="mb-3">Each one signs you in once if the authenticator is unavailable.</p>
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
@@ -471,7 +459,7 @@
   {{else if .Enrolling}}
   <div class="flex flex-col sm:flex-row gap-5 items-start">
     {{if .QRDataURI}}
-    <img src="{{.QRDataURI}}" alt="TOTP enrollment QR code" width="160" height="160" class="rounded-xl border border-line shrink-0"/>
+    <img src="{{.QRDataURI}}" alt="TOTP enrollment QR code" width="160" height="160" class="rounded-md border border-line shrink-0"/>
     {{end}}
     <div class="min-w-0 flex-1">
       <p class="text-[13px] text-slate-600 mb-2">Scan the QR code with your authenticator app, or enter this key manually:</p>
@@ -487,15 +475,15 @@
   </div>
 
   {{else if .TOTPEnabled}}
-  <div class="rounded-xl bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">On. Sign-in asks for an authenticator code after the password.</div>
+  <div class="rounded-md bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">On. Sign-in asks for an authenticator code after the password.</div>
   <form hx-post="{{.AdminPath}}/settings/2fa/disable" hx-target="#twofa-card" hx-swap="outerHTML"
         hx-confirm="Turn off two-factor authentication? Sign-in goes back to password only."
         class="flex items-center gap-2">
     <input name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="Code"
            class="w-28 rounded-lg border border-line bg-white text-slate-800 text-[13px] text-center px-3 py-2 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"/>
-    <button type="submit" class="rounded-full border border-red-200 text-red-600 text-[13px] font-medium px-5 py-2 hover:bg-red-50 transition-colors cursor-pointer">Disable 2FA</button>
+    <button type="submit" class="rounded-md border border-red-200 text-red-600 text-[13px] font-medium px-5 py-2 hover:bg-red-50 transition-colors cursor-pointer">Disable 2FA</button>
   </form>
-  <p class="text-[11px] text-slate-400 mt-2">Requires a current authenticator code (or a backup code) — a stolen session cookie alone can't turn it off.</p>
+  <p class="text-[11px] text-slate-400 mt-2">Requires a current authenticator code or a backup code, so a stolen session cookie alone can't turn it off.</p>
 
   {{else}}
   <form hx-post="{{.AdminPath}}/settings/2fa/start" hx-target="#twofa-card" hx-swap="outerHTML">

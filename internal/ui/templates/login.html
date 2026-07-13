@@ -4,6 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Sign in · Coraza WAF</title>
+  <link rel="icon" type="image/svg+xml" href="{{.AdminPath}}/static/imgs/logo.svg"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -13,7 +14,7 @@
         extend: {
           fontFamily: { sans: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'] },
           colors: {
-            brand: { DEFAULT: '#76C893', dark: '#2A9D8F', light: '#9FE0B7', tint: '#EAF7EE' },
+            brand: { DEFAULT: '#76C893', dark: '#2E7D5B', light: '#9FE0B7', tint: '#EAF7EE' },
           },
         },
       },
@@ -22,6 +23,9 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    .rise-in { animation: rise .35s cubic-bezier(.16, 1, .3, 1) both; }
+    @media (prefers-reduced-motion: reduce) { .rise-in { animation: none; } }
     input:-webkit-autofill,
     input:-webkit-autofill:hover,
     input:-webkit-autofill:focus {
@@ -42,14 +46,20 @@
         <img src="{{.AdminPath}}/static/imgs/LoginArt.webp" alt="" aria-hidden="true"
              class="absolute inset-0 h-full w-full object-cover"/>
         <div class="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent"></div>
-        <p class="absolute left-5 bottom-4 text-white text-sm font-semibold tracking-wide drop-shadow">Coraza WAF</p>
+        <span class="absolute left-5 bottom-4 flex items-center gap-2">
+          <img src="{{.AdminPath}}/static/imgs/logo.svg" alt="" class="w-6 h-6 drop-shadow"/>
+          <span class="text-white text-sm font-semibold tracking-wide drop-shadow">Coraza WAF</span>
+        </span>
       </div>
 
       <div class="flex flex-1 items-center justify-center px-6 py-10 sm:px-10 lg:px-16">
-        <div class="w-full max-w-[400px]">
+        <div class="w-full max-w-[400px] rise-in">
 
           <!-- Brand (desktop only; mobile shows it on the art banner instead) -->
-          <p class="hidden lg:block text-brand-dark text-sm font-bold tracking-wide mb-2">Coraza WAF</p>
+          <span class="hidden lg:flex items-center gap-2 mb-3">
+            <img src="{{.AdminPath}}/static/imgs/logo.svg" alt="" class="w-6 h-6"/>
+            <span class="text-brand-dark text-sm font-bold tracking-wide">Coraza WAF</span>
+          </span>
 
           {{if .TOTPStage}}
           <h1 class="text-slate-900 text-3xl sm:text-4xl font-extrabold leading-tight mb-2">Two-factor authentication</h1>
@@ -61,15 +71,13 @@
 
           <!-- Error message -->
           {{if .Error}}
-          <div class="mb-5 rounded-xl text-red-700 text-sm px-4 py-3"
-               style="background: #fef2f2; border: 1px solid #fecaca;"
+          <div class="mb-5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3"
                role="alert" aria-live="polite">
             {{.Error}}
           </div>
           {{end}}
           {{if .Notice}}
-          <div class="mb-5 rounded-xl text-green-700 text-sm px-4 py-3"
-               style="background: #f0fdf4; border: 1px solid #bbf7d0;"
+          <div class="mb-5 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3"
                role="status" aria-live="polite">
             {{.Notice}}
           </div>
@@ -88,15 +96,14 @@
                 placeholder="123456"
                 autofocus
                 required
-                class="w-full rounded-[10px] border border-slate-200 bg-white
+                class="w-full rounded-lg border border-slate-200 bg-white
                        text-slate-800 placeholder-slate-400 text-lg tracking-[0.25em] text-center
                        px-4 py-3.5 outline-none transition
                        focus:border-brand focus:ring-2 focus:ring-brand/20"/>
             </div>
             <button type="submit"
-                    class="mt-6 w-full rounded-[10px] bg-brand text-white text-base font-bold
-                           py-3.5 hover:bg-brand-dark active:scale-[0.98] transition-all duration-150
-                           shadow-md shadow-brand/25">
+                    class="mt-6 w-full rounded-lg bg-brand-dark text-white text-base font-bold
+                           py-3.5 hover:bg-[#276C4E] active:scale-[0.98] transition-all duration-150">
               Verify
             </button>
           </form>
@@ -125,7 +132,7 @@
                 autocomplete="email"
                 placeholder="admin@example.com"
                 required
-                class="w-full rounded-[10px] border border-slate-200 bg-white
+                class="w-full rounded-lg border border-slate-200 bg-white
                        text-slate-800 placeholder-slate-400 text-sm
                        px-4 py-3.5 outline-none transition
                        focus:border-brand focus:ring-2 focus:ring-brand/20"/>
@@ -145,7 +152,7 @@
                   autocomplete="current-password"
                   placeholder="Password"
                   required
-                  class="w-full rounded-[10px] border border-slate-200 bg-white
+                  class="w-full rounded-lg border border-slate-200 bg-white
                          text-slate-800 placeholder-slate-400 text-sm
                          px-4 py-3.5 pr-12 outline-none transition
                          focus:border-brand focus:ring-2 focus:ring-brand/20"/>
@@ -164,9 +171,8 @@
 
             <!-- Submit -->
             <button type="submit"
-                    class="mt-6 w-full rounded-[10px] bg-brand text-white text-base font-bold
-                           py-3.5 hover:bg-brand-dark active:scale-[0.98] transition-all duration-150
-                           shadow-md shadow-brand/25">
+                    class="mt-6 w-full rounded-lg bg-brand-dark text-white text-base font-bold
+                           py-3.5 hover:bg-[#276C4E] active:scale-[0.98] transition-all duration-150">
               Sign in
             </button>
 
