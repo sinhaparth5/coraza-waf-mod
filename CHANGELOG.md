@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.10] - 2026-07-13
+
+### Fixed
+- **Bot protection / IP blocking**: a banned IP (or a geo-blocked country)
+  could keep getting redirected to the JS challenge instead of receiving
+  the expected 403, if it had no bypass cookie (or an expired/cleared one)
+  — the bot-challenge gate ran *before* the IP and geo blocklist checks in
+  `Handle`, so the ban was never actually reached; it just kept scoring
+  more unsolved `bot_challenge` autoban points instead of ever getting
+  blocked with `ip_blocked`/`geo_blocked`. This read to an admin as "the
+  ban isn't taking effect" even though the underlying `ip_rules`/`geo_rules`
+  entry was entirely correct. The IP and geo blocklist checks now run
+  before the challenge gate — an explicit admin/autoban decision (or a
+  blocked country) has nothing left to prove by solving a challenge first.
+  The WAF check is unaffected and still runs *after* the challenge gate on
+  purpose, so a brand-new attacker with no block rule yet can still
+  accumulate unsolved-challenge points toward autoban before it ever
+  triggers a WAF rule.
+
 ## [1.4.9] - 2026-07-13
 
 ### Security
