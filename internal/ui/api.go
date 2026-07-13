@@ -92,10 +92,12 @@ func (h *Handler) apiKeyAuth(next echo.HandlerFunc) echo.HandlerFunc {
 // RegisterAPI mounts the bearer-token-authenticated REST API at
 // {admin.path}/api/v1/*, as a sibling to (not nested inside) the
 // session-cookie-authenticated group Register builds — see apiKeyAuth for
-// why it skips sessionAuth/csrfProtect.
+// why it skips sessionAuth/csrfProtect. hostGuard runs first, same as the
+// admin UI group, so this API is likewise unreachable on a service's own
+// domain (see hostGuard in handlers.go).
 func (h *Handler) RegisterAPI(e *echo.Echo) {
 	api := e.Group(h.cfg.Admin.Path + "/api/v1")
-	api.Use(middleware.BodyLimit("1M"), h.apiKeyAuth)
+	api.Use(h.hostGuard, middleware.BodyLimit("1M"), h.apiKeyAuth)
 
 	api.GET("/services", h.APIListServices)
 	api.POST("/services", h.APICreateService)

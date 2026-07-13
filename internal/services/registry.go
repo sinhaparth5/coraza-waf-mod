@@ -381,9 +381,18 @@ func StripPrefix(path, prefix string) string {
 // (mirrors nginx: location blocks beat a bare server_name default) — this
 // lets a host-wide catch-all service and path-scoped services coexist on
 // the same host. Prefixes only match at path-segment boundaries (see
-// PrefixMatch). Only if no Prefix matches does an exact Host match apply,
-// falling back to the first configured service if nothing matches at all.
-// Returns nil if no services are configured.
+// PrefixMatch). Only if no Prefix matches does an exact Host match apply.
+// Returns nil if nothing matches — including when services are configured
+// but none claim this host — rather than silently falling back to the
+// first configured service. That fallback used to mean any hostname
+// pointed at this server (e.g. hitting the bare server IP directly) got
+// proxied to, and logged under, whichever service happened to be added
+// first — including unintentionally exposing that service's backend (and,
+// via Echo's path-only routing, the admin dashboard itself before
+// ui.Handler's hostGuard was added) on a Host nobody configured for it. An
+// operator who wants a genuine default backend for unmatched hosts can
+// still do so explicitly with a Prefix of "/", which is unaffected by this
+// — see PrefixMatch.
 func (r *Registry) Match(host, path string) *storage.Service {
 	host = strings.ToLower(strings.Split(host, ":")[0])
 
@@ -409,10 +418,33 @@ func (r *Registry) Match(host, path string) *storage.Service {
 			return s
 		}
 	}
-	if len(r.list) > 0 {
-		return &r.list[0]
-	}
 	return nil
+}
+
+// IsServiceHost reports whether host (a request's Host header, with any
+// port stripped) exactly matches a configured service's virtual host. Used
+// by ui.Handler's hostGuard middleware to keep the admin dashboard and REST
+// API from being reachable on a customer-facing service domain that
+// happens to resolve to this server — Echo's router matches routes purely
+// by path with no awareness of Host, so without this check /admin/* would
+// respond identically regardless of which domain was used to reach it. Nil-
+// receiver safe, like asn.Lookup.Lookup, so a *Registry left unset (e.g. in
+// tests that don't need routing) is simply treated as claiming no hosts.
+func (r *Registry) IsServiceHost(host string) bool {
+	if r == nil {
+		return false
+	}
+	host = strings.ToLower(strings.Split(host, ":")[0])
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for i := range r.list {
+		if r.list[i].Host != "" && strings.ToLower(r.list[i].Host) == host {
+			return true
+		}
+	}
+	return false
 }
 
 // Proxy returns the reverse proxy for the named service.

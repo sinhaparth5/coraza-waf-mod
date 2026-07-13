@@ -118,6 +118,7 @@ type Handler struct {
 	loginLimiter    *loginLimiter
 	apiKeyLimiter   *loginLimiter
 	trustedNets     []*net.IPNet
+	proxyHandle     echo.HandlerFunc
 }
 
 type dashboardCountry struct {
@@ -144,8 +145,12 @@ type atAGlanceCard struct {
 // NewHandler builds the UI handler. jsFS must contain the minified JS
 // assets at "static/js/dist/*" (see assets.go in the repo root); it's
 // served under /<admin_path>/static/js/. imgsFS must contain
-// "static/imgs/*"; it's served under /<admin_path>/static/imgs/.
-func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error, reloadAutoban func(), scorer *threatscore.Scorer, reloadAdaptive func()) (*Handler, error) {
+// "static/imgs/*"; it's served under /<admin_path>/static/imgs/. proxyHandle
+// is the reverse-proxy pipeline's own route handler (proxy.Handler.Handle,
+// the same func registered for the catch-all "/*" route in main.go) — see
+// hostGuard for why the admin/API routes need to be able to hand a request
+// off to it.
+func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error, reloadAutoban func(), scorer *threatscore.Scorer, reloadAdaptive func(), proxyHandle echo.HandlerFunc) (*Handler, error) {
 	sub, err := fs.Sub(jsFS, "static/js/dist")
 	if err != nil {
 		return nil, fmt.Errorf("sub static/js/dist: %w", err)
@@ -154,7 +159,7 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 	if err != nil {
 		return nil, fmt.Errorf("sub static/imgs: %w", err)
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, reloadAutoban: reloadAutoban, scorer: scorer, reloadAdaptive: reloadAdaptive, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), trustedNets: parseTrustedNets(cfg.TrustedProxies)}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, reloadAutoban: reloadAutoban, scorer: scorer, reloadAdaptive: reloadAdaptive, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), trustedNets: parseTrustedNets(cfg.TrustedProxies), proxyHandle: proxyHandle}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -217,6 +222,28 @@ func (h *Handler) sessionAuth(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
+// hostGuard keeps the admin dashboard and REST API from being reachable on
+// a service's own domain. Echo's router matches routes purely by path with
+// no notion of Host, so without this check a request for
+// "https://example-api.com/admin/login" would hit this exact same route
+// (and get served the admin login page) just because example-api.com's DNS
+// happens to point at this server — even though example-api.com is
+// configured as a completely unrelated proxied service. Any request whose
+// Host matches a configured service is instead handed to the normal
+// reverse-proxy pipeline (registry.IsServiceHost), so it's routed — and
+// WAF/rate-limit/logged — exactly like every other request to that
+// service, landing on the real backend's own /admin/login if it has one.
+// The admin UI and API stay reachable on any Host nothing else claims,
+// e.g. this server's bare listen IP.
+func (h *Handler) hostGuard(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		if h.registry.IsServiceHost(c.Request().Host) {
+			return h.proxyHandle(c)
+		}
+		return next(c)
+	}
+}
+
 // Register mounts all admin routes on e under cfg.Admin.Path.
 // Login/logout are public; everything else is behind sessionAuth.
 func (h *Handler) Register(e *echo.Echo) {
@@ -229,14 +256,19 @@ func (h *Handler) Register(e *echo.Echo) {
 	// past the cap.
 	bodyLimit := middleware.BodyLimit("1M")
 
-	// Public routes — no session required.
-	e.GET(base+"/login", h.LoginPage)
-	e.POST(base+"/login", h.LoginPost, bodyLimit)
-	// Static assets are public so the login page can load spirals/JS before auth.
-	e.StaticFS(base+"/static/js", h.staticJS)
-	e.StaticFS(base+"/static/imgs", h.staticImgs)
+	// admin is the parent group for every route under cfg.Admin.Path.
+	// hostGuard runs first for all of them, public or not — see hostGuard.
+	admin := e.Group(base)
+	admin.Use(h.hostGuard)
 
-	g := e.Group(base)
+	// Public routes — no session required.
+	admin.GET("/login", h.LoginPage)
+	admin.POST("/login", h.LoginPost, bodyLimit)
+	// Static assets are public so the login page can load spirals/JS before auth.
+	admin.StaticFS("/static/js", h.staticJS)
+	admin.StaticFS("/static/imgs", h.staticImgs)
+
+	g := admin.Group("")
 	// bodyLimit must run ahead of csrfProtect, which parses the form body.
 	g.Use(bodyLimit, h.sessionAuth, h.csrfProtect)
 	g.POST("/logout", h.Logout)

@@ -35,6 +35,15 @@ import (
 
 const serverHeader = "Coraza WAF Mod"
 
+// unmatchedHostAppName is logged/labeled in place of a real service name
+// when registry.Match finds no service for the request's Host — e.g. a
+// client hitting this server's bare IP/listen address directly rather than
+// a configured service domain. Before this, appName stayed "" and Match
+// silently fell back to the first configured service, so direct-IP traffic
+// was proxied to (and logged under) an arbitrary service that had nothing
+// to do with the request.
+const unmatchedHostAppName = "VPS"
+
 type Handler struct {
 	wafMu        sync.RWMutex
 	wafDefault   *waf.Engine
@@ -196,7 +205,7 @@ func (h *Handler) Handle(c echo.Context) error {
 
 	clientIP := h.realIP(r)
 	app := h.registry.Match(r.Host, r.URL.Path)
-	appName := ""
+	appName := unmatchedHostAppName
 	if app != nil {
 		appName = app.Name
 	}
