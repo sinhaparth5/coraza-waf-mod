@@ -246,6 +246,114 @@ func TestIPBlocklistBlocks(t *testing.T) {
 	}
 }
 
+// TestBannedIPBlockedDespiteActiveChallenge reproduces a reported bug: with
+// bot protection enabled, a banned IP with no bypass cookie kept getting
+// redirected to the JS challenge (307) instead of the expected 403 —
+// because the challenge gate ran *before* the IP blocklist check, an
+// already-banned client with no cookie never reached the check that would
+// have blocked it. The IP blocklist must be checked before the challenge
+// gate, regardless of whether bot protection is active.
+func TestBannedIPBlockedDespiteActiveChallenge(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK) // should never be reached
+	}))
+	defer backend.Close()
+
+	dir := t.TempDir()
+	db, err := storage.Open(filepath.Join(dir, "banned-challenge.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	if err := db.AddService("svc", "", "/", backend.URL, 0, 0); err != nil {
+		t.Fatalf("add service: %v", err)
+	}
+	if err := db.AddIPRule("", "86.127.225.85", "block"); err != nil {
+		t.Fatalf("add ip rule: %v", err)
+	}
+
+	ipbl, _ := blocklist.NewIPBlocklist(db)
+	geoBl, _ := geo.New("", db)
+	defer geoBl.Close()
+	reg, _ := services.New(db)
+	engine, _ := waf.New(config.WAFConfig{Enabled: false}, nil)
+	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
+	defer rl.Stop()
+
+	// Threshold 0 = every non-trusted client without a bypass cookie gets
+	// challenged — matching the reported scenario (bot protection enabled).
+	ch := challenge.New("test-secret", 3600, 0)
+
+	h := proxy.NewHandler(reg, engine, nil, db, ipbl, geoBl, rl, nil, ch, nil, nil)
+	e := echo.New()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "86.127.225.85:12345"
+	rec := httptest.NewRecorder()
+	if err := h.Handle(e.NewContext(req, rec)); err != nil {
+		t.Fatalf("Handle returned error: %v", err)
+	}
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("banned IP with active challenge = %d, want 403 (must never reach the challenge redirect)", rec.Code)
+	}
+	if reason := rec.Header().Get("X-WAF-Block-Reason"); reason != "ip_blocked" {
+		t.Errorf("X-WAF-Block-Reason = %q, want %q", reason, "ip_blocked")
+	}
+}
+
+// TestGeoBlockedCountryBlockedDespiteActiveChallenge covers the same
+// ordering fix for the geo blocklist: a blocked country must get 403, not a
+// free pass through the challenge gate first.
+func TestGeoBlockedCountryBlockedDespiteActiveChallenge(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK) // should never be reached
+	}))
+	defer backend.Close()
+
+	dir := t.TempDir()
+	db, err := storage.Open(filepath.Join(dir, "geo-banned-challenge.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	if err := db.AddService("svc", "", "/", backend.URL, 0, 0); err != nil {
+		t.Fatalf("add service: %v", err)
+	}
+	// 8.8.8.8 resolves to US in the bundled GeoLite2 DB (see geo package tests).
+	if err := db.AddGeoRule("", "US", "block"); err != nil {
+		t.Fatalf("add geo rule: %v", err)
+	}
+
+	ipbl, _ := blocklist.NewIPBlocklist(db)
+	geoBl, err := geo.New("", db)
+	if err != nil {
+		t.Fatalf("geo: %v", err)
+	}
+	defer geoBl.Close()
+	reg, _ := services.New(db)
+	engine, _ := waf.New(config.WAFConfig{Enabled: false}, nil)
+	rl := ratelimit.New(config.RateLimitConfig{Enabled: false})
+	defer rl.Stop()
+
+	ch := challenge.New("test-secret", 3600, 0)
+
+	h := proxy.NewHandler(reg, engine, nil, db, ipbl, geoBl, rl, nil, ch, nil, nil)
+	e := echo.New()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "8.8.8.8:12345"
+	rec := httptest.NewRecorder()
+	if err := h.Handle(e.NewContext(req, rec)); err != nil {
+		t.Fatalf("Handle returned error: %v", err)
+	}
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("geo-blocked country with active challenge = %d, want 403 (must never reach the challenge redirect)", rec.Code)
+	}
+	if reason := rec.Header().Get("X-WAF-Block-Reason"); reason != "geo_blocked" {
+		t.Errorf("X-WAF-Block-Reason = %q, want %q", reason, "geo_blocked")
+	}
+}
+
 func TestRateLimitReturns429(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

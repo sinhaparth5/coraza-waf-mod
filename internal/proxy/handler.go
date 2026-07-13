@@ -275,7 +275,39 @@ func (h *Handler) Handle(c echo.Context) error {
 		return c.NoContent(http.StatusNotFound)
 	}
 
-	// Bot protection: challenge clients based on global setting + per-service
+	// Country lookup, and the geo-blocklist verdict for it — computed once
+	// up front so it's available both for the hard geo block below and for
+	// logging every other outcome (blocked or not) further down.
+	blockedByGeo, geoReason, country := h.geoBl.Check(r.RemoteAddr, clientIP, appName)
+
+	// 1. IP blocklist — an explicit admin/autoban decision, and 2. geo
+	// blocklist below, both checked before the bot-challenge gate. An IP
+	// (or country) that's already been decisively blocked has nothing left
+	// to prove by solving a JS challenge first: when this check ran *after*
+	// the challenge gate, a banned IP with no (or an expired/cleared)
+	// bypass cookie just kept getting redirected to /_cz/challenge instead
+	// of the expected 403 — logged as repeated unsolved bot_challenge
+	// attempts, never as ip_blocked — which reads to an admin as "the ban
+	// isn't taking effect" even though the ip_rules entry is entirely
+	// correct. This is unlike the WAF check further down, which still runs
+	// *after* the challenge gate on purpose (see autoban.go): a brand-new
+	// attacker with no block rule yet needs to accumulate unsolved-challenge
+	// points before autoban ever creates one.
+	blockedByIP, ipReason := h.ipbl.Check(clientIP, appName)
+	if blockedByIP {
+		metrics.IPBlockedTotal.WithLabelValues(appName).Inc()
+		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, ipReason, time.Since(start), meta)
+		w.Header().Set("X-WAF-Block-Reason", "ip_blocked")
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied"})
+	}
+	if blockedByGeo {
+		metrics.GeoBlockedTotal.WithLabelValues(appName, country).Inc()
+		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, geoReason, time.Since(start), meta)
+		w.Header().Set("X-WAF-Block-Reason", "geo_blocked")
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied", "country": country})
+	}
+
+	// 3. Bot protection: challenge clients based on global setting + per-service
 	// override + threat-score-driven adaptive enforcement (issue #16).
 	if ch != nil && !botAnalysis.IsTrustedCrawler {
 		svcMode := "inherit"
@@ -300,19 +332,7 @@ func (h *Handler) Handle(c echo.Context) error {
 		}
 	}
 
-	// Country lookup (used for logging even when not geo-blocked).
-	_, _, country := h.geoBl.Check(r.RemoteAddr, clientIP, appName)
-
-	// 1. IP blocklist — fastest check, no inspection needed.
-	blockedByIP, ipReason := h.ipbl.Check(clientIP, appName)
-	if blockedByIP {
-		metrics.IPBlockedTotal.WithLabelValues(appName).Inc()
-		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, ipReason, time.Since(start), meta)
-		w.Header().Set("X-WAF-Block-Reason", "ip_blocked")
-		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied"})
-	}
-
-	// 1.5 Rate limit — cheap per-IP throttle, before geo/WAF inspection.
+	// 4. Rate limit — cheap per-IP throttle, before WAF inspection.
 	// Scaled by threat-score-driven adaptive enforcement (issue #16) when
 	// enabled; adaptiveDecision.RateScale is 1.0 (no-op) otherwise.
 	h.ratelimitMu.RLock()
@@ -341,7 +361,7 @@ func (h *Handler) Handle(c echo.Context) error {
 		return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 	}
 
-	// 1.6 Per-service rate limit — only if the matched service has its own limit.
+	// 4.5 Per-service rate limit — only if the matched service has its own limit.
 	if app != nil {
 		svRes := h.registry.AllowService(app.Name, clientIP)
 		setRateLimitHeaders(c.Response().Header(), svRes)
@@ -358,16 +378,7 @@ func (h *Handler) Handle(c echo.Context) error {
 		}
 	}
 
-	// 2. Geo blocklist — country-level block.
-	blockedByGeo, geoReason, _ := h.geoBl.Check(r.RemoteAddr, clientIP, appName)
-	if blockedByGeo {
-		metrics.GeoBlockedTotal.WithLabelValues(appName, country).Inc()
-		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, geoReason, time.Since(start), meta)
-		w.Header().Set("X-WAF-Block-Reason", "geo_blocked")
-		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied", "country": country})
-	}
-
-	// 3. WAF — deep inspection of headers + body. Per-service override engine
+	// 5. WAF — deep inspection of headers + body. Per-service override engine
 	// (if this service has its own rule exceptions) takes precedence over
 	// the shared default.
 	engine := h.wafEngineFor(appName)
@@ -388,7 +399,7 @@ func (h *Handler) Handle(c echo.Context) error {
 		return c.JSON(status, map[string]any{"error": "request blocked", "rule_id": result.RuleID})
 	}
 
-	// 4. Proxy to backend.
+	// 6. Proxy to backend.
 	if app == nil {
 		h.logRequest(r, appName, clientIP, country, http.StatusBadGateway, result, time.Since(start), meta)
 		return c.JSON(http.StatusBadGateway, map[string]string{
