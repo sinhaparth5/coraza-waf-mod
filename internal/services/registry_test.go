@@ -227,6 +227,82 @@ func TestRegistryMatchPrefixBoundary(t *testing.T) {
 	}
 }
 
+// TestRegistryMatchUnmatchedHostReturnsNil covers the fix for a reported
+// bug: hitting this server on a Host nothing is configured for (e.g. its
+// bare listen IP, instead of a service's domain) used to silently fall back
+// to the first configured service — so that service's backend received,
+// and its name appeared in the logs for, traffic that had nothing to do
+// with it. Match must return nil instead, regardless of registration
+// order, as long as no Prefix or Host actually matches.
+func TestRegistryMatchUnmatchedHostReturnsNil(t *testing.T) {
+	db := openTestDB(t)
+	if err := db.AddService("example-api", "example-api.com", "", "http://10.0.0.5:3000", 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddService("example-fe", "example-fe.com", "", "http://10.0.0.6:4000", 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	reg, err := New(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, host := range []string{"192.168.1.1", "203.0.113.7", "some-other-domain.com"} {
+		if got := reg.Match(host, "/"); got != nil {
+			t.Errorf("Match(%q, \"/\") = %s, want nil (first-service fallback should not apply)", host, got.Name)
+		}
+	}
+
+	// Sanity check: the services' own hosts still resolve correctly —
+	// removing the fallback must not break real routing.
+	if got := reg.Match("example-api.com", "/"); got == nil || got.Name != "example-api" {
+		t.Fatalf("Match(\"example-api.com\") did not resolve to the matching service")
+	}
+	if got := reg.Match("example-fe.com", "/"); got == nil || got.Name != "example-fe" {
+		t.Fatalf("Match(\"example-fe.com\") did not resolve to the matching service")
+	}
+}
+
+// TestRegistryIsServiceHost covers the admin-dashboard-hijack fix: the
+// hostGuard middleware (internal/ui) uses this to keep /admin/* from being
+// served on a service's own domain, so it must accurately say which hosts
+// are claimed — case-insensitively, with any port ignored, and never for a
+// service that only has a Prefix rule (those aren't host-specific).
+func TestRegistryIsServiceHost(t *testing.T) {
+	db := openTestDB(t)
+	if err := db.AddService("example-api", "Example-API.com", "", "http://10.0.0.5:3000", 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddService("prefix-only", "", "/api", "http://10.0.0.6:4000", 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	reg, err := New(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		host string
+		want bool
+	}{
+		{"example-api.com", true},
+		{"EXAMPLE-API.COM", true},
+		{"example-api.com:8443", true},
+		{"192.168.1.1", false},
+		{"unrelated-domain.com", false},
+	}
+	for _, tc := range cases {
+		if got := reg.IsServiceHost(tc.host); got != tc.want {
+			t.Errorf("IsServiceHost(%q) = %v, want %v", tc.host, got, tc.want)
+		}
+	}
+
+	var nilReg *Registry
+	if nilReg.IsServiceHost("anything") {
+		t.Error("IsServiceHost on a nil *Registry must return false, not panic")
+	}
+}
+
 // TestValidateRejectsMetadataEndpoints checks the go/request-forgery
 // mitigation: admin-supplied backend URLs pointing at a cloud
 // instance-metadata endpoint are rejected before Probe ever contacts them,
