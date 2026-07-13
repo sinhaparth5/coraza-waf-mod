@@ -1,13 +1,18 @@
 {{template "base" .}}
 
 {{define "content"}}
-<div class="max-w-[640px] flex flex-col gap-4">
+<div class="max-w-[1240px] flex flex-col gap-4">
 
   {{if .CredentialErr}}
   <div class="rounded-md bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3">
     {{.CredentialErr}}
   </div>
   {{end}}
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+
+  <!-- ── Left column: account, security, data ─────────────────────────────── -->
+  <div class="flex flex-col gap-4 min-w-0">
 
   <!-- ── Account credentials ──────────────────────────────────────────────── -->
   <div class="card p-5">
@@ -53,6 +58,7 @@
   </div>
 
   {{template "twofa-card" .}}
+  {{template "api-keys-card" .}}
 
   <!-- ── Database backup ───────────────────────────────────────────────────── -->
   <div class="card p-5">
@@ -68,19 +74,25 @@
     </form>
   </div>
 
-  {{template "bot-card" .}}
-  {{template "varnish-card" .}}
-  {{template "ratelimit-card" .}}
-  {{template "webhook-card" .}}
-  {{template "email-card" .}}
-  {{template "api-keys-card" .}}
-
   <!-- ── WAF hot-reload ────────────────────────────────────────────────────── -->
   <div class="card p-5">
     <h2 class="text-[15px] font-bold text-slate-800 mb-1">WAF rules</h2>
     <p class="text-[13px] text-slate-500 mb-1">To reload custom WAF rules from <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded">rules_dir</code> without restarting, send SIGHUP to the process:</p>
     <pre class="mt-3 bg-slate-900 text-green-400 text-[12px] font-mono rounded-lg px-4 py-3 overflow-x-auto">kill -HUP $(pidof coraza-waf-mod)</pre>
     <p class="mt-2 text-[12px] text-slate-400">The engine swaps in place: in-flight requests finish on the old ruleset, new requests use the reloaded one.</p>
+  </div>
+
+  </div>
+
+  <!-- ── Right column: protection, cache, integrations ─────────────────────── -->
+  <div class="flex flex-col gap-4 min-w-0">
+  {{template "bot-card" .}}
+  {{template "varnish-card" .}}
+  {{template "ratelimit-card" .}}
+  {{template "webhook-card" .}}
+  {{template "email-card" .}}
+  </div>
+
   </div>
 
 </div>

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.12] - 2026-07-13
+
+### Changed
+- **Settings page is now a two-column layout.** The single 640px stack of ten
+  cards is split into two equal columns inside a wider (1240px) container:
+  account, two-factor authentication, API keys, database backup, and WAF rules
+  on the left; bot protection, Varnish cache, rate limiting, webhooks, and
+  email reports on the right. Columns collapse back to a single stack on
+  narrow screens, and each card still swaps in place via HTMX.
+
 ## [1.4.11] - 2026-07-13
 
 ### Changed
