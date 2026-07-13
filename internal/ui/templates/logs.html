@@ -1,20 +1,20 @@
 {{define "actions"}}
 {{if not .History}}
 <button id="pause-btn"
-  class="flex items-center gap-[6px] border border-line bg-white rounded-full px-4 py-2 text-[14px] font-medium text-slate-500 cursor-pointer font-sans">
+  class="flex items-center gap-[6px] border border-line bg-white rounded-md px-4 py-2 text-[14px] font-medium text-slate-500 cursor-pointer font-sans">
   <i id="pause-icon" class="hgi hgi-stroke hgi-rounded hgi-pause text-[13px]"></i>
   <span id="pause-label">Pause</span>
 </button>
 {{else}}
 <a href="{{$.AdminPath}}/logs"
-  class="flex items-center gap-[6px] border border-line bg-white rounded-full px-4 py-2 text-[14px] font-medium text-slate-500 cursor-pointer no-underline">
+  class="flex items-center gap-[6px] border border-line bg-white rounded-md px-4 py-2 text-[14px] font-medium text-slate-500 cursor-pointer no-underline">
   <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02 text-[13px] text-brand"></i>
   Back to live
 </a>
 {{end}}
 <a id="export-link"
    href="{{$.AdminPath}}/logs/export{{if or .FilterApp .FilterStatus .FilterFrom .FilterTo}}?app={{.FilterApp}}&status={{.FilterStatus}}&from={{.FilterFrom}}&to={{.FilterTo}}{{end}}"
-   class="flex items-center gap-[6px] border border-line bg-white rounded-full px-4 py-2 text-[14px] font-medium text-slate-500 hover:text-slate-700 no-underline transition-colors">
+   class="flex items-center gap-[6px] border border-line bg-white rounded-md px-4 py-2 text-[14px] font-medium text-slate-500 hover:text-slate-700 no-underline transition-colors">
   <i class="hgi hgi-stroke hgi-rounded hgi-download-02 text-[13px]"></i>
   Export NDJSON
 </a>
@@ -30,9 +30,9 @@
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">From</label>
     <input type="hidden" name="from" id="filter-from" value="{{.FilterFrom}}">
     <button type="button" id="filter-from-btn"
-      class="flex items-center gap-2 border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[210px] hover:border-slate-300 focus:outline-none transition-colors">
-      <i class="hgi hgi-stroke hgi-rounded hgi-calendar-02 text-[14px] text-slate-400 shrink-0"></i>
-      <span id="filter-from-display" class="flex-1 text-left text-slate-400">Any date</span>
+      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[210px] hover:border-slate-300 focus:outline-none transition-colors">
+      <i class="hgi hgi-stroke hgi-rounded hgi-calendar-02 text-[14px] text-slate-500 shrink-0"></i>
+      <span id="filter-from-display" class="flex-1 text-left text-slate-500">Any date</span>
     </button>
   </div>
 
@@ -41,9 +41,9 @@
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">To</label>
     <input type="hidden" name="to" id="filter-to" value="{{.FilterTo}}">
     <button type="button" id="filter-to-btn"
-      class="flex items-center gap-2 border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[210px] hover:border-slate-300 focus:outline-none transition-colors">
-      <i class="hgi hgi-stroke hgi-rounded hgi-calendar-02 text-[14px] text-slate-400 shrink-0"></i>
-      <span id="filter-to-display" class="flex-1 text-left text-slate-400">Any date</span>
+      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[210px] hover:border-slate-300 focus:outline-none transition-colors">
+      <i class="hgi hgi-stroke hgi-rounded hgi-calendar-02 text-[14px] text-slate-500 shrink-0"></i>
+      <span id="filter-to-display" class="flex-1 text-left text-slate-500">Any date</span>
     </button>
   </div>
 
@@ -52,13 +52,12 @@
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">App</label>
     <input type="hidden" name="app" id="filter-app" value="{{.FilterApp}}">
     <button type="button" id="filter-app-btn"
-      class="flex items-center gap-2 border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[145px] hover:border-slate-300 focus:outline-none transition-colors">
+      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[145px] hover:border-slate-300 focus:outline-none transition-colors">
       <span id="filter-app-display" class="flex-1 text-left text-slate-700">All apps</span>
-      <i class="hgi hgi-stroke hgi-rounded hgi-arrow-down-01 text-[11px] text-slate-400 shrink-0"></i>
+      <i class="hgi hgi-stroke hgi-rounded hgi-arrow-down-01 text-[11px] text-slate-500 shrink-0"></i>
     </button>
     <div id="filter-app-dropdown"
-      class="hidden absolute top-full left-0 mt-1 z-50 bg-white border border-line rounded-[12px] py-1 min-w-full"
-      style="box-shadow:0 8px 28px rgba(0,0,0,.10);">
+      class="hidden absolute top-full left-0 mt-1 z-50 bg-white border border-line rounded-md py-1 min-w-full shadow-[0_4px_14px_rgba(15,23,42,.10)]">
       <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="" data-label="All apps">All apps</button>
       {{range .Apps}}
       <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="{{.Name}}" data-label="{{.Name}}">{{.Name}}</button>
@@ -71,13 +70,12 @@
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">Status</label>
     <input type="hidden" name="status" id="filter-status" value="{{.FilterStatus}}">
     <button type="button" id="filter-status-btn"
-      class="flex items-center gap-2 border-[1.5px] border-line rounded-[9px] px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[155px] hover:border-slate-300 focus:outline-none transition-colors">
+      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[155px] hover:border-slate-300 focus:outline-none transition-colors">
       <span id="filter-status-display" class="flex-1 text-left text-slate-700">All statuses</span>
-      <i class="hgi hgi-stroke hgi-rounded hgi-arrow-down-01 text-[11px] text-slate-400 shrink-0"></i>
+      <i class="hgi hgi-stroke hgi-rounded hgi-arrow-down-01 text-[11px] text-slate-500 shrink-0"></i>
     </button>
     <div id="filter-status-dropdown"
-      class="hidden absolute top-full left-0 mt-1 z-50 bg-white border border-line rounded-[12px] py-1 min-w-[170px]"
-      style="box-shadow:0 8px 28px rgba(0,0,0,.10);">
+      class="hidden absolute top-full left-0 mt-1 z-50 bg-white border border-line rounded-md py-1 min-w-[170px] shadow-[0_4px_14px_rgba(15,23,42,.10)]">
       <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="" data-label="All statuses">All statuses</button>
       <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="blocked" data-label="Blocked only">Blocked only</button>
       <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="2xx" data-label="2xx success">2xx success</button>
@@ -114,14 +112,14 @@
   <span class="w-px h-4 bg-line block"></span>
   <span class="text-[12px] text-slate-500">New entries appear at the top</span>
   <span class="flex-1"></span>
-  <div class="inline-flex items-center rounded-full border border-line p-1 bg-surface" role="tablist" aria-label="Log view">
+  <div class="inline-flex items-center rounded-md border border-line p-1 bg-surface" role="tablist" aria-label="Log view">
     <button type="button" id="view-table-btn" role="tab" aria-selected="true"
-      class="flex items-center gap-[6px] px-3 py-[6px] text-[12px] font-medium rounded-full bg-white text-slate-800 shadow-sm cursor-pointer transition-colors duration-150">
+      class="flex items-center gap-[6px] px-3 py-[6px] text-[12px] font-medium rounded-md bg-white text-slate-800 shadow-sm cursor-pointer transition-colors duration-150">
       <i class="hgi hgi-stroke hgi-rounded hgi-menu-square text-[12px]"></i>
       Table
     </button>
     <button type="button" id="view-terminal-btn" role="tab" aria-selected="false"
-      class="flex items-center gap-[6px] px-3 py-[6px] text-[12px] font-medium rounded-full text-slate-500 cursor-pointer transition-colors duration-150">
+      class="flex items-center gap-[6px] px-3 py-[6px] text-[12px] font-medium rounded-md text-slate-500 cursor-pointer transition-colors duration-150">
       <i class="hgi hgi-stroke hgi-rounded hgi-code text-[12px]"></i>
       Terminal
     </button>
@@ -151,7 +149,7 @@
       {{range .Recent}}{{template "log-row" .}}{{end}}
     </div>
     {{if not .Recent}}
-    <div class="flex flex-col items-center justify-center p-16 text-slate-300 text-center">
+    <div class="flex flex-col items-center justify-center p-16 text-slate-500 text-center">
       <i class="hgi hgi-stroke hgi-rounded hgi-search-02 text-[40px] block mb-[10px] opacity-40"></i>
       <p class="text-[14px]">No requests match these filters.</p>
     </div>
@@ -167,7 +165,7 @@
       {{range .Recent}}{{template "log-row" .}}{{end}}
     </div>
     {{if not .Recent}}
-    <div id="empty-state" class="flex flex-col items-center justify-center p-16 text-slate-300 text-center">
+    <div id="empty-state" class="flex flex-col items-center justify-center p-16 text-slate-500 text-center">
       <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02 text-[40px] block mb-[10px] opacity-40"></i>
       <p class="text-[14px]">Waiting for requests…</p>
     </div>
@@ -180,7 +178,7 @@
   <div id="access-log-wrapper" class="hidden overflow-auto h-[calc(100vh-280px)] bg-slate-900">
     <div id="access-log-feed" class="text-white text-[12px] font-mono px-4 py-3 whitespace-pre">
       {{range .AccessLogRecent}}<div>{{.}}</div>{{end}}
-      {{if not .AccessLogRecent}}<p id="access-log-empty" class="text-slate-400">Waiting for requests…</p>{{end}}
+      {{if not .AccessLogRecent}}<p id="access-log-empty" class="text-slate-500">Waiting for requests…</p>{{end}}
     </div>
   </div>
   {{end}}
@@ -192,16 +190,16 @@
 <div class="flex items-center justify-center gap-3 mt-4">
   {{if gt .CurPage 1}}
   <a href="?from={{.FilterFrom}}&to={{.FilterTo}}&app={{.FilterApp}}&status={{.FilterStatus}}&mode=history&page={{sub .CurPage 1}}"
-     class="text-[13px] text-slate-500 border border-line rounded-full px-4 py-2 no-underline">← Prev</a>
+     class="text-[13px] text-slate-500 border border-line rounded-md px-4 py-2 no-underline">← Prev</a>
   {{end}}
   <span class="text-[13px] text-slate-500">Page {{.CurPage}} of {{.TotalPages}}</span>
   {{if lt .CurPage .TotalPages}}
   <a href="?from={{.FilterFrom}}&to={{.FilterTo}}&app={{.FilterApp}}&status={{.FilterStatus}}&mode=history&page={{add .CurPage 1}}"
-     class="text-[13px] text-slate-500 border border-line rounded-full px-4 py-2 no-underline">Next →</a>
+     class="text-[13px] text-slate-500 border border-line rounded-md px-4 py-2 no-underline">Next →</a>
   {{end}}
 </div>
 {{else}}
-<p id="table-format-hint" class="mono text-[12px] text-slate-300 mt-3">
+<p id="table-format-hint" class="mono text-[12px] text-slate-500 mt-3">
   Format: time · app · ip · method · path · status · duration · [action]
 </p>
 {{end}}
@@ -213,25 +211,24 @@
 
 <!-- ── Request Detail Modal ──────────────────────────────────── -->
 <div id="log-detail-backdrop"
-     class="hidden fixed inset-0 z-[300] flex items-center justify-center p-4"
-     style="background:rgba(15,23,42,.45);backdrop-filter:blur(4px);">
+     class="hidden fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-950/50">
   <div id="log-detail-modal"
-       class="bg-white rounded-[28px] border border-line w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden"
-       style="box-shadow:0 24px 80px rgba(0,0,0,.18);">
+       class="bg-white rounded-lg border border-line w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden shadow-[0_8px_24px_rgba(15,23,42,.16)]"
+       role="dialog" aria-modal="true" aria-label="Request details">
 
     <!-- Modal header bar -->
-    <div class="flex items-center gap-3 px-6 py-4 border-b border-canvas shrink-0">
+    <div class="flex items-center gap-3 px-6 py-4 border-b border-line shrink-0">
       <span id="ld-method" class="mono text-[11px] font-bold bg-slate-100 text-slate-600 px-2 py-[3px] rounded shrink-0"></span>
       <span id="ld-path"   class="mono text-[13px] text-slate-700 flex-1 truncate min-w-0"></span>
       <span id="ld-status" class="font-bold text-[15px] shrink-0 tabular-nums"></span>
-      <button id="log-detail-close"
-              class="w-8 h-8 flex items-center justify-center rounded-full bg-surface border border-line text-slate-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors cursor-pointer shrink-0 ml-1">
+      <button id="log-detail-close" type="button" aria-label="Close request details"
+              class="w-8 h-8 flex items-center justify-center rounded-md bg-surface border border-line text-slate-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors cursor-pointer shrink-0 ml-1">
         <i class="hgi hgi-stroke hgi-rounded hgi-cancel-01 text-[13px]"></i>
       </button>
     </div>
 
     <!-- Scrollable body -->
-    <div class="overflow-y-auto p-6 flex flex-col gap-6">
+    <div class="overflow-y-auto p-5 flex flex-col gap-4">
 
       <!-- ① Overview -->
       <div class="grid grid-cols-2 gap-x-8 gap-y-4">
@@ -273,15 +270,15 @@
       <div>
         <p class="ld-section-title">IP Addresses</p>
         <div class="grid grid-cols-2 gap-3">
-          <div class="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+          <div class="bg-amber-50 border border-amber-100 rounded-lg p-4">
             <p class="text-[10px] text-amber-600 font-semibold uppercase tracking-[.06em] mb-2">Real Client IP</p>
             <p id="ld-real-ip" class="mono text-[15px] font-bold text-amber-700 break-all"></p>
             <p class="text-[11px] text-amber-400 mt-1">CF-Connecting-IP / X-Forwarded-For</p>
           </div>
-          <div class="bg-slate-50 border border-line rounded-2xl p-4">
+          <div class="bg-slate-50 border border-line rounded-lg p-4">
             <p class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.06em] mb-2">Proxy / CDN IP</p>
             <p id="ld-proxy-ip" class="mono text-[15px] font-bold text-slate-600 break-all"></p>
-            <p class="text-[11px] text-slate-400 mt-1">direct TCP connection source</p>
+            <p class="text-[11px] text-slate-500 mt-1">direct TCP connection source</p>
           </div>
         </div>
       </div>
@@ -289,18 +286,18 @@
       <!-- ③ Network (ASN / ISP) -->
       <div>
         <p class="ld-section-title">Network</p>
-        <div class="bg-surface border border-line rounded-2xl overflow-hidden">
+        <div class="bg-surface border border-line rounded-lg overflow-hidden">
           <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
-            <i class="hgi hgi-stroke hgi-rounded hgi-wifi-router-01 text-slate-400 text-[16px] shrink-0"></i>
+            <i class="hgi hgi-stroke hgi-rounded hgi-wifi-router-01 text-slate-500 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
-              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">ASN</p>
+              <p class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.06em]">ASN</p>
               <p id="ld-asn" class="mono text-[13px] text-slate-700"></p>
             </div>
           </div>
           <div class="flex items-center gap-3 px-4 py-3">
-            <i class="hgi hgi-stroke hgi-rounded hgi-building-04 text-slate-400 text-[16px] shrink-0"></i>
+            <i class="hgi hgi-stroke hgi-rounded hgi-building-04 text-slate-500 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
-              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">ISP / Organization</p>
+              <p class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.06em]">ISP / Organization</p>
               <p id="ld-org" class="text-[13px] text-slate-700"></p>
             </div>
           </div>
@@ -310,25 +307,25 @@
       <!-- ④ Connection (protocol + TLS) -->
       <div>
         <p class="ld-section-title">Connection</p>
-        <div class="bg-surface border border-line rounded-2xl overflow-hidden">
+        <div class="bg-surface border border-line rounded-lg overflow-hidden">
           <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
-            <i class="hgi hgi-stroke hgi-rounded hgi-layers-01 text-slate-400 text-[16px] shrink-0"></i>
+            <i class="hgi hgi-stroke hgi-rounded hgi-layers-01 text-slate-500 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
-              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">Protocol</p>
+              <p class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.06em]">Protocol</p>
               <p id="ld-proto" class="mono text-[13px] text-slate-700"></p>
             </div>
           </div>
           <div id="ld-tls-row" class="flex items-center gap-3 px-4 py-3 border-b border-line">
-            <i class="hgi hgi-stroke hgi-rounded hgi-shield-key text-slate-400 text-[16px] shrink-0"></i>
+            <i class="hgi hgi-stroke hgi-rounded hgi-shield-key text-slate-500 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
-              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">TLS</p>
+              <p class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.06em]">TLS</p>
               <p id="ld-tls" class="mono text-[13px] text-slate-700"></p>
             </div>
           </div>
           <div id="ld-sni-row" class="flex items-center gap-3 px-4 py-3">
-            <i class="hgi hgi-stroke hgi-rounded hgi-tag-01 text-slate-400 text-[16px] shrink-0"></i>
+            <i class="hgi hgi-stroke hgi-rounded hgi-tag-01 text-slate-500 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
-              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">SNI (server name)</p>
+              <p class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.06em]">SNI (server name)</p>
               <p id="ld-sni" class="mono text-[13px] text-slate-700"></p>
             </div>
           </div>
@@ -338,32 +335,32 @@
       <!-- ⑤ Bot Analysis (hidden when no data) -->
       <div id="ld-bot-section" class="hidden">
         <p class="ld-section-title">Bot Analysis</p>
-        <div class="bg-surface border border-line rounded-2xl overflow-hidden">
+        <div class="bg-surface border border-line rounded-lg overflow-hidden">
           <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
-            <i class="hgi hgi-stroke hgi-rounded hgi-bot text-slate-400 text-[16px] shrink-0"></i>
+            <i class="hgi hgi-stroke hgi-rounded hgi-bot text-slate-500 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
-              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">Anomaly Score</p>
+              <p class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.06em]">Anomaly Score</p>
               <p id="ld-bot-score" class="mono text-[13px] text-slate-700"></p>
             </div>
           </div>
           <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
-            <i class="hgi hgi-stroke hgi-rounded hgi-fingerprint-01 text-slate-400 text-[16px] shrink-0"></i>
+            <i class="hgi hgi-stroke hgi-rounded hgi-fingerprint-01 text-slate-500 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
-              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">JA4 Fingerprint</p>
+              <p class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.06em]">JA4 Fingerprint</p>
               <p id="ld-ja4" class="mono text-[13px] text-slate-700 break-all"></p>
             </div>
           </div>
           <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
-            <i class="hgi hgi-stroke hgi-rounded hgi-fingerprint-01 text-slate-400 text-[16px] shrink-0"></i>
+            <i class="hgi hgi-stroke hgi-rounded hgi-fingerprint-01 text-slate-500 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
-              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">JA3 Fingerprint (legacy)</p>
+              <p class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.06em]">JA3 Fingerprint (legacy)</p>
               <p id="ld-ja3" class="mono text-[13px] text-slate-700 break-all"></p>
             </div>
           </div>
           <div class="flex items-center gap-3 px-4 py-3">
-            <i class="hgi hgi-stroke hgi-rounded hgi-user-circle text-slate-400 text-[16px] shrink-0"></i>
+            <i class="hgi hgi-stroke hgi-rounded hgi-user-circle text-slate-500 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
-              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">Visitor ID (browser fingerprint)</p>
+              <p class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.06em]">Visitor ID (browser fingerprint)</p>
               <p id="ld-visitor" class="mono text-[13px] text-slate-700 break-all"></p>
             </div>
           </div>
@@ -373,18 +370,18 @@
       <!-- ⑤.5 Threat Score (hidden until this IP has a recorded score) -->
       <div id="ld-threat-section" class="hidden">
         <p class="ld-section-title">Threat Score</p>
-        <div class="bg-surface border border-line rounded-2xl overflow-hidden">
+        <div class="bg-surface border border-line rounded-lg overflow-hidden">
           <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
-            <i class="hgi hgi-stroke hgi-rounded hgi-shield-energy text-slate-400 text-[16px] shrink-0"></i>
+            <i class="hgi hgi-stroke hgi-rounded hgi-shield-energy text-slate-500 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
-              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">Composite Score (0–100)</p>
+              <p class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.06em]">Composite Score (0–100)</p>
               <p id="ld-threat-score" class="mono text-[13px] text-slate-700"></p>
             </div>
           </div>
           <div class="flex items-center gap-3 px-4 py-3">
-            <i class="hgi hgi-stroke hgi-rounded hgi-chart-breakout-square text-slate-400 text-[16px] shrink-0"></i>
+            <i class="hgi hgi-stroke hgi-rounded hgi-chart-breakout-square text-slate-500 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
-              <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">Breakdown</p>
+              <p class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.06em]">Breakdown</p>
               <p id="ld-threat-breakdown" class="mono text-[13px] text-slate-700"></p>
             </div>
           </div>
@@ -394,7 +391,7 @@
       <!-- ⑥ Security (only when blocked) -->
       <div id="ld-security" class="hidden">
         <p class="ld-section-title">Security Decision</p>
-        <div class="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-start gap-3">
+        <div class="bg-red-50 border border-red-100 rounded-lg p-4 flex items-start gap-3">
           <i class="hgi hgi-stroke hgi-rounded hgi-shield-minus text-red-500 text-[22px] shrink-0 mt-[1px]"></i>
           <div>
             <p class="text-[13px] font-semibold text-red-700">Request Blocked</p>
@@ -406,7 +403,7 @@
       <!-- ⑥ Request Headers -->
       <div>
         <p class="ld-section-title">Request Headers</p>
-        <div id="ld-headers" class="bg-surface rounded-2xl border border-line overflow-hidden text-[12px]"></div>
+        <div id="ld-headers" class="bg-surface rounded-lg border border-line overflow-hidden text-[12px]"></div>
       </div>
 
     </div><!-- /body -->

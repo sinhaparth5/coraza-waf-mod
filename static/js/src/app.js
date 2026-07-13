@@ -160,32 +160,21 @@ function showToast(data) {
   var subtitle = (data.ip || '') + (data.country ? ' · ' + data.country : '');
   var body     = (data.method || 'GET') + ' ' + (data.path || '/');
 
-  // Outer card — frosted glass
+  // Notification surface
   var toast = document.createElement('div');
   toast.style.cssText = [
     'position:relative', 'overflow:hidden', 'cursor:pointer', 'pointer-events:auto',
     'display:flex', 'align-items:flex-start', 'gap:10px', 'width:100%', 'padding:14px',
-    'border-radius:20px', 'border:1px solid rgba(255,255,255,0.90)',
-    'background:rgba(255,255,255,0.80)',
-    'backdrop-filter:blur(40px)', '-webkit-backdrop-filter:blur(40px)',
-    'box-shadow:0 12px 40px rgba(0,0,0,0.10),0 0 0 1px rgba(0,0,0,0.04)',
+    'border-radius:8px', 'border:1px solid #D5DBE1',
+    'background:#FFFFFF',
+    'box-shadow:0 4px 14px rgba(15,23,42,0.10)',
     'transform:translateX(110%)', 'opacity:0',
-    'transition:transform .35s cubic-bezier(.22,.68,0,1.2),opacity .3s',
+    'transition:transform .2s ease-out,opacity .2s ease-out',
   ].join(';');
 
-  // Shimmer decoration (bottom-right)
-  var shimmer = document.createElement('div');
-  shimmer.style.cssText = [
-    'position:absolute', 'right:-24px', 'bottom:-24px',
-    'width:120px', 'height:60px', 'border-radius:10px',
-    'opacity:.18', 'pointer-events:none',
-    'background:conic-gradient(from 196deg at 50% 50%,rgba(66,232,255,0.009) 5deg,rgba(255,126,171,0.50) 185deg,#3083FF 275deg,#7147FF 360deg)',
-  ].join(';');
-  toast.appendChild(shimmer);
-
-  // Icon box — tinted per action type
+  // Icon box, tinted per action type
   var iconBox = document.createElement('div');
-  iconBox.style.cssText = 'width:38px;height:38px;border-radius:10px;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;background:' + cfg.bg + ';';
+  iconBox.style.cssText = 'width:38px;height:38px;border-radius:6px;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;background:' + cfg.bg + ';';
   iconBox.innerHTML = '<i class="hgi hgi-stroke hgi-rounded ' + cfg.icon + ' text-base" style="color:' + cfg.color + ';"></i>';
 
   // Content

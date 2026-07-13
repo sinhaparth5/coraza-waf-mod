@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Admin UI:** replaced the floating, heavily rounded dashboard style with an
+  attached sidebar, flat bordered surfaces, tighter spacing, stronger text
+  contrast, and a consistent green and navy palette. Authenticated pages now
+  use responsive grids, compact controls, plain modals and notifications, and
+  clearer table headers. The login page is unchanged.
+
 ### Added
 - **Admin login: TOTP two-factor authentication.** Sign-in can now require a
   6-digit authenticator code (RFC 6238, pure Go — works with Google

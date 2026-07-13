@@ -8,40 +8,38 @@
 {{define "content"}}
 
 <!-- ── Row 1: Two stat cards, 50/50 ── -->
-<div class="flex gap-6 mb-6">
+<div class="grid grid-cols-1 2xl:grid-cols-2 gap-4 mb-4">
 
   <!-- Card 1: WAF Active hero (photo + gradient, Allowed/Blocked breakdown) -->
   <div class="card flex-1 overflow-hidden relative bg-navy text-white">
     <img src="{{.AdminPath}}/static/imgs/Unsplash7bmdiiqz_j4.png" alt=""
       class="absolute right-0 top-0 h-full w-[55%] object-cover opacity-80"/>
     <div class="absolute inset-0 bg-gradient-to-r from-navy via-navy/75 to-transparent"></div>
-    <div class="absolute -top-10 -left-10 w-40 h-40 rounded-full bg-brand/30 blur-2xl"></div>
-
-    <div class="relative z-10 p-6 flex flex-col h-full">
-      <div class="inline-flex items-center gap-[6px] bg-white/10 backdrop-blur-sm rounded-full px-[14px] py-[6px] w-fit mb-6">
+    <div class="relative z-10 p-5 flex flex-col h-full">
+      <div class="inline-flex items-center gap-[6px] bg-white/10 border border-white/10 rounded px-3 py-[5px] w-fit mb-4">
         <span class="w-[6px] h-[6px] rounded-full bg-brand inline-block"></span>
         <span class="text-[12px] text-white font-medium">WAF Active</span>
       </div>
 
       <p class="text-[13px] text-white/60 mb-1">Protected backends</p>
-      <p class="text-[42px] font-extrabold leading-none mb-6">{{len .Apps}}</p>
+      <p class="text-[36px] font-bold leading-none mb-4">{{len .Apps}}</p>
 
       <div class="flex gap-3 mt-auto">
-        <div class="flex-1 rounded-2xl bg-white/[0.12] backdrop-blur-sm px-4 py-3">
+        <div class="flex-1 rounded-lg bg-white/[0.12]  px-4 py-3">
           <p class="text-[12px] text-white/70 mb-2">Allowed today</p>
           <div class="flex items-end justify-between gap-2">
             <span class="text-[22px] font-bold leading-none">{{sub .Stats.TotalToday .Stats.BlockedToday}}</span>
-            <span class="inline-flex items-center gap-1 text-[11px] font-semibold bg-brand/25 text-brand-light px-2 py-[3px] rounded-full shrink-0">
+            <span class="inline-flex items-center gap-1 text-[11px] font-semibold bg-brand/25 text-brand-light px-2 py-[3px] rounded shrink-0">
               <i class="hgi hgi-stroke hgi-rounded hgi-arrow-up-01 text-[10px]"></i>
               {{sub 100 .BlockRate}}%
             </span>
           </div>
         </div>
-        <div class="flex-1 rounded-2xl bg-white/[0.12] backdrop-blur-sm px-4 py-3">
+        <div class="flex-1 rounded-lg bg-white/[0.12]  px-4 py-3">
           <p class="text-[12px] text-white/70 mb-2">Blocked today</p>
           <div class="flex items-end justify-between gap-2">
             <span class="text-[22px] font-bold leading-none">{{.Stats.BlockedToday}}</span>
-            <span class="inline-flex items-center gap-1 text-[11px] font-semibold bg-red-500/25 text-red-200 px-2 py-[3px] rounded-full shrink-0">
+            <span class="inline-flex items-center gap-1 text-[11px] font-semibold bg-red-500/25 text-red-200 px-2 py-[3px] rounded shrink-0">
               <i class="hgi hgi-stroke hgi-rounded hgi-arrow-down-01 text-[10px]"></i>
               {{.BlockRate}}%
             </span>
@@ -52,15 +50,15 @@
   </div>
 
   <!-- Card 2: Traffic stats + dot matrix -->
-  <div class="card flex-1 p-6">
+  <div class="card flex-1 p-5">
     <div class="flex items-start gap-3 mb-1">
-      <div class="w-8 h-8 rounded-full bg-brand-tint flex items-center justify-center shrink-0 mt-[2px]">
+      <div class="w-8 h-8 rounded-md bg-brand-tint flex items-center justify-center shrink-0 mt-[2px]">
         <i class="hgi hgi-stroke hgi-rounded hgi-activity-01 text-sm text-brand-dark"></i>
       </div>
       <div>
         <div class="flex items-baseline gap-3">
-          <span class="text-[42px] font-extrabold text-slate-900 leading-none">{{.Stats.TotalToday}}</span>
-          <span class="text-[12px] font-semibold bg-brand-tint text-brand-dark px-[10px] py-[3px] rounded-full">Active</span>
+          <span class="text-[36px] font-bold text-slate-900 leading-none">{{.Stats.TotalToday}}</span>
+          <span class="text-[12px] font-semibold bg-brand-tint text-brand-dark px-[10px] py-[3px] rounded">Active</span>
         </div>
         <p class="text-[13px] text-slate-500 mt-1">requests today</p>
       </div>
@@ -79,19 +77,22 @@
       <span class="flex items-center gap-[6px] text-[12px] text-slate-500">
         <span class="w-2 h-2 rounded-full bg-navy inline-block"></span>Blocked
       </span>
-      <span class="text-[12px] text-slate-300">last 24h</span>
+      <span class="text-[12px] text-slate-500">last 24h</span>
     </div>
   </div>
 
 </div>
 
 <!-- ── Row 1.5: Live signals (placeholder ticker strip, real metrics TBD) ── -->
-<div class="card p-5 mb-6">
-  <p class="text-[12px] text-slate-500 mb-3 px-1">At a glance</p>
-  <div class="flex gap-3 overflow-x-auto">
+<div class="card overflow-hidden mb-4">
+  <div class="px-5 py-4 border-b border-line">
+    <p class="text-[11px] font-medium uppercase tracking-wide text-slate-500 mb-[2px]">Live signals</p>
+    <h2 class="text-[16px] font-semibold text-slate-900">At a glance</h2>
+  </div>
+  <div class="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
 
     {{range .AtAGlance}}
-    <div class="flex flex-col gap-3 shrink-0 w-[170px] rounded-2xl {{.CardClass}} p-4">
+    <div class="flex min-w-0 flex-col gap-3 border-r border-b border-line {{.CardClass}} p-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-[6px]">
           <i class="hgi hgi-stroke hgi-rounded {{.Icon}} text-sm {{.IconClass}}"></i>
@@ -101,7 +102,7 @@
       </div>
       <div>
         <p class="text-[11px] text-slate-500 mb-px">Current value</p>
-        <p class="text-[20px] font-extrabold text-slate-900">{{.Value}}</p>
+        <p class="text-[20px] font-bold text-slate-900">{{.Value}}</p>
       </div>
       <svg viewBox="0 0 170 36" class="w-full h-9" preserveAspectRatio="none">
         <defs><linearGradient id="{{.SparkID}}" x1="0" y1="0" x2="0" y2="1">
@@ -115,28 +116,28 @@
     {{end}}
 
   </div>
-  <p class="text-[11px] text-slate-300 mt-3 text-center">live metrics from recent request logs</p>
+  <p class="text-[11px] text-slate-500 px-5 py-3">Based on recent request logs</p>
 </div>
 
 <!-- ── Row 2: Breakdown + Top countries + Recent threats ── -->
-<div class="flex gap-6 mb-6">
+<div class="grid grid-cols-1 2xl:grid-cols-[260px_260px_minmax(0,1fr)] gap-4 mb-4">
 
   <!-- Request breakdown (donut + legend) -->
-  <div class="card w-[300px] shrink-0 p-6">
+  <div class="card p-5">
     <div class="flex items-start justify-between mb-2">
       <div>
         <p class="text-[12px] text-slate-500 mb-[2px]">Traffic analysis</p>
         <h3 class="text-[17px] font-bold text-slate-900">Request breakdown</h3>
       </div>
-      <a href="/admin/logs" class="w-8 h-8 rounded-full border border-line flex items-center justify-center text-slate-500 no-underline shrink-0">
+      <a href="/admin/logs" class="w-8 h-8 rounded-md border border-line flex items-center justify-center text-slate-500 no-underline shrink-0">
         <i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-01 text-[13px]"></i>
       </a>
     </div>
 
     <!-- SVG donut ring -->
-    <div class="flex items-center justify-center my-6">
-      <div class="relative w-[176px] h-[176px]">
-        <svg viewBox="0 0 176 176" class="w-[176px] h-[176px] rotate-[150deg]">
+    <div class="flex items-center justify-center my-4">
+      <div class="relative w-[156px] h-[156px]">
+        <svg viewBox="0 0 176 176" class="w-[156px] h-[156px] rotate-[150deg]">
           {{if .HasTraffic}}
           <circle cx="88" cy="88" r="74" fill="none" stroke="#76C893" stroke-width="13"
             stroke-dasharray="{{.AllowedArc}} 465" stroke-linecap="round"/>
@@ -149,7 +150,7 @@
           {{end}}
         </svg>
         <div class="absolute inset-0 flex flex-col items-center justify-center">
-          <span class="text-[32px] font-extrabold text-slate-900 leading-none">{{.Stats.TotalToday}}</span>
+          <span class="text-[28px] font-bold text-slate-900 leading-none">{{.Stats.TotalToday}}</span>
           <span class="text-[12px] text-slate-500 mt-1">requests</span>
         </div>
       </div>
@@ -175,13 +176,13 @@
   </div>
 
   <!-- Top countries -->
-  <div class="card w-[300px] shrink-0 p-6">
+  <div class="card p-5">
     <div class="flex items-start justify-between mb-5">
       <div>
         <p class="text-[12px] text-slate-500 mb-[2px]">Geo distribution</p>
         <h3 class="text-[17px] font-bold text-slate-900">Top countries</h3>
       </div>
-      <a href="/admin/geo-rules" class="w-8 h-8 rounded-full border border-line flex items-center justify-center text-slate-500 no-underline shrink-0">
+      <a href="/admin/geo-rules" class="w-8 h-8 rounded-md border border-line flex items-center justify-center text-slate-500 no-underline shrink-0">
         <i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-01 text-[13px]"></i>
       </a>
     </div>
@@ -195,23 +196,23 @@
         <span class="absolute right-3 top-2 text-[11px] font-medium text-slate-700">{{.Count}}</span>
       </div>
       {{else}}
-      <div class="text-center py-8 text-slate-300">
+      <div class="text-center py-8 text-slate-500">
         <i class="hgi hgi-stroke hgi-rounded hgi-earth text-[28px] block mx-auto mb-2 opacity-[.35]"></i>
         <p class="text-[13px]">No country data yet</p>
       </div>
       {{end}}
     </div>
-    <p class="text-[11px] text-slate-300 mt-5 text-center">requests by country, last 24h</p>
+    <p class="text-[11px] text-slate-500 mt-5 text-center">requests by country, last 24h</p>
   </div>
 
   <!-- Recent threats -->
-  <div class="card flex-1 p-6 flex flex-col">
+  <div class="card flex-1 p-5 flex flex-col">
     <div class="flex items-start justify-between mb-2">
       <div>
         <p class="text-[12px] text-slate-500 mb-[2px]">WAF detections</p>
         <h3 class="text-[19px] font-bold text-slate-900">Recent threats</h3>
       </div>
-      <a href="/admin/logs" class="w-8 h-8 rounded-full border border-line flex items-center justify-center text-slate-500 no-underline shrink-0">
+      <a href="/admin/logs" class="w-8 h-8 rounded-md border border-line flex items-center justify-center text-slate-500 no-underline shrink-0">
         <i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-01 text-[13px]"></i>
       </a>
     </div>
@@ -219,7 +220,7 @@
     <!-- Top blocked IP avatars -->
     <div class="flex gap-3 my-6">
       {{range $i, $r := .TopBlocked}}{{if lt $i 3}}
-      <div class="w-16 h-16 rounded-2xl bg-canvas flex flex-col items-center justify-center gap-1 overflow-hidden">
+      <div class="w-16 h-16 rounded-lg bg-canvas flex flex-col items-center justify-center gap-1 overflow-hidden">
         {{if $r.Country}}
         <span class="{{flagClass $r.Country}} w-6 h-[18px] bg-cover block rounded-[2px]"></span>
         {{else}}
@@ -229,9 +230,9 @@
       </div>
       {{end}}{{end}}
       {{if .TopBlocked}}
-      <div class="w-16 h-16 rounded-2xl bg-navy flex flex-col items-center justify-center gap-1">
+      <div class="w-16 h-16 rounded-lg bg-navy flex flex-col items-center justify-center gap-1">
         <i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-02 text-base text-white/[.65]"></i>
-        <span class="text-[10px] text-white/50">More</span>
+        <span class="text-[10px] text-white/60">More</span>
       </div>
       {{end}}
     </div>
@@ -244,26 +245,27 @@
     <div class="h-28 mt-auto">
       <canvas id="threatsChart"></canvas>
     </div>
-    <p class="text-[11px] text-slate-300 mt-3 text-center">blocked requests by country, last 24h</p>
+    <p class="text-[11px] text-slate-500 mt-3 text-center">blocked requests by country, last 24h</p>
   </div>
 
 </div>
 
 <!-- ── Recent requests table ── -->
 <div class="card overflow-hidden">
-  <div class="flex items-center justify-between px-6 py-5 border-b border-canvas">
+  <div class="flex items-center justify-between px-5 py-4 border-b border-line">
     <div>
       <p class="text-[12px] text-slate-500 mb-[2px]">Traffic monitor</p>
       <h3 class="text-[17px] font-bold text-slate-900">Recent requests</h3>
     </div>
-    <a href="/admin/logs" class="flex items-center gap-[6px] text-[13px] font-medium text-brand-dark border border-[#CFEADB] rounded-full px-4 py-2 no-underline">
+    <a href="/admin/logs" class="flex items-center gap-[6px] text-[13px] font-medium text-brand-dark border border-[#CFEADB] rounded-md px-4 py-2 no-underline">
       <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02 text-[13px]"></i>
       Live feed
     </a>
   </div>
-  <table class="w-full border-collapse text-[13px]">
-    <thead>
-      <tr class="border-b border-canvas">
+  <div class="overflow-x-auto">
+  <table class="w-full min-w-[760px] border-collapse text-[13px]">
+    <thead class="bg-surface">
+      <tr class="border-b border-line bg-surface">
         <th class="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Time</th>
         <th class="text-left px-3 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">App</th>
         <th class="text-left px-3 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Source</th>
@@ -285,7 +287,7 @@
           </div>
         </td>
         <td class="px-3 py-3">
-          <span class="mono text-[11px] font-bold bg-slate-100 text-slate-500 px-2 py-[3px] rounded-[5px]">{{.Method}}</span>
+          <span class="mono text-[11px] font-bold bg-slate-100 text-slate-500 px-2 py-[3px] rounded">{{.Method}}</span>
         </td>
         <td class="mono px-3 py-3 text-slate-500 max-w-[180px] overflow-hidden text-ellipsis whitespace-nowrap">{{truncate .Path 36}}</td>
         <td class="px-3 py-3">
@@ -294,14 +296,14 @@
             {{else if ge .Status 400}}<span class="text-[13px] font-bold text-amber-500">{{.Status}}</span>
             {{else if ge .Status 300}}<span class="text-[13px] font-bold text-blue-500">{{.Status}}</span>
             {{else}}<span class="text-[13px] font-bold text-brand">{{.Status}}</span>{{end}}
-            {{if .Blocked}}<span class="text-[10px] font-semibold bg-red-100 text-red-600 px-2 py-[2px] rounded-full">BLOCKED</span>{{end}}
+            {{if .Blocked}}<span class="text-[10px] font-semibold bg-red-100 text-red-600 px-2 py-[2px] rounded">BLOCKED</span>{{end}}
           </div>
         </td>
-        <td class="mono px-6 py-3 text-right text-slate-300">{{fmtDur .Duration}}</td>
+        <td class="mono px-6 py-3 text-right text-slate-500">{{fmtDur .Duration}}</td>
       </tr>
       {{else}}
       <tr>
-        <td colspan="7" class="text-center p-12 text-slate-500">
+        <td colspan="7" class="text-center p-10 text-slate-500">
           <i class="hgi hgi-stroke hgi-rounded hgi-activity-01 text-[32px] block mx-auto mb-2 opacity-30"></i>
           No requests yet. Send traffic through the proxy.
         </td>
@@ -309,6 +311,7 @@
       {{end}}
     </tbody>
   </table>
+  </div>
 </div>
 
 {{end}}
@@ -319,40 +322,40 @@
 
 <!-- ── Right panel ── -->
 {{define "rightpanel"}}
-<aside class="w-[320px] shrink-0 bg-white border-l border-line px-6 py-7 flex flex-col gap-6 overflow-y-auto">
+<aside class="w-[320px] shrink-0 bg-white border-l border-line px-5 py-6 flex flex-col gap-4 overflow-y-auto max-xl:w-full max-xl:border-l-0 max-xl:border-t">
 
   <!-- Blocked today / all-time -->
-  <div class="w-full rounded-[28px] p-6 flex flex-col bg-navy">
+  <div class="w-full rounded-lg p-5 flex flex-col bg-navy">
     <div class="pb-5 mb-5 border-b border-white/10">
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center gap-2">
-          <div class="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center">
+          <div class="w-6 h-6 rounded-md bg-white/10 flex items-center justify-center">
             <i class="hgi hgi-stroke hgi-rounded hgi-security-block text-sm text-white"></i>
           </div>
           <span class="text-[12px] text-white/[.55]">Blocked today</span>
         </div>
-        <span class="text-[12px] font-semibold bg-brand/[.28] text-brand-light px-[10px] py-[3px] rounded-full">{{.BlockRate}}%</span>
+        <span class="text-[12px] font-semibold bg-brand/[.28] text-brand-light px-[10px] py-[3px] rounded">{{.BlockRate}}%</span>
       </div>
-      <div class="text-[42px] font-extrabold text-white leading-[1.1]">{{.Stats.BlockedToday}}</div>
-      <div class="text-[12px] text-white/[.45] mt-1">threats blocked</div>
+      <div class="text-[36px] font-bold text-white leading-[1.1]">{{.Stats.BlockedToday}}</div>
+      <div class="text-[12px] text-white/60 mt-1">threats blocked</div>
     </div>
     <div>
       <div class="flex items-center gap-2 mb-3">
-        <div class="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center">
+        <div class="w-6 h-6 rounded-md bg-white/10 flex items-center justify-center">
           <i class="hgi hgi-stroke hgi-rounded hgi-earth text-sm text-white"></i>
         </div>
         <span class="text-[12px] text-white/[.55]">All time</span>
       </div>
-      <div class="text-[28px] font-extrabold text-white leading-[1.1]">{{.Stats.BlockedAll}}</div>
-      <div class="text-[12px] text-white/40 mt-1">total blocked</div>
+      <div class="text-[26px] font-bold text-white leading-[1.1]">{{.Stats.BlockedAll}}</div>
+      <div class="text-[12px] text-white/60 mt-1">total blocked</div>
     </div>
   </div>
 
   <!-- Bot Shield card -->
-  <div class="rounded-[20px] border border-line bg-white shadow-[0_1px_24px_0_rgba(0,0,0,0.06)] p-5 relative overflow-hidden">
+  <div class="rounded-lg border border-line bg-white p-5 relative overflow-hidden">
 
     <!-- Icon -->
-    <div class="w-[46px] h-[46px] rounded-xl bg-[#D0FBFF] flex items-center justify-center absolute left-5 top-5">
+    <div class="w-[46px] h-[46px] rounded-md bg-[#D0FBFF] flex items-center justify-center absolute left-5 top-5">
       <svg width="20" height="22" viewBox="0 0 20 33" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M9.6444 0C9.6444 9.47484 0 16.2896 0 23.1048C0 28.3374 4.31784 32.5793 9.6444 32.5793C14.9702 32.5793 19.2877 28.3374 19.2877 23.1048C19.2877 16.2896 9.6444 9.47484 9.6444 0ZM13.5241 27.9857H5.76324V25.9193L13.5241 25.9207V27.9857ZM13.5241 20.8364L10.6967 20.835V23.616H8.58996V20.835H5.76288V18.7686H8.58996V15.9905H10.6967V18.7686H13.5241V20.8364Z" fill="#478F96"/>
       </svg>
@@ -364,52 +367,36 @@
     <!-- Bots stopped (big) + users passed (muted) -->
     <div class="flex items-baseline gap-[6px] mt-[70px] mb-[6px]">
       <span class="text-[32px] font-bold text-[#272927] leading-none">{{.BotStats.ChallengedToday}}</span>
-      <span class="text-[15px] font-bold text-slate-400">/ {{.BotStats.PassedToday}}</span>
-      <span class="text-[11px] font-semibold text-slate-400">today</span>
+      <span class="text-[15px] font-bold text-slate-500">/ {{.BotStats.PassedToday}}</span>
+      <span class="text-[11px] font-semibold text-slate-500">today</span>
     </div>
 
     <!-- Labels -->
     <div class="flex items-center gap-3 mb-4">
       <span class="text-[11px] text-slate-500">bots challenged</span>
-      <span class="text-slate-300">·</span>
+      <span class="text-slate-500">·</span>
       <span class="text-[11px] text-slate-500">users passed</span>
     </div>
 
     <!-- Badge -->
-    <span class="inline-flex items-center gap-1 py-[3px] px-[9px] rounded bg-[#D0FBFF] text-[11px] font-semibold text-[#2a7a81] mb-4">
+    <span class="inline-flex items-center gap-1 py-[3px] px-[9px] rounded bg-cyan-50 border border-cyan-100 text-[11px] font-semibold text-cyan-800">
       {{if gt .BotStats.ChallengedToday 0}}{{.BotStats.ChallengedToday}} bots stopped{{else}}All clear{{end}}
     </span>
-
-    <!-- Decorative area chart (same paths as the reference design) -->
-    <div class="w-full h-[52px] relative">
-      <svg width="100%" height="52" viewBox="0 0 232 52" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M37.2 33.2C22.5 34.8 12.1 33.2 0 28.4V52H232V22.6C219.9 14.1 219.7 3.8 200.3 0.6C178.3 -3 168.8 10.4 146.3 12.6C120.2 15.1 103 4.5 78.5 10C56.9 14.9 60.3 31.2 37.2 33.2Z" fill="url(#botgrad)"/>
-        <defs>
-          <linearGradient id="botgrad" x1="116" y1="8" x2="116" y2="52" gradientUnits="userSpaceOnUse">
-            <stop stop-color="#D0FBFF"/>
-            <stop offset="1" stop-color="#DDF2F4" stop-opacity="0"/>
-          </linearGradient>
-        </defs>
-      </svg>
-      <svg width="100%" height="36" viewBox="0 0 232 36" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg" class="absolute left-0 top-0">
-        <path d="M0 28.4C12.1 33.2 22.5 34.8 37.2 33.2C60.3 31.2 56.9 14.9 78.5 10C103 4.5 120.2 15.1 146.3 12.6C168.8 10.4 178.3 -3 200.3 0.6C219.7 3.8 219.9 14.1 232 22.6" stroke="#76C893" stroke-width="1.5"/>
-      </svg>
-    </div>
   </div>
 
   <!-- Heading -->
   <div class="flex items-center justify-between">
     <div>
       <p class="text-[12px] text-slate-500 mb-1">Security intel</p>
-      <h2 class="text-[20px] font-extrabold text-slate-900">Top Threats</h2>
+      <h2 class="text-[20px] font-bold text-slate-900">Top threats</h2>
     </div>
-    <a href="/admin/logs" class="w-8 h-8 rounded-full border border-line flex items-center justify-center text-slate-500 no-underline shrink-0">
+    <a href="/admin/logs" class="w-8 h-8 rounded-md border border-line flex items-center justify-center text-slate-500 no-underline shrink-0">
       <i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-01 text-[13px]"></i>
     </a>
   </div>
 
   <!-- Threat list card -->
-  <div class="rounded-[20px] bg-white border border-line p-3 flex flex-col">
+  <div class="rounded-lg bg-white border border-line p-3 flex flex-col">
     {{range $i, $r := .TopBlocked}}
     {{if $i}}<div class="border-t border-line"></div>{{end}}
     <div class="flex items-center gap-3 py-[10px]">
@@ -427,13 +414,13 @@
         <div class="text-[11px] text-slate-500 truncate">{{truncate $r.Path 18}} · {{fmtTime $r.Timestamp}}</div>
       </div>
       <!-- Badge -->
-      <span class="text-[10px] font-semibold px-[8px] py-[3px] rounded-full shrink-0 flex items-center gap-1 {{if $r.RuleID}}bg-amber-100 text-amber-600{{else}}bg-red-100 text-red-600{{end}}">
+      <span class="text-[10px] font-semibold px-[8px] py-[3px] rounded shrink-0 flex items-center gap-1 {{if $r.RuleID}}bg-amber-100 text-amber-600{{else}}bg-red-100 text-red-600{{end}}">
         <span class="w-[5px] h-[5px] rounded-full inline-block {{if $r.RuleID}}bg-amber-600{{else}}bg-red-600{{end}}"></span>
         {{if $r.RuleID}}WAF{{else}}Block{{end}}
       </span>
     </div>
     {{else}}
-    <div class="text-center py-8 text-slate-300">
+    <div class="text-center py-8 text-slate-500">
       <i class="hgi hgi-stroke hgi-rounded hgi-shield-01 text-[28px] block mx-auto mb-2 opacity-[.35]"></i>
       <p class="text-[13px]">No threats detected</p>
     </div>
@@ -441,48 +428,48 @@
   </div>
 
   {{if .TopBlocked}}
-  <a href="/admin/logs" class="flex items-center justify-center text-[13px] font-semibold text-brand-dark bg-brand-tint rounded-full py-[10px] no-underline">
+  <a href="/admin/logs" class="flex items-center justify-center text-[13px] font-semibold text-brand-dark bg-brand-tint rounded-md py-[10px] no-underline">
     See all
   </a>
   {{end}}
 
   <!-- WAF status dark card -->
-  <div class="rounded-[28px] bg-navy p-6 mt-auto">
+  <div class="rounded-lg bg-navy p-5 mt-auto">
 
     <!-- Pills -->
     <div class="flex gap-[6px] flex-wrap mb-4">
-      <span class="text-[12px] font-semibold bg-brand text-white px-3 py-[5px] rounded-full">WAF Engine</span>
-      <span class="text-[12px] font-medium bg-white/[.12] text-white/80 px-3 py-[5px] rounded-full">CRS 4.x</span>
+      <span class="text-[12px] font-semibold bg-brand text-white px-3 py-[5px] rounded">WAF Engine</span>
+      <span class="text-[12px] font-medium bg-white/[.12] text-white/80 px-3 py-[5px] rounded">CRS 4.x</span>
     </div>
 
     <div class="flex flex-col gap-[10px] mb-4">
       <div class="flex justify-between items-center">
-        <span class="text-[12px] text-white/50">IP Rules</span>
+        <span class="text-[12px] text-white/60">IP Rules</span>
         <span class="text-[12px] font-semibold text-white">Active</span>
       </div>
       <div class="flex justify-between items-center">
-        <span class="text-[12px] text-white/50">Geo Rules</span>
+        <span class="text-[12px] text-white/60">Geo Rules</span>
         <span class="text-[12px] font-semibold text-white">Active</span>
       </div>
       <div class="flex justify-between items-center">
-        <span class="text-[12px] text-white/50">Protection</span>
-        <span class="text-[16px] font-extrabold text-white">100%</span>
+        <span class="text-[12px] text-white/60">Protection</span>
+        <span class="text-[16px] font-bold text-white">100%</span>
       </div>
     </div>
 
-    <div class="text-[24px] font-extrabold text-white">Coraza v3.7</div>
-    <div class="text-[12px] text-white/[.38] mt-1">OWASP Core Rule Set</div>
+    <div class="text-[24px] font-bold text-white">Coraza v3.7</div>
+    <div class="text-[12px] text-white/60 mt-1">OWASP Core Rule Set</div>
 
     <!-- Bottom icons -->
     <div class="flex items-center gap-2 mt-4 pt-4 border-t border-white/10">
-      <div class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+      <div class="w-9 h-9 rounded-md bg-white/10 flex items-center justify-center">
         <i class="hgi hgi-stroke hgi-rounded hgi-shield-01 text-sm text-white"></i>
       </div>
       <div class="relative">
-        <div class="w-9 h-9 rounded-full bg-brand flex items-center justify-center">
+        <div class="w-9 h-9 rounded-md bg-brand flex items-center justify-center">
           <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01 text-sm text-white"></i>
         </div>
-        <span class="absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full bg-white text-navy text-[9px] font-extrabold flex items-center justify-center">{{len .Apps}}</span>
+        <span class="absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full bg-white text-navy text-[9px] font-bold flex items-center justify-center">{{len .Apps}}</span>
       </div>
     </div>
   </div>

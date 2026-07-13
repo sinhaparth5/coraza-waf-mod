@@ -1,7 +1,8 @@
 # Admin UI redesign plan (internal/ui)
 
-Status: **planned, nothing edited yet**. All findings below come from a survey of the
-current templates; no template, JS, or Go file has been changed for this redesign.
+Status: **implemented on 2026-07-13**. The authenticated admin templates and their
+shared JavaScript now follow the design language below. The standalone login page
+was left unchanged.
 
 ## What the user asked for (2026-07-13)
 

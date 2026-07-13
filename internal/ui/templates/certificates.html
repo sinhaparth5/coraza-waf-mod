@@ -1,11 +1,11 @@
 {{define "content"}}
-<div class="grid grid-cols-2 gap-6">
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
 
   <!-- ── Left: upload form ── -->
   <div class="flex flex-col gap-4">
-    <div class="card p-6">
-      <div class="flex items-center gap-[10px] mb-6">
-        <div class="w-8 h-8 rounded-full bg-brand-tint flex items-center justify-center">
+    <div class="card p-5">
+      <div class="flex items-center gap-[10px] mb-4">
+        <div class="w-8 h-8 rounded-md bg-brand-tint flex items-center justify-center">
           <i class="hgi hgi-stroke hgi-rounded hgi-certificate-01 text-[14px] text-brand-dark"></i>
         </div>
         <h2 class="text-[17px] font-bold text-slate-900">Add Certificate</h2>
@@ -24,7 +24,7 @@
           </label>
           <input id="cert-name" name="name" type="text"
             placeholder="e.g. cloudflare-example-com"
-            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
         </div>
 
         <div>
@@ -42,7 +42,7 @@
             data-fills="cert-pem" data-names="cert-name"/>
           <textarea id="cert-pem" name="cert_pem" rows="5"
             placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
-            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[12px] font-mono outline-none text-slate-800 bg-white resize-y"></textarea>
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[12px] font-mono outline-none text-slate-800 bg-white resize-y"></textarea>
         </div>
 
         <div>
@@ -60,7 +60,7 @@
             data-fills="key-pem"/>
           <textarea id="key-pem" name="key_pem" rows="5"
             placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
-            class="focus-green w-full border-[1.5px] border-line rounded-[10px] px-[14px] py-[10px] text-[12px] font-mono outline-none text-slate-800 bg-white resize-y"></textarea>
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[12px] font-mono outline-none text-slate-800 bg-white resize-y"></textarea>
         </div>
 
         <div id="cert-error" class="text-[12px] text-red-500 -mt-1"></div>
@@ -71,8 +71,8 @@
         </button>
       </form>
 
-      <div class="mt-5 pt-4 border-t border-canvas">
-        <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Cloudflare origin certs</p>
+      <div class="mt-5 pt-4 border-t border-line">
+        <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Cloudflare origin certs</p>
         <p class="text-[12px] text-slate-500 leading-[1.6]">
           Cloudflare → SSL/TLS → Origin Server → <strong>Create Certificate</strong>.
           Covers your domain and <code class="font-mono bg-surface px-1 rounded text-[11px]">*.domain</code> in one cert.
@@ -86,14 +86,14 @@
   <div class="card overflow-hidden">
     {{template "card-header" (map "Cat" "TLS" "Title" "Saved Certificates" "Badge" (printf "%d certs" (len .Certs)))}}
 
-    <div class="px-6 pb-6">
-      <table class="w-full border-collapse text-[13px]">
-        <thead>
-          <tr class="border-b border-canvas">
-            <th class="text-left pb-3 pr-6 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Name</th>
-            <th class="text-left pb-3 pr-6 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Domains covered</th>
-            <th class="text-left pb-3 pr-6 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Expires</th>
-            <th class="pb-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wide"></th>
+    <div class="px-5 pb-5 overflow-x-auto">
+      <table class="w-full min-w-[620px] border-collapse text-[13px]">
+        <thead class="bg-surface">
+          <tr class="border-b border-line">
+            <th class="text-left pb-3 pr-6 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Name</th>
+            <th class="text-left pb-3 pr-6 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Domains covered</th>
+            <th class="text-left pb-3 pr-6 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Expires</th>
+            <th class="pb-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide"></th>
           </tr>
         </thead>
         <tbody id="cert-rows">
@@ -164,17 +164,17 @@
 </tr>
 {{else}}
 {{range .Certs}}
-<tr class="border-b border-canvas last:border-0">
+<tr class="border-b border-line last:border-0">
   <td class="py-4 pr-6 font-medium text-slate-800 align-top">{{.Name}}</td>
   <td class="py-4 pr-6 align-top">
     {{if .Domains}}
     <div class="flex flex-wrap gap-[6px]">
       {{range (splitComma .Domains)}}
-      <span class="text-[11px] font-mono bg-canvas border border-line rounded-[6px] px-[8px] py-[3px] text-slate-600">{{.}}</span>
+      <span class="text-[11px] font-mono bg-canvas border border-line rounded px-[8px] py-[3px] text-slate-600">{{.}}</span>
       {{end}}
     </div>
     {{else}}
-    <span class="text-slate-400 text-[12px]">—</span>
+    <span class="text-slate-500 text-[12px]">—</span>
     {{end}}
   </td>
   <td class="py-4 pr-6 text-[12px] text-slate-500 whitespace-nowrap align-top">

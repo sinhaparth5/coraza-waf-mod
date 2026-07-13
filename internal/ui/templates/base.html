@@ -7,22 +7,22 @@
   <title>Coraza WAF Mod · {{.Heading}}</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
         extend: {
           colors: {
-            brand: { DEFAULT: '#76C893', dark: '#2A9D8F', light: '#9FE0B7', tint: '#EAF7EE' },
-            navy: '#2B5C74',
-            slateblue: '#4A7B96',
-            canvas: '#EAEBED',
-            surface: '#F4F7F9',
-            line: '#E2E5EA',
+            brand: { DEFAULT: '#2E7D5B', dark: '#1F5F43', light: '#B9E2C6', tint: '#EAF5EE' },
+            navy: '#263F50',
+            slateblue: '#4A7085',
+            canvas: '#EEF1F4',
+            surface: '#F6F7F9',
+            line: '#D5DBE1',
           },
           fontFamily: {
-            sans: ['Plus Jakarta Sans', 'system-ui', '-apple-system', 'sans-serif'],
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
             mono: ['JetBrains Mono', 'monospace'],
           },
         },
@@ -37,69 +37,75 @@
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    .card { background: #fff; border-radius: 28px; border: 1px solid #EEF1F3; box-shadow: 0px 10px 40px rgba(0,0,0,0.03); }
-    .btn-primary { background: #76C893; color: #fff; border: none; cursor: pointer; border-radius: 999px; padding: 7px 20px; font-size: 14px; font-weight: 500; font-family: inherit; transition: opacity .15s; }
-    .btn-primary:hover { opacity: .88; }
-    input, select { font-family: inherit; }
+    .card { background: #fff; border-radius: 8px; border: 1px solid #D5DBE1; box-shadow: 0 1px 2px rgba(15,23,42,.035); }
+    .btn-primary { background: #2E7D5B; color: #fff; border: 1px solid #2E7D5B; cursor: pointer; border-radius: 6px; padding: 8px 16px; font-size: 14px; font-weight: 600; font-family: inherit; transition: background-color .15s, border-color .15s; }
+    .btn-primary:hover { background: #1F5F43; border-color: #1F5F43; }
+    input, select, textarea { font-family: inherit; }
+    input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select { min-height: 40px; }
+    input::placeholder, textarea::placeholder { color: #94A3B8; opacity: 1; }
     .focus-green { transition: border-color .15s; }
-    .focus-green:focus { border-color: #76C893 !important; }
+    .focus-green:focus { border-color: #2E7D5B !important; }
+    a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid #2E7D5B; outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+    }
   </style>
 </head>
 <body class="min-h-screen bg-canvas text-slate-800 font-sans text-[14px]" data-admin-path="{{.AdminPath}}" data-csrf="{{.CSRF}}" hx-headers='{"X-CSRF-Token":"{{.CSRF}}"}'>
 
 <!-- ── Sidebar Navigation ─────────────────────────────────── -->
-<aside class="fixed left-4 top-4 bottom-4 w-[264px] bg-white rounded-2xl border border-line flex flex-col z-50">
+<aside class="fixed left-0 top-0 bottom-0 w-[264px] bg-white border-r border-line flex flex-col z-50 max-lg:static max-lg:w-full max-lg:h-auto max-lg:flex-row max-lg:items-center max-lg:border-r-0 max-lg:border-b max-lg:overflow-x-auto">
 
   <!-- Brand -->
-  <div class="flex items-center gap-[10px] px-5 py-5 shrink-0">
-    <div class="w-9 h-9 rounded-full bg-brand flex items-center justify-center shrink-0">
+  <div class="flex items-center gap-[10px] px-5 py-5 shrink-0 max-lg:px-4 max-lg:py-3">
+    <div class="w-9 h-9 rounded-md bg-brand flex items-center justify-center shrink-0">
       <i class="hgi hgi-stroke hgi-rounded hgi-shield-01 text-base text-white"></i>
     </div>
     <span class="font-bold text-[15px] text-slate-800 truncate">Coraza WAF</span>
   </div>
 
   <!-- Nav links -->
-  <nav class="flex-1 flex flex-col gap-1 px-3 pt-1 overflow-y-auto">
-    <a href="/admin" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "dashboard"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+  <nav class="flex-1 flex flex-col gap-1 px-3 pt-1 overflow-y-auto max-lg:flex-row max-lg:overflow-x-auto max-lg:px-2 max-lg:py-2">
+    <a href="/admin" class="flex items-center gap-3 px-4 py-[10px] rounded-md text-[14px] font-medium no-underline whitespace-nowrap transition-colors duration-150 {{if eq .Page "dashboard"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-dashboard-square-01 text-base"></i>
       Dashboard
     </a>
-    <a href="/admin/logs" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "logs"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin/logs" class="flex items-center gap-3 px-4 py-[10px] rounded-md text-[14px] font-medium no-underline whitespace-nowrap transition-colors duration-150 {{if eq .Page "logs"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-activity-01 text-base"></i>
       Live Logs
     </a>
-    <a href="/admin/ip-rules" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "ip_rules"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin/ip-rules" class="flex items-center gap-3 px-4 py-[10px] rounded-md text-[14px] font-medium no-underline whitespace-nowrap transition-colors duration-150 {{if eq .Page "ip_rules"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-base"></i>
       IP Rules
     </a>
-    <a href="/admin/geo-rules" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "geo_rules"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin/geo-rules" class="flex items-center gap-3 px-4 py-[10px] rounded-md text-[14px] font-medium no-underline whitespace-nowrap transition-colors duration-150 {{if eq .Page "geo_rules"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-earth text-base"></i>
       Geo Rules
     </a>
-    <a href="/admin/services" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "services"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin/services" class="flex items-center gap-3 px-4 py-[10px] rounded-md text-[14px] font-medium no-underline whitespace-nowrap transition-colors duration-150 {{if eq .Page "services"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-settings-01 text-base"></i>
       Services
     </a>
-    <a href="/admin/certificates" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "certificates"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin/certificates" class="flex items-center gap-3 px-4 py-[10px] rounded-md text-[14px] font-medium no-underline whitespace-nowrap transition-colors duration-150 {{if eq .Page "certificates"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-certificate-01 text-base"></i>
       Certificates
     </a>
-    <a href="/admin/waf-rules" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "waf_rules"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin/waf-rules" class="flex items-center gap-3 px-4 py-[10px] rounded-md text-[14px] font-medium no-underline whitespace-nowrap transition-colors duration-150 {{if eq .Page "waf_rules"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-security-block text-base"></i>
       WAF Rules
     </a>
-    <a href="/admin/threat-intel" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "threat_intel"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin/threat-intel" class="flex items-center gap-3 px-4 py-[10px] rounded-md text-[14px] font-medium no-underline whitespace-nowrap transition-colors duration-150 {{if eq .Page "threat_intel"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-database-01 text-base"></i>
       Threat Intel
     </a>
-    <a href="/admin/settings" class="flex items-center gap-3 px-4 py-[10px] rounded-2xl text-[14px] font-medium no-underline transition-colors duration-150 {{if eq .Page "settings"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
+    <a href="/admin/settings" class="flex items-center gap-3 px-4 py-[10px] rounded-md text-[14px] font-medium no-underline whitespace-nowrap transition-colors duration-150 {{if eq .Page "settings"}}bg-brand-tint text-brand-dark font-semibold{{else}}text-slate-600 hover:bg-surface{{end}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-user-account text-base"></i>
       Settings
     </a>
   </nav>
 
   <!-- Account -->
-  <div class="px-3 pb-3 pt-2 border-t border-canvas shrink-0">
+  <div class="px-3 pb-3 pt-2 border-t border-line shrink-0 max-lg:border-t-0 max-lg:border-l max-lg:p-2">
     <div class="flex items-center gap-3 px-3 py-[10px]">
       <div class="w-8 h-8 rounded-full bg-navy flex items-center justify-center text-white text-[12px] font-bold shrink-0">A</div>
       <span class="text-[13px] font-semibold text-slate-800 flex-1 truncate">Admin</span>
@@ -108,18 +114,19 @@
       <form action="{{.AdminPath}}/logout" method="POST" class="contents">
         <input type="hidden" name="_csrf" value="{{.CSRF}}">
         <button type="submit" title="Sign out"
-                class="w-8 h-8 rounded-full bg-surface border border-line flex items-center justify-center text-slate-500 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors cursor-pointer">
+                aria-label="Sign out"
+                class="w-8 h-8 rounded-md bg-surface border border-line flex items-center justify-center text-slate-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors cursor-pointer">
           <i class="hgi hgi-stroke hgi-rounded hgi-logout-02 text-[14px]"></i>
         </button>
       </form>
       <div class="relative shrink-0">
-        <button id="notif-btn" class="w-8 h-8 rounded-full bg-surface border border-line flex items-center justify-center text-slate-500 cursor-pointer relative">
+        <button id="notif-btn" type="button" aria-label="Open notifications" class="w-8 h-8 rounded-md bg-surface border border-line flex items-center justify-center text-slate-500 hover:bg-white cursor-pointer relative">
           <i class="hgi hgi-stroke hgi-rounded hgi-notification-03 text-[14px]"></i>
           {{if gt .AlertCount 0}}
           <span id="notif-badge" class="absolute -top-[3px] -right-[3px] bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[17px] h-[17px] flex items-center justify-center px-[3px] border-2 border-white">{{if gt .AlertCount 9}}9+{{else}}{{.AlertCount}}{{end}}</span>
           {{end}}
         </button>
-        <div id="notif-panel" class="hidden absolute bottom-10 left-0 w-[300px] bg-white border border-line rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,.12)] z-[100]"></div>
+        <div id="notif-panel" class="hidden absolute bottom-10 left-0 w-[300px] bg-white border border-line rounded-lg shadow-[0_4px_14px_rgba(15,23,42,.10)] z-[100]"></div>
       </div>
       </div><!-- end flex gap-1 -->
     </div>
@@ -127,17 +134,17 @@
 </aside>
 
 <!-- ── Page body ──────────────────────────────────────── -->
-<div class="flex min-h-screen ml-[288px]">
+<div class="flex min-h-screen ml-[264px] max-xl:flex-col max-lg:ml-0">
 
-  <main class="flex-1 p-7 min-w-0">
+  <main class="flex-1 p-6 min-w-0 max-sm:p-4">
     <!-- Page header -->
-    <div class="flex items-start justify-between mb-7">
+    <div class="flex items-start justify-between gap-4 mb-6 max-sm:flex-col">
       <div>
         <p class="text-[12px] text-slate-500 mb-1">Admin › {{.Heading}}</p>
-        <h1 class="text-[28px] font-extrabold text-slate-900 leading-[1.2]">{{.Heading}}</h1>
+        <h1 class="text-[24px] font-bold text-slate-900 leading-[1.25]">{{.Heading}}</h1>
       </div>
       <div class="flex items-center gap-3 shrink-0">
-        <div class="flex items-center gap-2 bg-surface border border-line rounded-lg px-3 py-2 text-[13px] text-slate-700">
+        <div class="flex items-center gap-2 bg-white border border-line rounded-md px-3 py-2 text-[13px] text-slate-700">
           <i class="hgi hgi-stroke hgi-rounded hgi-calendar-03 text-base text-slate-500"></i>
           {{today}}
         </div>
@@ -154,7 +161,7 @@
 
 <script src="{{.AdminPath}}/static/js/app.min.js" defer></script>
 {{block "scripts" .}}{{end}}
-<div id="toast-container" class="fixed top-6 right-6 z-[400] flex flex-col gap-3 w-[340px] pointer-events-none"></div>
+<div id="toast-container" class="fixed top-6 right-6 z-[400] flex flex-col gap-2 w-[340px] max-w-[calc(100vw-2rem)] pointer-events-none" aria-live="polite" aria-atomic="false"></div>
 {{template "confirm-modal" .}}
 </body>
 </html>

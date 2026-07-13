@@ -1,35 +1,25 @@
 {{define "confirm-modal"}}
 <div id="confirm-modal-overlay"
-     class="hidden flex fixed inset-0 z-[300] items-center justify-center"
-     style="background:rgba(0,0,0,0.15);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);">
-  <div class="relative overflow-hidden"
-       style="width:360px;background:rgba(255,255,255,0.80);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);border-radius:20px;border:1px solid rgba(255,255,255,0.90);box-shadow:0 20px 60px rgba(0,0,0,0.12),0 0 0 1px rgba(0,0,0,0.04);padding:24px;">
-
-    <!-- iridescent shimmer decoration -->
-    <div class="absolute pointer-events-none"
-         style="right:-32px;bottom:-32px;width:160px;height:80px;border-radius:10px;opacity:.20;background:conic-gradient(from 196deg at 50% 50%,rgba(66,232,255,0.009) 5deg,rgba(255,126,171,0.50) 185deg,#3083FF 275deg,#7147FF 360deg);"></div>
-
-    <div class="flex items-center gap-3 mb-5 relative">
-      <div class="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-           style="background:rgba(255,59,48,0.10);">
-        <i class="hgi hgi-stroke hgi-rounded hgi-alert-02 text-base" style="color:#FF3B30;"></i>
+     class="hidden flex fixed inset-0 z-[300] items-center justify-center bg-slate-950/50 p-4"
+     role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+  <div class="relative w-[360px] max-w-full overflow-hidden rounded-lg bg-white border border-line shadow-[0_8px_24px_rgba(15,23,42,.16)] p-5">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-9 h-9 rounded-md flex items-center justify-center shrink-0 bg-red-50">
+        <i class="hgi hgi-stroke hgi-rounded hgi-alert-02 text-base text-red-600"></i>
       </div>
-      <h2 class="text-[17px] font-bold" style="color:rgba(0,0,0,0.85);">Confirm removal</h2>
+      <h2 id="confirm-modal-title" class="text-[17px] font-semibold text-slate-900">Confirm removal</h2>
     </div>
 
     <p id="confirm-modal-message"
-       class="text-[14px] leading-[1.6] mb-6 relative"
-       style="color:rgba(0,0,0,0.55);"></p>
+       class="text-[14px] leading-[1.6] mb-5 text-slate-600"></p>
 
-    <div class="flex gap-2.5 relative">
+    <div class="flex gap-2.5">
       <button id="confirm-modal-cancel" type="button"
-        class="flex-1 py-[11px] text-[15px] font-semibold cursor-pointer font-sans border-none hover:opacity-[.70] transition-opacity duration-150"
-        style="background:rgba(0,0,0,0.06);color:rgba(0,0,0,0.70);border-radius:14px;">
+        class="flex-1 rounded-md border border-line bg-surface py-[10px] text-[14px] font-semibold text-slate-700 cursor-pointer font-sans hover:bg-slate-100 transition-colors duration-150">
         Cancel
       </button>
       <button id="confirm-modal-ok" type="button"
-        class="flex-1 py-[11px] text-[15px] font-semibold cursor-pointer font-sans border-none hover:opacity-[.70] transition-opacity duration-150"
-        style="background:rgba(255,59,48,0.12);color:#FF3B30;border-radius:14px;">
+        class="flex-1 rounded-md border border-red-600 bg-red-600 py-[10px] text-[14px] font-semibold text-white cursor-pointer font-sans hover:bg-red-700 hover:border-red-700 transition-colors duration-150">
         Remove
       </button>
     </div>
