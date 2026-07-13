@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.9] - 2026-07-13
+
+### Security
+- **Services**: the admin dashboard and REST API were reachable on *any*
+  domain routed to this server, not just its own management address —
+  Echo's router matches routes purely by path with no notion of `Host`, so
+  a service configured for e.g. `example-api.com` also served
+  `example-api.com/admin/login` as the WAF's own login page instead of
+  proxying that path to the service's own backend. A new `hostGuard`
+  middleware (`internal/ui`) now hands any request whose `Host` matches a
+  configured service straight to the reverse-proxy pipeline instead of the
+  admin routes — applied to both the session-cookie admin group and the
+  `/api/v1` bearer-token API — so the dashboard and API stay reachable only
+  on a `Host` nothing else claims (typically the server's bare listen IP),
+  and requests to a real service's domain are proxied/WAF'd/logged exactly
+  like any other traffic to it.
+
+### Fixed
+- **Services**: `Registry.Match` silently fell back to the first
+  configured service whenever a request's `Host` matched no service at
+  all — e.g. hitting the server's bare IP directly was proxied to, and
+  logged under the name of, whichever service happened to be added first,
+  even though it had nothing to do with the request. `Match` now returns
+  no match instead of guessing, and such requests are logged under a
+  distinct `VPS` app name rather than an arbitrary service's name.
+
 ## [1.4.8] - 2026-07-11
 
 ### Added
