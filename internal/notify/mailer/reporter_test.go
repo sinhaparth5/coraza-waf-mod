@@ -231,3 +231,48 @@ func TestBuildMessageIsWellFormedMIME(t *testing.T) {
 		t.Error("message contains bare LF line endings")
 	}
 }
+
+// TestSendLoginCodeRequiresTokenAndRecipient checks the 2FA recovery email:
+// it must send even with the Enabled toggle off (the admin explicitly asked
+// for it), but must error — not silently skip — when the mailer has no
+// token or recipient to send with.
+func TestSendLoginCodeRequiresTokenAndRecipient(t *testing.T) {
+	now := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
+
+	cfg := enabledConfig()
+	cfg.Enabled = false // reports/alerts off must not block explicit recovery
+	r, subjects := testReporter(&fakeStore{cfg: cfg}, now)
+	if err := r.SendLoginCode("482913"); err != nil {
+		t.Fatalf("SendLoginCode with Enabled=false: %v", err)
+	}
+	if len(*subjects) != 1 {
+		t.Fatalf("subjects = %v, want one login-code mail", *subjects)
+	}
+
+	for name, mutate := range map[string]func(*storage.EmailConfig){
+		"no token": func(c *storage.EmailConfig) { c.Token = "" },
+		"no to":    func(c *storage.EmailConfig) { c.To = "" },
+	} {
+		cfg := enabledConfig()
+		mutate(&cfg)
+		r, subjects := testReporter(&fakeStore{cfg: cfg}, now)
+		if err := r.SendLoginCode("482913"); err == nil {
+			t.Errorf("%s: SendLoginCode returned nil, want error", name)
+		}
+		if len(*subjects) != 0 {
+			t.Errorf("%s: mail sent despite incomplete config", name)
+		}
+	}
+}
+
+// TestComposeLoginCodeBody checks the code lands in both bodies and the
+// plain-text body carries the expiry warning.
+func TestComposeLoginCodeBody(t *testing.T) {
+	_, text, html := composeLoginCode("482913", time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC))
+	if !strings.Contains(text, "482913") || !strings.Contains(html, "482913") {
+		t.Error("code missing from a body")
+	}
+	if !strings.Contains(text, "expires in 10 minutes") {
+		t.Error("plain-text body missing expiry note")
+	}
+}

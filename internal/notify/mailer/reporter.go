@@ -133,6 +133,72 @@ func (r *Reporter) SendBanAlert(ip, reason string) error {
 	return r.send(cfg, subject, text, html)
 }
 
+// SendLoginCode emails a one-time 2FA recovery code to the configured
+// recipients, for an admin who can't produce an authenticator code at login.
+// Unlike SendBanAlert this is not silently skipped when cfg.Enabled is off:
+// the admin explicitly clicked "email me a code", so an unconfigured mailer
+// is an error the login page should surface, not swallow. It does require a
+// token and recipient; the login UI only offers the option when both are set.
+func (r *Reporter) SendLoginCode(code string) error {
+	cfg, err := r.db.GetEmailConfig()
+	if err != nil {
+		return err
+	}
+	if cfg.Token == "" || cfg.To == "" {
+		return fmt.Errorf("email recovery is not configured")
+	}
+	subject, text, html := composeLoginCode(code, r.now())
+	return r.send(cfg, subject, text, html)
+}
+
+// composeLoginCode renders the 2FA recovery-code email, reusing
+// composeBanAlert's card layout with the code in place of the banned IP.
+func composeLoginCode(code string, at time.Time) (subject, text, html string) {
+	subject = "WAF admin login code"
+	when := at.Format("2006-01-02 15:04 MST")
+
+	var t strings.Builder
+	t.WriteString("Coraza WAF Mod — admin login code\n\n")
+	fmt.Fprintf(&t, "Code:       %s\n", code)
+	fmt.Fprintf(&t, "Requested:  %s\n", when)
+	t.WriteString("\nThe code expires in 10 minutes and works once.\n")
+	t.WriteString("If you didn't request it, someone knows your admin password — change it now.\n")
+
+	var h strings.Builder
+	h.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EAEBED"><tr><td align="center" style="padding:32px 12px">`)
+	h.WriteString(`<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#ffffff;border:1px solid #EEF1F3;border-radius:28px">`)
+
+	// Brand header, same badge as the other mails.
+	h.WriteString(`<tr><td style="padding:28px 32px 0">`)
+	h.WriteString(`<table role="presentation" cellpadding="0" cellspacing="0"><tr>`)
+	h.WriteString(`<td width="40" height="40" align="center" style="width:40px;height:40px;background:#1a3d28;border-radius:10px;vertical-align:middle">`)
+	h.WriteString(`<div style="width:22px;height:4px;background:#8edba8;border-radius:3px;margin:0 auto 3px"></div>`)
+	h.WriteString(`<div style="width:17px;height:4px;background:#6cc98a;border-radius:3px;margin:0 auto 3px"></div>`)
+	h.WriteString(`<div style="width:12px;height:4px;background:#4db872;border-radius:3px;margin:0 auto"></div>`)
+	h.WriteString(`</td>`)
+	h.WriteString(`<td style="padding-left:12px;vertical-align:middle">`)
+	h.WriteString(`<p style="margin:0;font:700 16px ` + fontStack + `;color:#0f172a">Coraza WAF Mod</p>`)
+	h.WriteString(`<p style="margin:2px 0 0;font:400 12px ` + fontStack + `;color:#64748b">Admin login code</p>`)
+	h.WriteString(`</td></tr></table>`)
+	h.WriteString(`</td></tr>`)
+
+	// The code, big and centered.
+	h.WriteString(`<tr><td style="padding:20px 32px 0">`)
+	h.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#E4F5EC;border:1px solid #BFE8D2;border-radius:14px"><tr><td align="center" style="padding:18px">`)
+	h.WriteString(`<p style="margin:0;font:700 32px 'SF Mono',Consolas,monospace;letter-spacing:.3em;color:#0f172a">` + code + `</p>`)
+	h.WriteString(`</td></tr></table>`)
+	h.WriteString(`</td></tr>`)
+
+	// Footer.
+	h.WriteString(`<tr><td style="padding:16px 32px 28px">`)
+	h.WriteString(`<p style="margin:0;font:400 12px ` + fontStack + `;color:#94A3B8">Requested ` + when + `. The code expires in 10 minutes and works once. If you didn't request it, someone knows your admin password — change it now. Sent by Coraza WAF Mod from ` + Sender + `.</p>`)
+	h.WriteString(`</td></tr>`)
+
+	h.WriteString(`</table></td></tr></table>`)
+
+	return subject, t.String(), h.String()
+}
+
 // fontStack mirrors the admin UI's typography (base.html); Plus Jakarta Sans
 // is used when the recipient has it installed, otherwise the system fallback.
 const fontStack = `'Plus Jakarta Sans',-apple-system,'Segoe UI',Arial,sans-serif`
