@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-14
+
+### Added
+- **Secrets-at-rest encryption (`--db-key-file`).** The live credentials
+  stored in `waf.db` — the bot-challenge HMAC secret, TOTP secrets, the
+  Cloudflare email token, the Redis password, and the webhook secret — are
+  now sealed with AES-256-GCM when a key file is configured. Enabling it on
+  an existing deployment migrates plaintext secrets in place automatically;
+  without a key everything behaves as before. A sealed value read with a
+  missing or wrong key fails loudly instead of returning empty config, and
+  Settings backups inherit the protection since they are byte-for-byte DB
+  copies. The installer generates `/etc/coraza-waf-mod/db.key` (mode 0400,
+  kept outside the data directory, never regenerated on upgrade) and wires
+  the flag into the systemd unit, so fresh installs get this by default.
+- **`prune --vacuum` reclaims disk space.** The one-shot prune subcommand can
+  now rebuild the database file after deleting old rows (`VACUUM` followed by
+  a WAL `TRUNCATE` checkpoint) — a plain DELETE only free-lists pages inside
+  the file and never shrinks it, so without this the DB sat at its high-water
+  mark forever. The installer's 15-day prune timer passes the flag, and the
+  prune log reports bytes reclaimed (main file + WAL sidecars).
+
 ### Changed
 - **Admin UI upgraded from Tailwind CSS v3 to v4.** `base.html` and the
   standalone `login.html` now load the `@tailwindcss/browser@4` CDN build and
@@ -434,7 +455,8 @@ Initial release — a single-binary Go WAF + reverse proxy.
 - **All storage in SQLite** (`modernc.org/sqlite`, pure Go, no CGO) — one
   `waf.db` file for logs, rules, services, and TLS state.
 
-[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.4.2...main
+[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.5.0...main
+[1.5.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.4.12...v1.5.0
 [1.4.2]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.3.0...v1.4.2
 [1.3.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.1.0...v1.2.0

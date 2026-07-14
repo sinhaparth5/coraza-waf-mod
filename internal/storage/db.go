@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"crypto/cipher"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
@@ -37,6 +38,7 @@ type DB struct {
 	autobanFn     func(RequestLog)
 	threatScoreFn func(RequestLog)
 	accessLogFn   func(RequestLog)
+	secretGCM     cipher.AEAD // non-nil = secrets-at-rest encryption active (see secretenc.go)
 }
 
 // SetAutobanFn registers a callback invoked (from the log worker goroutine)
@@ -1678,8 +1680,14 @@ const metaKeyNotificationsSeenAt = "notifications_seen_at"
 // every restart would invalidate all outstanding bypass cookies).
 func (db *DB) GetOrCreateChallengeSecret() (string, error) {
 	const key = "challenge_secret"
-	secret, err := db.getMeta(key)
-	if err == nil && secret != "" {
+	secret, err := db.getSecretMeta(key)
+	if err != nil {
+		// An unreadable stored secret (wrong/missing --db-key-file) must not
+		// be silently replaced with a fresh one — that would invalidate every
+		// outstanding bypass cookie and mask the key misconfiguration.
+		return "", err
+	}
+	if secret != "" {
 		return secret, nil
 	}
 	// Generate a new random secret and persist it.
@@ -1688,7 +1696,7 @@ func (db *DB) GetOrCreateChallengeSecret() (string, error) {
 		return "", fmt.Errorf("generate challenge secret: %w", err)
 	}
 	secret = hex.EncodeToString(b)
-	return secret, db.setMeta(key, secret)
+	return secret, db.setSecretMeta(key, secret)
 }
 
 // GetAcmeEmail returns the Let's Encrypt contact email stored in the DB, or
@@ -1755,6 +1763,22 @@ func (db *DB) MarkNotificationsSeen() error {
 // for the duration and writes a fresh, defragmented file.
 func (db *DB) BackupTo(path string) error {
 	_, err := db.conn.Exec(`VACUUM INTO ?`, path)
+	return err
+}
+
+// Vacuum rebuilds the database in place, returning freed pages to the OS —
+// DELETE (e.g. PruneOldRequests) only moves pages to SQLite's free list for
+// reuse and never shrinks the file. Meant for the one-shot prune CLI
+// (`prune --vacuum`), not the live server: VACUUM is one long write
+// transaction, so the running process's log worker would stall behind it for
+// the whole rebuild. The TRUNCATE checkpoint afterwards matters because the
+// rebuild is written through the WAL — without it the reclaimed space just
+// sits in a ballooned -wal file until the last connection closes.
+func (db *DB) Vacuum() error {
+	if _, err := db.conn.Exec(`VACUUM`); err != nil {
+		return err
+	}
+	_, err := db.conn.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
 	return err
 }
 
@@ -1826,9 +1850,13 @@ func (db *DB) CheckAdminPassword(password string) (bool, error) {
 //   admin_totp_last_counter    last accepted TOTP counter, to reject replays
 
 // GetTOTPSecret returns the active TOTP secret, or "" when 2FA is disabled.
-func (db *DB) GetTOTPSecret() (string, error) { return db.getMeta("admin_totp_secret") }
+func (db *DB) GetTOTPSecret() (string, error) { return db.getSecretMeta("admin_totp_secret") }
 
-// TOTPEnabled reports whether admin login requires a second factor.
+// TOTPEnabled reports whether admin login requires a second factor. Reads the
+// raw value: "is 2FA on" doesn't need the secret decrypted, so it keeps
+// working (and keeps the login flow demanding a second factor) even when the
+// key file is missing — failing open to password-only here would let a key
+// misconfiguration disable 2FA.
 func (db *DB) TOTPEnabled() (bool, error) {
 	s, err := db.getMeta("admin_totp_secret")
 	return s != "", err
@@ -1838,26 +1866,26 @@ func (db *DB) TOTPEnabled() (bool, error) {
 // becomes active via EnableTOTP after the admin proves their authenticator
 // produces a valid code; a stale pending secret is inert.
 func (db *DB) SetPendingTOTPSecret(secret string) error {
-	return db.setMeta("admin_totp_pending_secret", secret)
+	return db.setSecretMeta("admin_totp_pending_secret", secret)
 }
 
 // GetPendingTOTPSecret returns the enrollment secret awaiting confirmation.
 func (db *DB) GetPendingTOTPSecret() (string, error) {
-	return db.getMeta("admin_totp_pending_secret")
+	return db.getSecretMeta("admin_totp_pending_secret")
 }
 
 // EnableTOTP promotes the pending secret to active and stores the backup-code
 // hashes (SHA-256 hex — the codes are high-entropy random, so like API keys
 // they don't need bcrypt). Returns an error if no enrollment is pending.
 func (db *DB) EnableTOTP(backupHashes []string) error {
-	pending, err := db.getMeta("admin_totp_pending_secret")
+	pending, err := db.getSecretMeta("admin_totp_pending_secret")
 	if err != nil {
 		return err
 	}
 	if pending == "" {
 		return fmt.Errorf("no pending TOTP enrollment")
 	}
-	if err := db.setMeta("admin_totp_secret", pending); err != nil {
+	if err := db.setSecretMeta("admin_totp_secret", pending); err != nil {
 		return err
 	}
 	if err := db.setMeta("admin_totp_backup_codes", strings.Join(backupHashes, ",")); err != nil {
@@ -2134,7 +2162,7 @@ func (db *DB) GetRedisConfig() (addr, password string, err error) {
 	if err != nil {
 		return
 	}
-	password, err = db.getMeta("redis_password")
+	password, err = db.getSecretMeta("redis_password")
 	return
 }
 
@@ -2144,7 +2172,7 @@ func (db *DB) SetRedisConfig(addr, password string) error {
 	if err := db.setMeta("redis_addr", addr); err != nil {
 		return err
 	}
-	return db.setMeta("redis_password", password)
+	return db.setSecretMeta("redis_password", password)
 }
 
 // GetRateLimitSettings reads the global per-client-IP rate limit from the
@@ -2578,13 +2606,20 @@ func (db *DB) GetWebhookConfig() (WebhookConfig, error) {
 		return WebhookConfig{}, err
 	}
 	cfg.Enabled = enabled == 1
+	if cfg.Secret, err = db.openSecret(cfg.Secret); err != nil {
+		return WebhookConfig{}, fmt.Errorf("webhook secret: %w", err)
+	}
 	return cfg, nil
 }
 
 func (db *DB) SetWebhookConfig(cfg WebhookConfig) error {
-	_, err := db.conn.Exec(
+	sealed, err := db.sealSecret(cfg.Secret)
+	if err != nil {
+		return err
+	}
+	_, err = db.conn.Exec(
 		`UPDATE webhook_config SET url=?, secret=?, enabled=?, events=? WHERE id=1`,
-		cfg.URL, cfg.Secret, boolToInt(cfg.Enabled), cfg.Events,
+		cfg.URL, sealed, boolToInt(cfg.Enabled), cfg.Events,
 	)
 	return err
 }
@@ -2609,7 +2644,7 @@ func (db *DB) GetEmailConfig() (EmailConfig, error) {
 		return EmailConfig{}, err
 	}
 	cfg.Enabled = enabled == "1"
-	if cfg.Token, err = db.getMeta("email_token"); err != nil {
+	if cfg.Token, err = db.getSecretMeta("email_token"); err != nil {
 		return EmailConfig{}, err
 	}
 	if cfg.To, err = db.getMeta("email_to"); err != nil {
@@ -2625,14 +2660,13 @@ func (db *DB) SetEmailConfig(cfg EmailConfig) error {
 	}
 	for key, val := range map[string]string{
 		"email_enabled": enabled,
-		"email_token":   cfg.Token,
 		"email_to":      cfg.To,
 	} {
 		if err := db.setMeta(key, val); err != nil {
 			return err
 		}
 	}
-	return nil
+	return db.setSecretMeta("email_token", cfg.Token)
 }
 
 // GetEmailReportSentFor returns the day ("2006-01-02") the last daily report

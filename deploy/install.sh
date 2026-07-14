@@ -60,6 +60,10 @@ PRUNE_SERVICE_PATH="/etc/systemd/system/${BINARY_NAME}-prune.service"
 PRUNE_TIMER_PATH="/etc/systemd/system/${BINARY_NAME}-prune.timer"
 CERT_FILE="${VAR_DIR}/certs/self-signed.crt"
 KEY_FILE="${VAR_DIR}/certs/self-signed.key"
+# Deliberately under /etc, outside ${VAR_DIR}: exfiltrating the data
+# directory (or a waf.db backup) alone must not also hand over the key that
+# decrypts the secrets stored inside it.
+DB_KEY_FILE="/etc/${BINARY_NAME}/db.key"
 
 if [ "$DRY_RUN" = "1" ]; then
 	printf '%s%sDRY RUN%s — no files will be written and no commands executed.\n' "$C_BOLD" "$C_YELLOW" "$C_RESET"
@@ -263,6 +267,27 @@ step "Creating directories"
 run mkdir -p "${VAR_DIR}/certs"
 run chown -R "${SERVICE_USER}:${SERVICE_USER}" "${VAR_DIR}"
 
+# ── DB secrets encryption key ─────────────────────────────────────────────────
+# Passed to the server as --db-key-file: stored secrets in waf.db (TOTP
+# secrets, Cloudflare email token, webhook/Redis credentials, challenge HMAC
+# key) get sealed with AES-256-GCM, so a stolen DB file or backup doesn't
+# yield live credentials. Never regenerated on upgrade — a new key would
+# orphan every secret encrypted under the old one.
+
+step "Ensuring DB secrets encryption key"
+if [ -f "${DB_KEY_FILE}" ]; then
+	detail "Key already exists — keeping it"
+else
+	run mkdir -p "$(dirname "${DB_KEY_FILE}")"
+	if [ "$DRY_RUN" = "1" ]; then
+		detail "[DRY RUN] Would generate ${DB_KEY_FILE}"
+	else
+		head -c 32 /dev/urandom | base64 >"${DB_KEY_FILE}"
+	fi
+	run chown "${SERVICE_USER}:${SERVICE_USER}" "${DB_KEY_FILE}"
+	run chmod 400 "${DB_KEY_FILE}"
+fi
+
 # ── TLS certificate ───────────────────────────────────────────────────────────
 
 TLS_FLAGS="--listen :80 --listen-tls :443"
@@ -329,7 +354,7 @@ Type=simple
 User=${SERVICE_USER}
 Group=${SERVICE_USER}
 WorkingDirectory=${VAR_DIR}
-ExecStart=${INSTALL_PATH} ${TLS_FLAGS} --db ${VAR_DIR}/waf.db --certs ${VAR_DIR}/certs --retention 30
+ExecStart=${INSTALL_PATH} ${TLS_FLAGS} --db ${VAR_DIR}/waf.db --certs ${VAR_DIR}/certs --retention 30 --db-key-file ${DB_KEY_FILE}
 Restart=on-failure
 RestartSec=5s
 
@@ -354,7 +379,10 @@ Type=oneshot
 User=${SERVICE_USER}
 Group=${SERVICE_USER}
 WorkingDirectory=${VAR_DIR}
-ExecStart=${INSTALL_PATH} prune --db ${VAR_DIR}/waf.db --retention 30
+# --vacuum rebuilds the DB file after pruning so freed pages go back to the
+# OS — a plain DELETE never shrinks a SQLite file, it only marks pages
+# reusable inside it.
+ExecStart=${INSTALL_PATH} prune --db ${VAR_DIR}/waf.db --retention 30 --vacuum
 UNIT
 
 write_file "${PRUNE_TIMER_PATH}" <<UNIT
