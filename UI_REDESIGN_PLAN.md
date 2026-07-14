@@ -1,6 +1,6 @@
 # Admin UI redesign plan (internal/ui)
 
-Status: **implemented (2026-07-13), round two also done, not yet committed**.
+Status: **implemented (2026-07-13), round two also done, committed (`b46d610`, settings follow-up `6ec21a0`)**.
 Tasks 1-5 below are complete, plus a second pass: shared components extracted
 (`toggle-switch`, `panel-header`, `rule-ring-row`, `rule-type-badge`), app.js
 split into toast/notify/clipboard/motion.js, logo.svg as favicon + sidebar
