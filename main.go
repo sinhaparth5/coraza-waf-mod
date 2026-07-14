@@ -365,7 +365,7 @@ func main() {
 		h.ReloadRateLimit(newBackend)
 	}
 
-	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticImgs, reloadBot, buildChallenger, reloadRateLimit, reloadWAF, intelWorker.SyncSource, emailReporter.SendNow, emailReporter.SendLoginCode, banner.ReloadConfig, scorer, adaptivePolicy.ReloadConfig, h.Handle)
+	uiHandler, err := ui.NewHandler(cfg, db, ipbl, geoBl, registry, broadcaster, staticJS, staticCSS, staticImgs, reloadBot, buildChallenger, reloadRateLimit, reloadWAF, intelWorker.SyncSource, emailReporter.SendNow, emailReporter.SendLoginCode, banner.ReloadConfig, scorer, adaptivePolicy.ReloadConfig, h.Handle)
 	if err != nil {
 		log.Fatalf("ui init: %v", err)
 	}

@@ -10,13 +10,33 @@ LDFLAGS  := -s -w -X main.version=$(VERSION)
 # input, so a clean local `make lint` and CI never disagree on results.
 LINT_VERSION := v2.12.2
 
-.PHONY: build generate run test lint hooks clean dist checksums tag
+.PHONY: build generate css run test lint hooks clean dist checksums tag
 
 build: hooks generate
 	go build -ldflags "-X main.version=$(VERSION)" -o $(BINARY) .
 
 generate:
 	go generate ./...
+
+# Recompile the admin UI stylesheet (static/css/tailwind.css ->
+# static/css/dist/tailwind.min.css) with the standalone Tailwind CLI — a
+# single native binary, no Node/npm. The output is committed and //go:embed-ed
+# (assets.go), so build/dist/CI never need this tool; run it (and commit the
+# result) whenever templates, static/js/src, or internal/ui Go handlers
+# add/remove a utility class. Missing CLI is auto-downloaded to a git-ignored
+# local cache (no sudo, arch/OS-aware); TAILWIND_BIN points at an existing
+# binary instead.
+TAILWIND_BIN  ?= .cache/tailwindcss
+TAILWIND_OS   := $(shell uname -s | sed -e 's/Linux/linux/' -e 's/Darwin/macos/')
+TAILWIND_ARCH := $(shell uname -m | sed -e 's/x86_64/x64/' -e 's/aarch64/arm64/')
+css:
+	@if [ ! -x "$(TAILWIND_BIN)" ] && ! command -v "$(TAILWIND_BIN)" >/dev/null 2>&1; then \
+		echo "==> Downloading standalone Tailwind CLI ($(TAILWIND_OS)-$(TAILWIND_ARCH)) to $(TAILWIND_BIN)"; \
+		mkdir -p $(dir $(TAILWIND_BIN)); \
+		curl -fsSLo "$(TAILWIND_BIN)" https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-$(TAILWIND_OS)-$(TAILWIND_ARCH); \
+		chmod +x "$(TAILWIND_BIN)"; \
+	fi
+	"$(TAILWIND_BIN)" -i static/css/tailwind.css -o static/css/dist/tailwind.min.css --minify
 
 run: build
 	./$(BINARY)

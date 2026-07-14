@@ -7,22 +7,9 @@
   <link rel="icon" type="image/svg+xml" href="{{.AdminPath}}/static/imgs/logo.svg"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-  <style type="text/tailwindcss">
-    @theme {
-      --color-brand: #76C893;
-      --color-brand-dark: #2E7D5B;
-      --color-brand-light: #9FE0B7;
-      --color-brand-tint: #EAF7EE;
-      --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
-    }
-    @layer base {
-      /* v4 preflight defaults borders to currentColor and buttons to the
-         default cursor; restore the v3 behavior this page was built on. */
-      *, ::before, ::after { border-color: var(--color-slate-200); }
-      button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
-    }
-  </style>
+  <!-- Compiled Tailwind (make css), shared with base.html; .page-login on
+       <body> keeps this page's slate-200 default borders. -->
+  <link rel="stylesheet" href="{{.AdminPath}}/static/css/tailwind.min.css"/>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
@@ -37,7 +24,7 @@
     }
   </style>
 </head>
-<body class="min-h-dvh bg-white lg:bg-brand-tint">
+<body class="page-login min-h-dvh bg-white lg:bg-brand-tint">
 
   <div class="min-h-dvh w-full lg:flex lg:items-stretch lg:gap-8 lg:p-8">
 

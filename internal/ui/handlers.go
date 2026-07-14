@@ -105,6 +105,7 @@ type Handler struct {
 	broadcaster     *LogBroadcaster
 	tmpls           map[string]*template.Template
 	staticJS        fs.FS
+	staticCSS       fs.FS
 	staticImgs      fs.FS
 	reloadBot       func(*challenge.Challenger)
 	buildChallenger func(enabled bool, threshold, ttl int) *challenge.Challenger
@@ -146,22 +147,28 @@ type atAGlanceCard struct {
 
 // NewHandler builds the UI handler. jsFS must contain the minified JS
 // assets at "static/js/dist/*" (see assets.go in the repo root); it's
-// served under /<admin_path>/static/js/. imgsFS must contain
-// "static/imgs/*"; it's served under /<admin_path>/static/imgs/. proxyHandle
-// is the reverse-proxy pipeline's own route handler (proxy.Handler.Handle,
-// the same func registered for the catch-all "/*" route in main.go); see
-// hostGuard for why the admin/API routes need to be able to hand a request
-// off to it.
-func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error, sendLoginCode func(string) error, reloadAutoban func(), scorer *threatscore.Scorer, reloadAdaptive func(), proxyHandle echo.HandlerFunc) (*Handler, error) {
+// served under /<admin_path>/static/js/. cssFS must contain the compiled
+// Tailwind stylesheet at "static/css/dist/*" (built by `make css`, committed,
+// embedded — no CDN); it's served under /<admin_path>/static/css/. imgsFS
+// must contain "static/imgs/*"; it's served under /<admin_path>/static/imgs/.
+// proxyHandle is the reverse-proxy pipeline's own route handler
+// (proxy.Handler.Handle, the same func registered for the catch-all "/*"
+// route in main.go); see hostGuard for why the admin/API routes need to be
+// able to hand a request off to it.
+func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, cssFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error, sendLoginCode func(string) error, reloadAutoban func(), scorer *threatscore.Scorer, reloadAdaptive func(), proxyHandle echo.HandlerFunc) (*Handler, error) {
 	sub, err := fs.Sub(jsFS, "static/js/dist")
 	if err != nil {
 		return nil, fmt.Errorf("sub static/js/dist: %w", err)
+	}
+	cssSub, err := fs.Sub(cssFS, "static/css/dist")
+	if err != nil {
+		return nil, fmt.Errorf("sub static/css/dist: %w", err)
 	}
 	imgsSub, err := fs.Sub(imgsFS, "static/imgs")
 	if err != nil {
 		return nil, fmt.Errorf("sub static/imgs: %w", err)
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, sendLoginCode: sendLoginCode, reloadAutoban: reloadAutoban, scorer: scorer, reloadAdaptive: reloadAdaptive, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), twoFA: newTwoFAStore(), trustedNets: parseTrustedNets(cfg.TrustedProxies), proxyHandle: proxyHandle}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticCSS: cssSub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, sendLoginCode: sendLoginCode, reloadAutoban: reloadAutoban, scorer: scorer, reloadAdaptive: reloadAdaptive, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), twoFA: newTwoFAStore(), trustedNets: parseTrustedNets(cfg.TrustedProxies), proxyHandle: proxyHandle}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -269,6 +276,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	admin.POST("/login/totp/email", h.LoginTOTPEmail, bodyLimit)
 	// Static assets are public so the login page can load spirals/JS before auth.
 	admin.StaticFS("/static/js", h.staticJS)
+	admin.StaticFS("/static/css", h.staticCSS)
 	admin.StaticFS("/static/imgs", h.staticImgs)
 
 	g := admin.Group("")

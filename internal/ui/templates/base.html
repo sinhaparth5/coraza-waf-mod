@@ -9,28 +9,9 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-  <style type="text/tailwindcss">
-    @theme {
-      --color-brand: #76C893;
-      --color-brand-dark: #2E7D5B;
-      --color-brand-light: #9FE0B7;
-      --color-brand-tint: #EAF7EE;
-      --color-navy: #2B5C74;
-      --color-slateblue: #4A7B96;
-      --color-canvas: #E7E9EC;
-      --color-surface: #F4F6F8;
-      --color-line: #D9DEE3;
-      --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-      --font-mono: 'JetBrains Mono', monospace;
-    }
-    @layer base {
-      /* v4 preflight defaults borders to currentColor and buttons to the
-         default cursor; restore the v3 behavior this UI was built on. */
-      *, ::before, ::after { border-color: var(--color-line); }
-      button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
-    }
-  </style>
+  <!-- Compiled Tailwind (make css), embedded in the binary — theme tokens and
+       v3-preflight compat live in static/css/tailwind.css, not here. -->
+  <link rel="stylesheet" href="{{.AdminPath}}/static/css/tailwind.min.css"/>
   <link rel="stylesheet" href="https://cdn.hugeicons.com/font/hgi-stroke-rounded.css"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7/css/flag-icons.min.css"/>
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>

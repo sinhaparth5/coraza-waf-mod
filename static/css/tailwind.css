@@ -1,0 +1,46 @@
+/*
+ * Tailwind v4 input for the admin UI (base.html and the standalone
+ * login.html share the one compiled output). Built by the standalone
+ * Tailwind CLI — no Node/npm — via `make css`, which writes
+ * static/css/dist/tailwind.min.css; that generated file is committed and
+ * //go:embed-ed (assets.go), so `make build` never needs the CLI. Re-run
+ * `make css` whenever a template, static/js/src file, or Go handler adds a
+ * utility class this file's @source globs cover.
+ */
+
+/* source(none) disables auto-detection so the scan is exactly the @source
+   list below — otherwise the whole repo (docs.md, CHANGELOG, …) would be
+   scanned and any class-shaped token in prose would bloat the output. */
+@import "tailwindcss" source(none);
+
+/* Templates, and the Go handlers whose server-computed class strings
+   (meter width buckets, enforcement bar colors, glance card classes) never
+   appear in template text. Both are under internal/ui. */
+@source "../../internal/ui";
+/* Runtime-toggled classes in frontend JS (classList.add/toggle). */
+@source "../js/src";
+
+@theme {
+  --color-brand: #76C893;
+  --color-brand-dark: #2E7D5B;
+  --color-brand-light: #9FE0B7;
+  --color-brand-tint: #EAF7EE;
+  --color-navy: #2B5C74;
+  --color-slateblue: #4A7B96;
+  --color-canvas: #E7E9EC;
+  --color-surface: #F4F6F8;
+  --color-line: #D9DEE3;
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+@layer base {
+  /* v4 preflight defaults borders to currentColor and buttons to the
+     default cursor; restore the v3 behavior this UI was built on. */
+  *, ::before, ::after { border-color: var(--color-line); }
+  button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+  /* The login page predates the --color-line token and was built on
+     slate-200 default borders; keep its exact look (body carries
+     .page-login there). */
+  .page-login *, .page-login ::before, .page-login ::after { border-color: var(--color-slate-200); }
+}
