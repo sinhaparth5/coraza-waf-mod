@@ -11,14 +11,14 @@
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">IP Address</label>
           <input name="ip" type="text" placeholder="1.2.3.4 or 10.0.0.0/8" required
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] font-mono outline-none transition-[border] duration-150 text-slate-800 bg-white"
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] font-mono outline-hidden transition-[border] duration-150 text-slate-800 bg-white"
             />
         </div>
 
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Scope</label>
           <select name="app_name"
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white transition-[border] duration-150"
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white transition-[border] duration-150"
             >
             <option value="">Global (all apps)</option>
             {{range .Apps}}<option value="{{.Name}}">{{.Name}} only</option>{{end}}
@@ -48,11 +48,11 @@
       <div class="mt-5 pt-4 border-t border-canvas">
         <div class="flex flex-col gap-2">
           <div class="flex items-center gap-2 text-[12px] text-slate-500">
-            <span class="bg-red-100 text-red-600 px-2 py-[2px] rounded font-semibold text-[11px]">Block</span>
+            <span class="bg-red-100 text-red-600 px-2 py-[2px] rounded-sm font-semibold text-[11px]">Block</span>
             deny all requests from this IP
           </div>
           <div class="flex items-center gap-2 text-[12px] text-slate-500">
-            <span class="bg-green-100 text-green-600 px-2 py-[2px] rounded font-semibold text-[11px]">Allow</span>
+            <span class="bg-green-100 text-green-600 px-2 py-[2px] rounded-sm font-semibold text-[11px]">Allow</span>
             whitelist, bypasses other blocks
           </div>
           <p class="text-[12px] text-slate-500 mt-[2px]">Per-app rules take priority over global. CIDR ranges (e.g. 10.0.0.0/8) are supported.</p>
@@ -107,12 +107,12 @@
       <div>
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Ban score</label>
         <input name="autoban_threshold" type="number" min="1" max="1000" value="{{.AutobanThresh}}"
-          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden transition-[border] duration-150 text-slate-800 bg-white"/>
       </div>
       <div>
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Window (min)</label>
         <input name="autoban_window" type="number" min="1" max="1440" value="{{.AutobanWindow}}"
-          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden transition-[border] duration-150 text-slate-800 bg-white"/>
       </div>
     </div>
     <p class="text-[12px] text-slate-500 -mt-1">Scoring inside the window: critical WAF hit = 5, other WAF hit = 2, rate-limited = 1, unsolved bot challenge = 1. Private and allow-listed IPs are never banned.</p>
@@ -147,30 +147,30 @@
       <div>
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">High-risk threshold (score ≥)</label>
         <input name="adaptive_high_threshold" type="number" min="1" max="100" value="{{.AdaptiveHighThresh}}"
-          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden transition-[border] duration-150 text-slate-800 bg-white"/>
       </div>
       <div>
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Low-risk threshold (score ≤)</label>
         <input name="adaptive_low_threshold" type="number" min="0" max="99" value="{{.AdaptiveLowThresh}}"
-          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden transition-[border] duration-150 text-slate-800 bg-white"/>
       </div>
       <div>
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">High-risk rate scale</label>
         <input name="adaptive_high_rate_scale" type="number" min="0.05" max="1" step="0.05" value="{{.AdaptiveHighScale}}"
-          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden transition-[border] duration-150 text-slate-800 bg-white"/>
       </div>
       <div>
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Low-risk rate scale</label>
         <input name="adaptive_low_rate_scale" type="number" min="1" max="5" step="0.05" value="{{.AdaptiveLowScale}}"
-          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden transition-[border] duration-150 text-slate-800 bg-white"/>
       </div>
       <div class="col-span-2">
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Force bot challenge (score ≥)</label>
         <input name="adaptive_force_challenge_threshold" type="number" min="1" max="100" value="{{.AdaptiveForceChallenge}}"
-          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden transition-[border] duration-150 text-slate-800 bg-white"/>
       </div>
     </div>
-    <p class="text-[12px] text-slate-500 -mt-1">Rate scale multiplies the global limit's rate and burst: 0.3 means 30% of normal for high-risk IPs, 1.5 means 150% of normal for low-risk ones. Blocked/challenged rows from adaptive enforcement show up in Logs tagged <span class="mono">:adaptive</span>.</p>
+    <p class="text-[12px] text-slate-500 -mt-1">Rate scale multiplies the global limit's rate and burst: 0.3 means 30% of normal for high-risk IPs, 1.5 means 150% of normal for low-risk ones. Blocked/challenged rows from adaptive enforcement show up in Logs tagged <span class="font-mono">:adaptive</span>.</p>
 
     <button type="submit" class="btn-primary w-full flex items-center justify-center gap-2">
       <i class="hgi hgi-stroke hgi-rounded hgi-checkmark-circle-02 text-sm"></i>
@@ -191,15 +191,15 @@
     {{end}}
   </div>
   <div class="flex-1 min-w-0">
-    <div class="mono text-[14px] font-semibold text-slate-900 truncate">{{.IP}}</div>
+    <div class="font-mono text-[14px] font-semibold text-slate-900 truncate">{{.IP}}</div>
     <div class="text-[12px] text-slate-500 truncate">{{if .AppName}}{{.AppName}}{{else}}Global{{end}} · {{fmtTime .CreatedAt}}{{if .Note}} · {{.Note}}{{end}}</div>
   </div>
   {{if .Auto}}
-  <span class="text-[12px] font-semibold px-[10px] py-1 rounded shrink-0 bg-amber-100 text-amber-700">Auto</span>
+  <span class="text-[12px] font-semibold px-[10px] py-1 rounded-sm shrink-0 bg-amber-100 text-amber-700">Auto</span>
   {{end}}
   {{$score := 0}}
   {{if $.ThreatScores}}{{$score = index $.ThreatScores .IP}}{{end}}
-  <span class="text-[12px] font-semibold px-[10px] py-1 rounded shrink-0 bg-slate-100 text-slate-600" title="Composite threat score (0-100)">
+  <span class="text-[12px] font-semibold px-[10px] py-1 rounded-sm shrink-0 bg-slate-100 text-slate-600" title="Composite threat score (0-100)">
     {{if gt $score 0}}Score {{$score}}{{else}}Score —{{end}}
   </span>
   {{template "rule-type-badge" .RuleType}}

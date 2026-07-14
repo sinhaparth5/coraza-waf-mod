@@ -24,6 +24,7 @@ func TestDashboardTemplateRendersAtAGlanceCards(t *testing.T) {
 		"TopBlocked":    []storage.LogRow{},
 		"TopCountries":  []dashboardCountry{},
 		"AtAGlance":     dashboardAtAGlance(storage.AtAGlanceStats{RequestsLastMinute: 12}, 2),
+		"Enforcement":   dashboardEnforcement(storage.DailyReport{WAFBlocked: 3, BotChallenged: 9}),
 		"BlockRate":     0,
 		"HasTraffic":    false,
 		"TrackArc":      310,
@@ -40,6 +41,35 @@ func TestDashboardTemplateRendersAtAGlanceCards(t *testing.T) {
 	}
 	if !bytes.Contains(buf.Bytes(), []byte("Requests/sec")) {
 		t.Fatal("dashboard did not render at-a-glance cards")
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("Enforcement today")) {
+		t.Fatal("dashboard did not render the enforcement card")
+	}
+	// Bot challenge (9 hits) is the busiest layer, so its meter is full width.
+	if !bytes.Contains(buf.Bytes(), []byte("bg-brand w-full")) {
+		t.Fatal("enforcement meters missing bucketed width class")
+	}
+}
+
+// TestMeterWidthClass pins the bucket math: ceil(count/max*8) into eight
+// fixed classes, zero collapsing to a hairline sliver.
+func TestMeterWidthClass(t *testing.T) {
+	cases := []struct {
+		count, max int
+		want       string
+	}{
+		{0, 0, "w-[3%]"},
+		{0, 10, "w-[3%]"},
+		{1, 8, "w-[12%]"},
+		{4, 8, "w-[50%]"},
+		{5, 8, "w-[62%]"},
+		{8, 8, "w-full"},
+		{1, 1000, "w-[12%]"}, // tiny but nonzero never rounds to the zero sliver
+	}
+	for _, tc := range cases {
+		if got := meterWidthClass(tc.count, tc.max); got != tc.want {
+			t.Errorf("meterWidthClass(%d, %d) = %q, want %q", tc.count, tc.max, got, tc.want)
+		}
 	}
 }
 

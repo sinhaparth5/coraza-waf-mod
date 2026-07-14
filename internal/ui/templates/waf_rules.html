@@ -11,14 +11,14 @@
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">CRS Rule ID</label>
           <input name="rule_id" type="number" placeholder="e.g. 942100" required
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] font-mono outline-none transition-[border] duration-150 text-slate-800 bg-white"
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] font-mono outline-hidden transition-[border] duration-150 text-slate-800 bg-white"
           />
         </div>
 
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Scope</label>
           <select name="service"
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white">
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white">
             <option value="">Global (all services)</option>
             {{range .Services}}
             <option value="{{.Name}}">{{.Name}}</option>
@@ -29,7 +29,7 @@
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Reason <span class="text-slate-400">(optional)</span></label>
           <input name="reason" type="text" placeholder="e.g. false positive on login form"
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden transition-[border] duration-150 text-slate-800 bg-white"
           />
         </div>
 
@@ -40,7 +40,7 @@
       </form>
 
       <div class="mt-5 pt-4 border-t border-canvas flex flex-col gap-2 text-[12px] text-slate-500">
-        <p>Disabling a rule suppresses it via <code class="font-mono bg-surface px-1 py-[1px] rounded text-[11px]">SecRuleRemoveById</code> and reloads the WAF engine immediately, no restart needed.</p>
+        <p>Disabling a rule suppresses it via <code class="font-mono bg-surface px-1 py-[1px] rounded-sm text-[11px]">SecRuleRemoveById</code> and reloads the WAF engine immediately, no restart needed.</p>
         <p class="mt-1">Leave scope on Global to disable everywhere, or pick a service to only suppress the rule for that backend; every other service keeps enforcing it.</p>
         <p class="mt-1">Re-enable any time from the lists below.</p>
       </div>
@@ -81,9 +81,9 @@
             <td class="px-4 py-3 text-slate-500">{{fmtTime .LastSeen}}</td>
             <td class="px-4 py-3">
               {{if .Disabled}}
-              <span class="text-[11px] font-semibold px-[10px] py-1 rounded bg-amber-100 text-amber-700">Disabled</span>
+              <span class="text-[11px] font-semibold px-[10px] py-1 rounded-sm bg-amber-100 text-amber-700">Disabled</span>
               {{else}}
-              <span class="text-[11px] font-semibold px-[10px] py-1 rounded bg-green-100 text-green-700">Active</span>
+              <span class="text-[11px] font-semibold px-[10px] py-1 rounded-sm bg-green-100 text-green-700">Active</span>
               {{end}}
             </td>
             <td class="px-4 py-3 text-right">
@@ -146,7 +146,7 @@
         <div class="flex-1 min-w-0">
           <div class="font-mono text-[14px] font-semibold text-slate-900">
             Rule {{.RuleID}}
-            <span class="ml-1 font-sans text-[11px] font-semibold px-[8px] py-[2px] rounded bg-brand-tint text-brand-dark">{{.ServiceName}}</span>
+            <span class="ml-1 font-sans text-[11px] font-semibold px-[8px] py-[2px] rounded-sm bg-brand-tint text-brand-dark">{{.ServiceName}}</span>
           </div>
           <div class="text-[12px] text-slate-500 truncate">
             {{if .Reason}}{{.Reason}}{{else}}No reason given{{end}} · {{fmtTime .CreatedAt}}

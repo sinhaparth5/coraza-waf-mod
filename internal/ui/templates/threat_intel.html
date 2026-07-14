@@ -13,21 +13,21 @@
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Label</label>
           <input name="label" type="text" placeholder="e.g. Tor Exit Nodes" required
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none bg-white text-slate-800"
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden bg-white text-slate-800"
           />
         </div>
 
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">URL</label>
           <input name="url" type="url" placeholder="https://…/iplist.txt" required
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] font-mono outline-none bg-white text-slate-800"
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] font-mono outline-hidden bg-white text-slate-800"
           />
         </div>
 
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Sync interval (hours)</label>
           <input name="interval_hours" type="number" value="24" min="1"
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none bg-white text-slate-800"
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden bg-white text-slate-800"
           />
         </div>
 
@@ -58,7 +58,7 @@
       </div>
 
       <div class="mt-4 pt-4 border-t border-canvas text-[12px] text-slate-500 flex flex-col gap-1">
-        <p>Feeds are plain-text lists of IPs/CIDRs, one per line. Lines starting with <code class="font-mono bg-surface px-1 rounded text-[11px]">#</code> or <code class="font-mono bg-surface px-1 rounded text-[11px]">;</code> are treated as comments.</p>
+        <p>Feeds are plain-text lists of IPs/CIDRs, one per line. Lines starting with <code class="font-mono bg-surface px-1 rounded-sm text-[11px]">#</code> or <code class="font-mono bg-surface px-1 rounded-sm text-[11px]">;</code> are treated as comments.</p>
         <p class="mt-1">Intel blocks are lower priority than your IP Rules; your allow rules always win.</p>
       </div>
     </div>
@@ -109,9 +109,9 @@
       </td>
       <td class="px-5 py-3">
         {{if .Enabled}}
-        <span class="text-[11px] font-semibold px-[10px] py-1 rounded bg-green-100 text-green-700">Active</span>
+        <span class="text-[11px] font-semibold px-[10px] py-1 rounded-sm bg-green-100 text-green-700">Active</span>
         {{else}}
-        <span class="text-[11px] font-semibold px-[10px] py-1 rounded bg-slate-100 text-slate-500">Paused</span>
+        <span class="text-[11px] font-semibold px-[10px] py-1 rounded-sm bg-slate-100 text-slate-500">Paused</span>
         {{end}}
       </td>
       <td class="px-5 py-3">
