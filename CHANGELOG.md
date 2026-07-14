@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **WAF verdict caching for repeated identical requests (issue #13).** Under
+  scanning/flood conditions the same byte-identical request (method + host +
+  path + query + body hash) no longer re-runs the full CRS rule engine on
+  every repeat — a short-TTL (5s), size-bounded (4096-entry) LRU cache keyed
+  on that fingerprint reuses the prior verdict instead. Restricted to
+  anonymous/bot-flood-shaped traffic: requests carrying a session cookie or
+  `Authorization` header are never fingerprinted, since a body/path match
+  alone doesn't capture request identity for those. Exact-fingerprint match
+  only — no "similar request" heuristics.
+
 ## [1.5.2] - 2026-07-14
 
 ### Fixed

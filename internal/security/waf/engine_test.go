@@ -3,6 +3,7 @@ package waf
 import (
 	"bytes"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -79,5 +80,71 @@ func TestCheckBodyOverLimit(t *testing.T) {
 	}
 	if cr.n > requestBodyLimit+1 {
 		t.Errorf("check read %d bytes off the wire, want at most limit+1 (%d)", cr.n, requestBodyLimit+1)
+	}
+	if got := e.cache.order.Len(); got != 0 {
+		t.Errorf("over-limit request must never be cached, got %d cache entries", got)
+	}
+}
+
+// TestCheckDeduplicatesIdenticalRequests proves the verdict cache (issue #13)
+// actually keys on the request fingerprint: a byte-identical repeat reuses
+// the existing cache entry instead of creating a new one, while a request
+// that differs only in query string gets its own entry.
+func TestCheckDeduplicatesIdenticalRequests(t *testing.T) {
+	e := newTestEngine(t)
+
+	newReq := func(query string) *http.Request {
+		r := httptest.NewRequest("GET", "http://app.example.com/search?"+query, nil)
+		r.Header.Set("User-Agent", "Mozilla/5.0")
+		r.Header.Set("Accept", "*/*")
+		return r
+	}
+
+	if _, err := e.Check(newReq("q=hello"), "203.0.113.9"); err != nil {
+		t.Fatalf("check 1: %v", err)
+	}
+	if got := e.cache.order.Len(); got != 1 {
+		t.Fatalf("cache entries after 1st request = %d, want 1", got)
+	}
+
+	if _, err := e.Check(newReq("q=hello"), "203.0.113.9"); err != nil {
+		t.Fatalf("check 2 (identical repeat): %v", err)
+	}
+	if got := e.cache.order.Len(); got != 1 {
+		t.Fatalf("cache entries after identical repeat = %d, want 1 (should reuse the existing entry)", got)
+	}
+
+	if _, err := e.Check(newReq("q=different"), "203.0.113.9"); err != nil {
+		t.Fatalf("check 3 (distinct query): %v", err)
+	}
+	if got := e.cache.order.Len(); got != 2 {
+		t.Fatalf("cache entries after distinct request = %d, want 2", got)
+	}
+}
+
+// TestCheckNeverCachesCookieOrAuthRequests proves requests carrying a
+// session cookie or Authorization header are excluded from the verdict
+// cache entirely (issue #13's identity-safety requirement) — a
+// method+path+query+body fingerprint doesn't capture "which logged-in user."
+func TestCheckNeverCachesCookieOrAuthRequests(t *testing.T) {
+	e := newTestEngine(t)
+
+	withCookie := httptest.NewRequest("GET", "http://app.example.com/account", nil)
+	withCookie.Header.Set("User-Agent", "Mozilla/5.0")
+	withCookie.Header.Set("Cookie", "session=abc123")
+	if _, err := e.Check(withCookie, "203.0.113.9"); err != nil {
+		t.Fatalf("check (cookie): %v", err)
+	}
+	if got := e.cache.order.Len(); got != 0 {
+		t.Fatalf("cache entries after cookie-bearing request = %d, want 0", got)
+	}
+
+	withAuth := httptest.NewRequest("GET", "http://app.example.com/api", nil)
+	withAuth.Header.Set("Authorization", "Bearer abc123")
+	if _, err := e.Check(withAuth, "203.0.113.9"); err != nil {
+		t.Fatalf("check (authorization): %v", err)
+	}
+	if got := e.cache.order.Len(); got != 0 {
+		t.Fatalf("cache entries after Authorization-bearing request = %d, want 0", got)
 	}
 }
