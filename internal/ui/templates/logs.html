@@ -414,7 +414,10 @@
 </div><!-- /backdrop -->
 
 <style>
+  /* @layer components so utilities keep overriding these (see base.html). */
+  @layer components {
   .ld-label { font-size:10px; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
   .ld-section-title { font-size:10px; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:.06em; margin-bottom:10px; }
+  }
 </style>
 {{end}}

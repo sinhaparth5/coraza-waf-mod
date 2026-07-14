@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-07-14
+
+### Fixed
+- **Padding/margin utilities were overridden after the switch to compiled
+  Tailwind.** The compiled stylesheet puts utilities in CSS cascade layers,
+  and un-layered CSS beats layered CSS regardless of specificity — so the
+  templates' inline `* { margin:0; padding:0 }` reset (redundant with
+  Tailwind preflight, now removed) silently cancelled every `p-*`/`m-*`
+  class, and custom classes like `.card` started beating utilities such as
+  `bg-navy`. All inline `<style>` blocks (base, login, logs) now live in
+  `@layer components`, restoring the utilities-win-over-custom-classes
+  ordering the UI was built on.
+
 ## [1.5.1] - 2026-07-14
 
 ### Changed
@@ -466,7 +479,8 @@ Initial release — a single-binary Go WAF + reverse proxy.
 - **All storage in SQLite** (`modernc.org/sqlite`, pure Go, no CGO) — one
   `waf.db` file for logs, rules, services, and TLS state.
 
-[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.5.1...main
+[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.5.2...main
+[1.5.2]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.4.12...v1.5.0
 [1.4.2]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.3.0...v1.4.2
