@@ -7,10 +7,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -92,6 +94,7 @@ func main() {
 	accessLogPath := fs.String("access-log", "", "nginx-style access log file path (empty = disabled)")
 	accessLogMaxSizeMB := fs.Int("access-log-max-size-mb", 100, "rotate access log after this many MB")
 	accessLogMaxBackups := fs.Int("access-log-max-backups", 5, "number of rotated access log files to keep")
+	dbKeyFile := fs.String("db-key-file", "", "key file for AES-256-GCM encryption of stored secrets at rest (empty = plaintext)")
 	fs.Parse(os.Args[1:]) //nolint // ExitOnError: never returns an error to check
 
 	cfg := config.Defaults()
@@ -111,6 +114,17 @@ func main() {
 		log.Fatalf("db: %v", err)
 	}
 	defer db.Close()
+
+	// Must happen before anything reads secret config (the challenge secret,
+	// TOTP secrets, email/webhook/Redis credentials) — EnableSecretEncryption
+	// also migrates any still-plaintext secrets, so first boot with a key
+	// needs no manual step.
+	if *dbKeyFile != "" {
+		if err := enableDBEncryption(db, *dbKeyFile); err != nil {
+			log.Fatalf("db-key-file: %v", err)
+		}
+		log.Printf("secrets-at-rest encryption enabled (key file %s)", *dbKeyFile)
+	}
 
 	// buildWAFAll constructs a fresh default engine plus one extra engine per
 	// service that has its own rule exceptions, reading the current DB state
@@ -613,11 +627,19 @@ func splitCSV(s string) []string {
 // retention window plus expired admin sessions, logs the result, and returns
 // — it does not start the WAF, proxy, or admin UI. retention <= 0 disables
 // request-log pruning (logs kept forever); expired sessions are always swept.
-// Invoked as: coraza-waf-mod prune [--db path] [--retention days]
+// --vacuum additionally rebuilds the DB file afterwards to hand freed pages
+// back to the OS — DELETE alone never shrinks a SQLite file, only marks pages
+// reusable, so without an occasional VACUUM the file sits at its high-water
+// mark forever. It lives in this one-shot mode rather than the server because
+// VACUUM is a single long write transaction: here the live server's writers
+// just wait their busy_timeout turn, instead of the rebuild monopolizing the
+// serving process's own connection pool.
+// Invoked as: coraza-waf-mod prune [--db path] [--retention days] [--vacuum]
 func runPruneOnly(args []string) {
 	fs := flag.NewFlagSet("prune", flag.ExitOnError)
 	dbPath := fs.String("db", "waf.db", "SQLite database path")
 	retention := fs.Int("retention", 30, "log retention in days (0 = keep forever)")
+	vacuum := fs.Bool("vacuum", false, "rebuild the DB file after pruning to reclaim disk space")
 	fs.Parse(args) //nolint // ExitOnError: never returns an error to check
 
 	db, err := storage.Open(*dbPath)
@@ -634,16 +656,72 @@ func runPruneOnly(args []string) {
 
 	if *retention <= 0 {
 		log.Printf("log retention: disabled (retention <= 0), nothing to prune")
-		return
+	} else {
+		start := time.Now()
+		n, err := db.PruneOldRequests(*retention)
+		dur := time.Since(start)
+		if err != nil {
+			log.Fatalf("log retention: prune failed after %s: %v", dur, err)
+		}
+		log.Printf("log retention: deleted %d requests older than %d days (took %s)", n, *retention, dur)
 	}
 
-	start := time.Now()
-	n, err := db.PruneOldRequests(*retention)
-	dur := time.Since(start)
-	if err != nil {
-		log.Fatalf("log retention: prune failed after %s: %v", dur, err)
+	if *vacuum {
+		before := dbDiskSize(*dbPath)
+		start := time.Now()
+		if err := db.Vacuum(); err != nil {
+			log.Fatalf("vacuum: failed after %s: %v", time.Since(start), err)
+		}
+		after := dbDiskSize(*dbPath)
+		log.Printf("vacuum: reclaimed %s (%s -> %s, took %s)",
+			formatBytes(before-after), formatBytes(before), formatBytes(after), time.Since(start))
 	}
-	log.Printf("log retention: deleted %d requests older than %d days (took %s)", n, *retention, dur)
+}
+
+// dbDiskSize sums the on-disk footprint of a SQLite database: the main file
+// plus its -wal and -shm sidecars (right after a big prune the WAL can dwarf
+// the main file, so counting waf.db alone would misstate what VACUUM
+// reclaimed). Missing sidecars contribute zero.
+func dbDiskSize(path string) int64 {
+	var total int64
+	for _, p := range []string{path, path + "-wal", path + "-shm"} {
+		if fi, err := os.Stat(p); err == nil {
+			total += fi.Size()
+		}
+	}
+	return total
+}
+
+// enableDBEncryption turns on secrets-at-rest encryption from a key file.
+// The AES-256 key is SHA-256 of the file's whitespace-trimmed contents rather
+// than the raw bytes, so any high-entropy file works regardless of format
+// (`openssl rand -hex 32 > db.key`, raw binary, base64) and an editor adding
+// a trailing newline doesn't silently derive a different key. The file must
+// carry at least 32 bytes so a short passphrase can't quietly stand in for
+// real key material — hashing would mask how weak it is.
+func enableDBEncryption(db *storage.DB, path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) < 32 {
+		return fmt.Errorf("key file %s holds %d bytes; need at least 32 — generate one with: openssl rand -hex 32 > %s", path, len(trimmed), path)
+	}
+	key := sha256.Sum256(trimmed)
+	return db.EnableSecretEncryption(key[:])
+}
+
+// formatBytes renders a byte count human-readably for prune log lines.
+func formatBytes(n int64) string {
+	switch {
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1f MiB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.1f KiB", float64(n)/(1<<10))
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
 }
 
 // runSetup seeds admin credentials and optional TLS config into the DB, then
