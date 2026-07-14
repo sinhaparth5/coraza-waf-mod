@@ -17,6 +17,7 @@ import (
 type Engine struct {
 	waf     coraza.WAF
 	enabled bool
+	cache   *verdictCache // nil when enabled == false
 }
 
 type Result struct {
@@ -88,16 +89,72 @@ SecDebugLogLevel 0
 		return nil, fmt.Errorf("coraza init: %w", err)
 	}
 
-	return &Engine{waf: w, enabled: true}, nil
+	return &Engine{waf: w, enabled: true, cache: newVerdictCache(verdictCacheTTL, verdictCacheCapacity)}, nil
 }
 
 // Check runs r through the WAF using clientIP as the real remote address.
-// It buffers the request body so it can be read again by the proxy after inspection.
+// It buffers the request body so it can be read again by the proxy after
+// inspection. Repeated byte-identical requests (same method/host/path/query/
+// body — a flood or scanner replaying the same probe) can skip the Coraza
+// transaction entirely and reuse a recent verdict; see verdictcache.go.
 func (e *Engine) Check(r *http.Request, clientIP string) (*Result, error) {
 	if !e.enabled {
 		return &Result{}, nil
 	}
 
+	// Buffer body up front — never more than the WAF's own body limit plus
+	// one byte: an uncapped io.ReadAll would allocate a whole multi-GB (or
+	// chunked, no-Content-Length) upload in RAM before SecRequestBodyLimit
+	// was ever consulted, so a handful of concurrent large POSTs could
+	// exhaust memory. The extra byte lets Coraza see that the body exceeds
+	// its limit and apply SecRequestBodyLimitAction itself (Reject → 413
+	// with the recommended config), keeping the limit logic in one place.
+	var body []byte
+	hadBody := r.Body != nil && r.Body != http.NoBody
+	if hadBody {
+		orig := r.Body
+		b, err := io.ReadAll(io.LimitReader(orig, requestBodyLimit+1))
+		if err != nil {
+			return nil, fmt.Errorf("reading request body: %w", err)
+		}
+		body = b
+		if len(body) > requestBodyLimit {
+			// Over-limit body with more bytes still on the wire: chain the
+			// buffered head with the unread tail so the proxy can forward
+			// the full upload if the configured action is ProcessPartial
+			// rather than Reject.
+			r.Body = &bodyReplay{Reader: io.MultiReader(bytes.NewReader(body), orig), Closer: orig}
+		} else {
+			r.Body = io.NopCloser(bytes.NewReader(body))
+		}
+	}
+
+	// Only fingerprint in-limit bodies: an over-limit request already takes
+	// the rare ProcessPartial/Reject path above and its outcome depends on
+	// exactly how much of the body was on the wire, not just its buffered
+	// head, so it's not a safe cache candidate.
+	var cacheKey string
+	if len(body) <= requestBodyLimit && fingerprintEligible(r) {
+		cacheKey = fingerprint(r, body)
+		if cached, ok := e.cache.get(cacheKey); ok {
+			return &cached, nil
+		}
+	}
+
+	result, err := e.evaluate(r, clientIP, body, hadBody)
+	if err != nil {
+		return nil, err
+	}
+	if cacheKey != "" {
+		e.cache.put(cacheKey, *result)
+	}
+	return result, nil
+}
+
+// evaluate runs the actual Coraza transaction against the already-buffered
+// body. Split out of Check so the verdict-cache fast path above never has to
+// touch a coraza.Transaction at all.
+func (e *Engine) evaluate(r *http.Request, clientIP string, body []byte, hadBody bool) (*Result, error) {
 	tx := e.waf.NewTransaction()
 	defer func() {
 		tx.ProcessLogging()
@@ -119,30 +176,7 @@ func (e *Engine) Check(r *http.Request, clientIP string) (*Result, error) {
 		return &Result{Blocked: true, Status: it.Status, RuleID: it.RuleID, Action: it.Action}, nil
 	}
 
-	// Buffer body so Coraza can inspect it and the proxy can still forward
-	// it — but never more than the WAF's own body limit plus one byte: an
-	// uncapped io.ReadAll would allocate a whole multi-GB (or chunked,
-	// no-Content-Length) upload in RAM before SecRequestBodyLimit was ever
-	// consulted, so a handful of concurrent large POSTs could exhaust
-	// memory. The extra byte lets Coraza see that the body exceeds its
-	// limit and apply SecRequestBodyLimitAction itself (Reject → 413 with
-	// the recommended config), keeping the limit logic in one place.
-	if r.Body != nil && r.Body != http.NoBody {
-		orig := r.Body
-		body, err := io.ReadAll(io.LimitReader(orig, requestBodyLimit+1))
-		if err != nil {
-			return nil, fmt.Errorf("reading request body: %w", err)
-		}
-		if len(body) > requestBodyLimit {
-			// Over-limit body with more bytes still on the wire: chain the
-			// buffered head with the unread tail so the proxy can forward
-			// the full upload if the configured action is ProcessPartial
-			// rather than Reject.
-			r.Body = &bodyReplay{Reader: io.MultiReader(bytes.NewReader(body), orig), Closer: orig}
-		} else {
-			r.Body = io.NopCloser(bytes.NewReader(body))
-		}
-
+	if hadBody {
 		if it, _, err := tx.WriteRequestBody(body); err != nil {
 			return nil, fmt.Errorf("waf body write: %w", err)
 		} else if it != nil {
