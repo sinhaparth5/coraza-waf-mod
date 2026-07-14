@@ -24,7 +24,7 @@
       <div class="wizard-step" data-step="1">
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Service Name</label>
         <input name="name" type="text" placeholder="e.g. blog, api, admin-panel"
-          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white"/>
         <p class="step-error hidden text-[12px] text-red-500 mt-[6px]">This field is required.</p>
         <p class="text-[12px] text-slate-500 mt-[10px]">A friendly name to identify this backend in logs and rules.</p>
       </div>
@@ -43,7 +43,7 @@
           </label>
         </div>
         <input name="match_value" type="text" placeholder="blog.example.com or /api"
-          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white"/>
         <p class="step-error hidden text-[12px] text-red-500 mt-[6px]">This field is required.</p>
         <p class="text-[12px] text-slate-500 mt-[10px]">Host matches the request's Host header exactly; prefix matches the start of the URL path.</p>
       </div>
@@ -52,7 +52,7 @@
       <div class="wizard-step hidden" data-step="3">
         <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Backend URL</label>
         <input name="backend" type="text" placeholder="http://127.0.0.1:3000"
-          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] font-mono outline-none text-slate-800 bg-white"/>
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] font-mono outline-hidden text-slate-800 bg-white"/>
         <p class="step-error hidden text-[12px] text-red-500 mt-[6px]">This field is required.</p>
         <p class="text-[12px] text-slate-500 mt-[10px]">Where the WAF forwards allowed traffic once it's passed inspection.</p>
 
@@ -62,12 +62,12 @@
             <div class="flex-1">
               <label class="block text-[11px] text-slate-400 mb-[5px]">Requests / second</label>
               <input name="rps" type="number" min="0" step="0.1" placeholder="e.g. 10"
-                class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+                class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white"/>
             </div>
             <div class="flex-1">
               <label class="block text-[11px] text-slate-400 mb-[5px]">Burst</label>
               <input name="burst" type="number" min="0" placeholder="auto (2× RPS)"
-                class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+                class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white"/>
             </div>
           </div>
           <p class="text-[12px] text-slate-400 mt-[8px]">Leave blank to use the global limit from Settings.</p>
@@ -117,10 +117,10 @@
 
     <!-- Tabs -->
     <div id="svc-tabs" class="flex gap-1 mb-5 bg-surface rounded-md p-1">
-      <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded text-[12px] font-semibold cursor-pointer font-sans border-none bg-white shadow text-slate-900" data-tab="ratelimit">Rate Limit</button>
-      <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="bot">Bot</button>
-      <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="cache">Cache</button>
-      <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="tls">TLS</button>
+      <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-white shadow-sm text-slate-900" data-tab="ratelimit">Rate Limit</button>
+      <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="bot">Bot</button>
+      <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="cache">Cache</button>
+      <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="tls">TLS</button>
     </div>
 
     <!-- ── Rate Limit tab ── -->
@@ -131,12 +131,12 @@
           <div class="flex-1">
             <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Requests / second</label>
             <input id="rl-rps" name="rps" type="number" min="0" step="0.1" placeholder="e.g. 10"
-              class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+              class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white"/>
           </div>
           <div class="flex-1">
             <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Burst</label>
             <input id="rl-burst" name="burst" type="number" min="0" placeholder="auto (2× RPS)"
-              class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+              class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white"/>
           </div>
         </div>
         <p class="text-[12px] text-slate-400 mb-4 leading-[1.5]">Set 0 or leave blank to fall through to the global limit from Settings.</p>
@@ -202,7 +202,7 @@
           </label>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Session cookie name</label>
           <input id="svc-cache-session-cookie" name="session_cookie_name" type="text" placeholder="e.g. session_id, connect.sid"
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white mb-4"/>
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white mb-4"/>
           <button type="submit" class="btn-primary w-full">Save</button>
         </form>
         <div id="svc-cache-session-error" class="text-[12px] text-red-500 mt-[10px]"></div>
@@ -215,24 +215,24 @@
             <div class="flex-1">
               <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">TTL floor (s)</label>
               <input id="svc-cache-ttl-floor" name="ttl_floor" type="number" min="0" placeholder="e.g. 3600"
-                class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+                class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white"/>
             </div>
             <div class="flex-1">
               <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">TTL ceiling (s)</label>
               <input id="svc-cache-ttl-ceiling" name="ttl_ceiling" type="number" min="0" placeholder="e.g. 86400"
-                class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+                class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white"/>
             </div>
           </div>
           <div class="flex gap-3 mb-4">
             <div class="flex-1">
               <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Grace (s)</label>
               <input id="svc-cache-grace" name="grace" type="number" min="0" placeholder="30"
-                class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+                class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white"/>
             </div>
             <div class="flex-1">
               <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Keep (s)</label>
               <input id="svc-cache-keep" name="keep" type="number" min="0" placeholder="30"
-                class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+                class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white"/>
             </div>
           </div>
           <button type="submit" class="btn-primary w-full">Save</button>
@@ -274,7 +274,7 @@
       {{if .PoolCerts}}
       <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Select certificate</label>
       <select name="cert_id"
-        class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white mb-4">
+        class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white mb-4">
         {{range .PoolCerts}}
         <option value="{{.ID}}">{{.Name}}{{if .Domains}} · {{.Domains}}{{end}}</option>
         {{end}}
@@ -293,10 +293,10 @@
       <input type="hidden" name="service_id" class="tls-service-id"/>
       <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Certificate (PEM)</label>
       <textarea name="cert_pem" rows="4" placeholder="-----BEGIN CERTIFICATE-----"
-        class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[12px] font-mono outline-none text-slate-800 bg-white mb-3 resize-y"></textarea>
+        class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[12px] font-mono outline-hidden text-slate-800 bg-white mb-3 resize-y"></textarea>
       <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Private Key (PEM)</label>
       <textarea name="key_pem" rows="4" placeholder="-----BEGIN PRIVATE KEY-----"
-        class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[12px] font-mono outline-none text-slate-800 bg-white resize-y"></textarea>
+        class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[12px] font-mono outline-hidden text-slate-800 bg-white resize-y"></textarea>
       <button type="submit" class="btn-primary w-full mt-4">Save Certificate</button>
     </form>
 
@@ -342,7 +342,7 @@
       <input type="hidden" name="service_id" id="acme-email-service-id"/>
       <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Email address</label>
       <input id="acme-email-input" name="email" type="email" placeholder="you@example.com" autocomplete="email"
-        class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white mb-3"/>
+        class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white mb-3"/>
       <div id="acme-email-error" class="text-[12px] text-red-500 mb-3"></div>
       <p class="text-[12px] text-slate-400 mb-4 leading-[1.5]">Let's Encrypt sends renewal notices and important account alerts to this address. It is not shown publicly.</p>
       <button type="submit" class="btn-primary w-full">Save &amp; enable auto-TLS</button>
@@ -364,36 +364,36 @@
     <div class="flex items-center gap-2">
       <span class="text-[14px] font-semibold text-slate-900 truncate">{{.Name}}</span>
       {{if .Host}}
-      <span class="text-[11px] font-semibold bg-blue-50 text-blue-500 px-2 py-px rounded shrink-0">host</span>
+      <span class="text-[11px] font-semibold bg-blue-50 text-blue-500 px-2 py-px rounded-sm shrink-0">host</span>
       {{else}}
-      <span class="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-px rounded shrink-0">prefix</span>
+      <span class="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-px rounded-sm shrink-0">prefix</span>
       {{end}}
     </div>
-    <div class="mono text-[12px] text-slate-500 truncate">{{if .Host}}{{.Host}}{{else}}{{.Prefix}}{{end}} &rarr; {{.Backend}}</div>
+    <div class="font-mono text-[12px] text-slate-500 truncate">{{if .Host}}{{.Host}}{{else}}{{.Prefix}}{{end}} &rarr; {{.Backend}}</div>
   </div>
   <div class="flex items-center gap-2 shrink-0">
     {{if .Host}}
     {{if eq .TLSMode "custom"}}
-    <span class="text-[11px] font-semibold bg-green-100 text-green-600 px-2 py-[2px] rounded">
+    <span class="text-[11px] font-semibold bg-green-100 text-green-600 px-2 py-[2px] rounded-sm">
       {{if .CertName}}{{.CertName}}{{else}}Custom{{if .TLSExpiresAt}} · exp {{shortDate .TLSExpiresAt}}{{end}}{{end}}
     </span>
     {{else if eq .TLSMode "auto"}}
-    <span class="text-[11px] font-semibold bg-blue-50 text-blue-500 px-2 py-[2px] rounded">Auto (Let's Encrypt)</span>
+    <span class="text-[11px] font-semibold bg-blue-50 text-blue-500 px-2 py-[2px] rounded-sm">Auto (Let's Encrypt)</span>
     {{else}}
-    <span class="text-[11px] font-semibold bg-slate-100 text-slate-500 px-2 py-[2px] rounded">No TLS</span>
+    <span class="text-[11px] font-semibold bg-slate-100 text-slate-500 px-2 py-[2px] rounded-sm">No TLS</span>
     {{end}}
     {{end}}
     {{if gt .RateLimitRPS 0.0}}
-    <span class="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-[2px] rounded">{{printf "%.0f" .RateLimitRPS}}/s</span>
+    <span class="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-[2px] rounded-sm">{{printf "%.0f" .RateLimitRPS}}/s</span>
     {{end}}
     {{if ne .BotMode "inherit"}}
-    <span class="text-[11px] font-semibold {{if eq .BotMode "always"}}bg-purple-100 text-purple-600{{else}}bg-slate-100 text-slate-500{{end}} px-2 py-[2px] rounded">Bot: {{.BotMode}}</span>
+    <span class="text-[11px] font-semibold {{if eq .BotMode "always"}}bg-purple-100 text-purple-600{{else}}bg-slate-100 text-slate-500{{end}} px-2 py-[2px] rounded-sm">Bot: {{.BotMode}}</span>
     {{end}}
     {{if .CacheEnabled}}
-    <span class="text-[11px] font-semibold bg-sky-100 text-sky-600 px-2 py-[2px] rounded">Cached</span>
+    <span class="text-[11px] font-semibold bg-sky-100 text-sky-600 px-2 py-[2px] rounded-sm">Cached</span>
     {{end}}
     {{if .CacheBySession}}
-    <span class="text-[11px] font-semibold bg-sky-100 text-sky-600 px-2 py-[2px] rounded">Cached (session)</span>
+    <span class="text-[11px] font-semibold bg-sky-100 text-sky-600 px-2 py-[2px] rounded-sm">Cached (session)</span>
     {{end}}
     <span class="text-[12px] text-slate-400 whitespace-nowrap ml-1">{{fmtTime .CreatedAt}}</span>
     <button type="button" class="svc-edit-btn inline-flex items-center gap-[5px] text-[12px] font-medium text-slate-600 bg-white border border-line rounded-md px-4 py-[6px] cursor-pointer font-sans hover:border-slate-400 transition-colors duration-150 ml-1"

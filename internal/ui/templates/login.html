@@ -7,19 +7,22 @@
   <link rel="icon" type="image/svg+xml" href="{{.AdminPath}}/static/imgs/logo.svg"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: { sans: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'] },
-          colors: {
-            brand: { DEFAULT: '#76C893', dark: '#2E7D5B', light: '#9FE0B7', tint: '#EAF7EE' },
-          },
-        },
-      },
-    };
-  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style type="text/tailwindcss">
+    @theme {
+      --color-brand: #76C893;
+      --color-brand-dark: #2E7D5B;
+      --color-brand-light: #9FE0B7;
+      --color-brand-tint: #EAF7EE;
+      --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+    }
+    @layer base {
+      /* v4 preflight defaults borders to currentColor and buttons to the
+         default cursor; restore the v3 behavior this page was built on. */
+      *, ::before, ::after { border-color: var(--color-slate-200); }
+      button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+    }
+  </style>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
@@ -39,16 +42,16 @@
   <div class="min-h-dvh w-full lg:flex lg:items-stretch lg:gap-8 lg:p-8">
 
     <!-- ── Form column ─────────────────────────────────────────────────────── -->
-    <div class="flex flex-1 flex-col lg:rounded-[32px] lg:bg-white lg:shadow-sm lg:border lg:border-slate-100 lg:overflow-hidden">
+    <div class="flex flex-1 flex-col lg:rounded-[32px] lg:bg-white lg:shadow-xs lg:border lg:border-slate-100 lg:overflow-hidden">
 
       <!-- Art banner: mobile/tablet only, sits above the form -->
       <div class="relative h-52 sm:h-64 w-full shrink-0 overflow-hidden lg:hidden">
         <img src="{{.AdminPath}}/static/imgs/LoginArt.webp" alt="" aria-hidden="true"
              class="absolute inset-0 h-full w-full object-cover"/>
-        <div class="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent"></div>
+        <div class="absolute inset-0 bg-linear-to-t from-black/35 via-transparent to-transparent"></div>
         <span class="absolute left-5 bottom-4 flex items-center gap-2">
-          <img src="{{.AdminPath}}/static/imgs/logo.svg" alt="" class="w-6 h-6 drop-shadow"/>
-          <span class="text-white text-sm font-semibold tracking-wide drop-shadow">Coraza WAF</span>
+          <img src="{{.AdminPath}}/static/imgs/logo.svg" alt="" class="w-6 h-6 drop-shadow-sm"/>
+          <span class="text-white text-sm font-semibold tracking-wide drop-shadow-sm">Coraza WAF</span>
         </span>
       </div>
 
@@ -97,8 +100,8 @@
                 autofocus
                 required
                 class="w-full rounded-lg border border-slate-200 bg-white
-                       text-slate-800 placeholder-slate-400 text-lg tracking-[0.25em] text-center
-                       px-4 py-3.5 outline-none transition
+                       text-slate-800 placeholder:text-slate-400 text-lg tracking-[0.25em] text-center
+                       px-4 py-3.5 outline-hidden transition
                        focus:border-brand focus:ring-2 focus:ring-brand/20"/>
             </div>
             <button type="submit"
@@ -133,8 +136,8 @@
                 placeholder="admin@example.com"
                 required
                 class="w-full rounded-lg border border-slate-200 bg-white
-                       text-slate-800 placeholder-slate-400 text-sm
-                       px-4 py-3.5 outline-none transition
+                       text-slate-800 placeholder:text-slate-400 text-sm
+                       px-4 py-3.5 outline-hidden transition
                        focus:border-brand focus:ring-2 focus:ring-brand/20"/>
             </div>
 
@@ -153,8 +156,8 @@
                   placeholder="Password"
                   required
                   class="w-full rounded-lg border border-slate-200 bg-white
-                         text-slate-800 placeholder-slate-400 text-sm
-                         px-4 py-3.5 pr-12 outline-none transition
+                         text-slate-800 placeholder:text-slate-400 text-sm
+                         px-4 py-3.5 pr-12 outline-hidden transition
                          focus:border-brand focus:ring-2 focus:ring-brand/20"/>
                 <button type="button" id="pw-toggle" aria-label="Show password" aria-pressed="false"
                         class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-600 transition rounded-md">
@@ -186,7 +189,7 @@
     <div class="relative hidden lg:block lg:w-[42%] xl:w-[45%] rounded-[32px] overflow-hidden">
       <img src="{{.AdminPath}}/static/imgs/LoginArt.webp" alt="" aria-hidden="true"
            class="absolute inset-0 h-full w-full object-cover"/>
-      <div class="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent"></div>
+      <div class="absolute inset-0 bg-linear-to-t from-black/25 via-transparent to-transparent"></div>
     </div>
 
   </div>

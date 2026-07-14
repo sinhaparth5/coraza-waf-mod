@@ -482,12 +482,21 @@ func (h *Handler) Dashboard(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// Per-stage enforcement counts for the right panel, since UTC midnight —
+	// the same window and query GetStats/GetBotStats already use.
+	nowUTC := time.Now().UTC()
+	startOfDay := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
+	report, err := h.db.GetDailyReport(startOfDay, startOfDay.Add(24*time.Hour))
+	if err != nil {
+		return err
+	}
 	return h.render(c, "dashboard", map[string]any{
 		"Stats":         stats,
 		"Recent":        recent,
 		"TopBlocked":    topBlocked,
 		"TopCountries":  dashboardCountries(topCountryCounts),
 		"AtAGlance":     dashboardAtAGlance(atAGlance, len(apps)),
+		"Enforcement":   dashboardEnforcement(report),
 		"BlockRate":     blockRate,
 		"HasTraffic":    hasTraffic,
 		"TrackArc":      arc240,
@@ -614,6 +623,53 @@ func dashboardAtAGlance(s storage.AtAGlanceStats, serviceCount int) []atAGlanceC
 			LinePath:   "M0,28 18,25 36,26 54,20 72,22 90,14 108,17 126,9 144,12 170,6",
 		},
 	}
+}
+
+// enforcementRow is one defense layer in the right panel's "Enforcement
+// today" card: a label, today's hit count, and a meter bar sized relative to
+// the busiest layer. WidthClass comes from fixed buckets, like the Top
+// countries WidthClass — runtime-computed widths would need a style
+// attribute, which the templates don't use.
+type enforcementRow struct {
+	Label      string
+	Icon       string
+	Count      int
+	WidthClass string
+	BarClass   string
+}
+
+func dashboardEnforcement(rep storage.DailyReport) []enforcementRow {
+	rows := []enforcementRow{
+		{Label: "WAF rules", Icon: "hgi-security-block", Count: rep.WAFBlocked, BarClass: "bg-red-400"},
+		{Label: "IP blocklist", Icon: "hgi-cancel-circle", Count: rep.IPBlocked, BarClass: "bg-navy"},
+		{Label: "Geo rules", Icon: "hgi-earth", Count: rep.GeoBlocked, BarClass: "bg-slateblue"},
+		{Label: "Rate limit", Icon: "hgi-time-04", Count: rep.RateLimited, BarClass: "bg-amber-400"},
+		{Label: "Bot challenge", Icon: "hgi-bot", Count: rep.BotChallenged, BarClass: "bg-brand"},
+	}
+	max := 0
+	for _, r := range rows {
+		if r.Count > max {
+			max = r.Count
+		}
+	}
+	for i := range rows {
+		rows[i].WidthClass = meterWidthClass(rows[i].Count, max)
+	}
+	return rows
+}
+
+// meterWidthClass buckets count/max into one of eight fixed Tailwind widths.
+// Zero collapses to a hairline sliver so an idle layer still reads as a meter.
+func meterWidthClass(count, max int) string {
+	if count == 0 || max == 0 {
+		return "w-[3%]"
+	}
+	buckets := []string{"w-[12%]", "w-[25%]", "w-[38%]", "w-[50%]", "w-[62%]", "w-[75%]", "w-[88%]", "w-full"}
+	idx := (count*8 + max - 1) / max // ceil(count/max * 8), 1..8
+	if idx > 8 {
+		idx = 8
+	}
+	return buckets[idx-1]
 }
 
 func trendLabel(current, previous int) string {

@@ -9,27 +9,28 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            brand: { DEFAULT: '#76C893', dark: '#2E7D5B', light: '#9FE0B7', tint: '#EAF7EE' },
-            navy: '#2B5C74',
-            slateblue: '#4A7B96',
-            canvas: '#E7E9EC',
-            surface: '#F4F6F8',
-            line: '#D9DEE3',
-          },
-          fontFamily: {
-            sans: ['Plus Jakarta Sans', 'system-ui', '-apple-system', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          },
-        },
-      },
-    };
-  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style type="text/tailwindcss">
+    @theme {
+      --color-brand: #76C893;
+      --color-brand-dark: #2E7D5B;
+      --color-brand-light: #9FE0B7;
+      --color-brand-tint: #EAF7EE;
+      --color-navy: #2B5C74;
+      --color-slateblue: #4A7B96;
+      --color-canvas: #E7E9EC;
+      --color-surface: #F4F6F8;
+      --color-line: #D9DEE3;
+      --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+    @layer base {
+      /* v4 preflight defaults borders to currentColor and buttons to the
+         default cursor; restore the v3 behavior this UI was built on. */
+      *, ::before, ::after { border-color: var(--color-line); }
+      button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+    }
+  </style>
   <link rel="stylesheet" href="https://cdn.hugeicons.com/font/hgi-stroke-rounded.css"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7/css/flag-icons.min.css"/>
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
@@ -74,7 +75,7 @@
     #brand-logo.guard::after { content: ""; position: absolute; inset: -4px; border-radius: 10px; border: 2px solid #76C893; opacity: 0; animation: guard-ring .5s var(--ease-out); }
     @keyframes guard-ring { 0% { opacity: .8; transform: scale(.8); } 100% { opacity: 0; transform: scale(1.35); } }
     @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0ms !important; }
     }
   </style>
 </head>

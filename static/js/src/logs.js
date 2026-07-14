@@ -159,9 +159,9 @@
     // ── Time ──
     html += '<div class="flex items-center gap-2 mt-3 pt-3 border-t border-line">';
     html += '<i class="hgi hgi-stroke hgi-rounded hgi-clock-01 text-slate-400 text-[13px] shrink-0"></i>';
-    html += '<input class="dp-hour border border-line rounded-md w-11 text-center text-[13px] py-[5px] outline-none text-slate-700 tabular-nums focus:border-brand" type="number" min="0" max="23" value="' + selH + '">';
+    html += '<input class="dp-hour border border-line rounded-md w-11 text-center text-[13px] py-[5px] outline-hidden text-slate-700 tabular-nums focus:border-brand" type="number" min="0" max="23" value="' + selH + '">';
     html += '<span class="text-slate-400 text-[14px] font-semibold select-none">:</span>';
-    html += '<input class="dp-min border border-line rounded-md w-11 text-center text-[13px] py-[5px] outline-none text-slate-700 tabular-nums focus:border-brand" type="number" min="0" max="59" value="' + selMi + '">';
+    html += '<input class="dp-min border border-line rounded-md w-11 text-center text-[13px] py-[5px] outline-hidden text-slate-700 tabular-nums focus:border-brand" type="number" min="0" max="59" value="' + selMi + '">';
     html += '<span class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider ml-1 select-none">UTC</span>';
     html += '</div>';
     // ── Actions ──
@@ -493,14 +493,14 @@
 
       if (tableBtn) {
         tableBtn.classList.toggle('bg-white', isTable);
-        tableBtn.classList.toggle('shadow-sm', isTable);
+        tableBtn.classList.toggle('shadow-xs', isTable);
         tableBtn.classList.toggle('text-slate-800', isTable);
         tableBtn.classList.toggle('text-slate-500', !isTable);
         tableBtn.setAttribute('aria-selected', String(isTable));
       }
       if (terminalBtn) {
         terminalBtn.classList.toggle('bg-white', !isTable);
-        terminalBtn.classList.toggle('shadow-sm', !isTable);
+        terminalBtn.classList.toggle('shadow-xs', !isTable);
         terminalBtn.classList.toggle('text-slate-800', !isTable);
         terminalBtn.classList.toggle('text-slate-500', isTable);
         terminalBtn.setAttribute('aria-selected', String(!isTable));
@@ -651,8 +651,8 @@
         hdrsEl.innerHTML = keys.map(function (k, i) {
           var border = i < keys.length - 1 ? ' border-b border-line' : '';
           return '<div class="flex items-start gap-3 px-4 py-[9px]' + border + '">' +
-            '<span class="mono text-slate-500 shrink-0 w-[190px] pt-[1px] break-all">' + esc(k) + '</span>' +
-            '<span class="mono text-slate-700 flex-1 break-all">' + esc(h[k]) + '</span>' +
+            '<span class="font-mono text-slate-500 shrink-0 w-[190px] pt-[1px] break-all">' + esc(k) + '</span>' +
+            '<span class="font-mono text-slate-700 flex-1 break-all">' + esc(h[k]) + '</span>' +
             '</div>';
         }).join('');
       } else {

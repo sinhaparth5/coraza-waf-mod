@@ -19,7 +19,7 @@
           </label>
           <input id="cert-name" name="name" type="text"
             placeholder="e.g. cloudflare-example-com"
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white"/>
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white"/>
         </div>
 
         <div>
@@ -37,7 +37,7 @@
             data-fills="cert-pem" data-names="cert-name"/>
           <textarea id="cert-pem" name="cert_pem" rows="5"
             placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[12px] font-mono outline-none text-slate-800 bg-white resize-y"></textarea>
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[12px] font-mono outline-hidden text-slate-800 bg-white resize-y"></textarea>
         </div>
 
         <div>
@@ -55,7 +55,7 @@
             data-fills="key-pem"/>
           <textarea id="key-pem" name="key_pem" rows="5"
             placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[12px] font-mono outline-none text-slate-800 bg-white resize-y"></textarea>
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[12px] font-mono outline-hidden text-slate-800 bg-white resize-y"></textarea>
         </div>
 
         <div id="cert-error" class="text-[12px] text-red-500 -mt-1"></div>
@@ -70,7 +70,7 @@
         <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Cloudflare origin certs</p>
         <p class="text-[12px] text-slate-500 leading-[1.6]">
           Cloudflare → SSL/TLS → Origin Server → <strong>Create Certificate</strong>.
-          Covers your domain and <code class="font-mono bg-surface px-1 rounded text-[11px]">*.domain</code> in one cert.
+          Covers your domain and <code class="font-mono bg-surface px-1 rounded-sm text-[11px]">*.domain</code> in one cert.
           Set SSL/TLS mode to <strong>Full (strict)</strong>, then assign it to each matching service.
         </p>
       </div>
@@ -165,7 +165,7 @@
     {{if .Domains}}
     <div class="flex flex-wrap gap-[6px]">
       {{range (splitComma .Domains)}}
-      <span class="text-[11px] font-mono bg-canvas border border-line rounded px-[8px] py-[3px] text-slate-600">{{.}}</span>
+      <span class="text-[11px] font-mono bg-canvas border border-line rounded-sm px-[8px] py-[3px] text-slate-600">{{.}}</span>
       {{end}}
     </div>
     {{else}}

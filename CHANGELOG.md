@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Admin UI upgraded from Tailwind CSS v3 to v4.** `base.html` and the
+  standalone `login.html` now load the `@tailwindcss/browser@4` CDN build and
+  define the theme as CSS `@theme` tokens instead of an inline
+  `tailwind.config` object. Utility classes were renamed to the v4 scale
+  (`rounded`→`rounded-sm`, `shadow-sm`→`shadow-xs`, `outline-none`→
+  `outline-hidden`, `bg-gradient-to-*`→`bg-linear-to-*`,
+  `backdrop-blur-sm`→`backdrop-blur-xs`, `placeholder-*`→`placeholder:text-*`)
+  with no visual change, and a small base layer restores the v3 default border
+  color and pointer cursor on buttons that v4's preflight dropped.
+- **Dashboard layout gaps fixed.** "At a glance" tiles now stretch to fill the
+  full row width instead of leaving dead space after the last tile, and the
+  right panel's empty stretch between Top Threats and the Coraza card is
+  filled by a new "Enforcement today" card — today's per-layer hit counts
+  (WAF rules, IP blocklist, geo rules, rate limit, bot challenge) with meter
+  bars scaled against the busiest layer, fed by the existing daily-report
+  query.
+- **v4-native motion.** Right-panel cards rise in with a pure-CSS staggered
+  `@starting-style` entrance and the enforcement meters sweep in from the
+  left — no new JavaScript, and all of it collapses under
+  `prefers-reduced-motion`.
+
 ## [1.4.12] - 2026-07-13
 
 ### Changed

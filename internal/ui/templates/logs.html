@@ -30,7 +30,7 @@
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">From</label>
     <input type="hidden" name="from" id="filter-from" value="{{.FilterFrom}}">
     <button type="button" id="filter-from-btn"
-      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[210px] hover:border-slate-300 focus:outline-none transition-colors">
+      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[210px] hover:border-slate-300 focus:outline-hidden transition-colors">
       <i class="hgi hgi-stroke hgi-rounded hgi-calendar-02 text-[14px] text-slate-400 shrink-0"></i>
       <span id="filter-from-display" class="flex-1 text-left text-slate-400">Any date</span>
     </button>
@@ -41,7 +41,7 @@
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">To</label>
     <input type="hidden" name="to" id="filter-to" value="{{.FilterTo}}">
     <button type="button" id="filter-to-btn"
-      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[210px] hover:border-slate-300 focus:outline-none transition-colors">
+      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[210px] hover:border-slate-300 focus:outline-hidden transition-colors">
       <i class="hgi hgi-stroke hgi-rounded hgi-calendar-02 text-[14px] text-slate-400 shrink-0"></i>
       <span id="filter-to-display" class="flex-1 text-left text-slate-400">Any date</span>
     </button>
@@ -52,7 +52,7 @@
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">App</label>
     <input type="hidden" name="app" id="filter-app" value="{{.FilterApp}}">
     <button type="button" id="filter-app-btn"
-      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[145px] hover:border-slate-300 focus:outline-none transition-colors">
+      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[145px] hover:border-slate-300 focus:outline-hidden transition-colors">
       <span id="filter-app-display" class="flex-1 text-left text-slate-700">All apps</span>
       <i class="hgi hgi-stroke hgi-rounded hgi-arrow-down-01 text-[11px] text-slate-400 shrink-0"></i>
     </button>
@@ -71,7 +71,7 @@
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">Status</label>
     <input type="hidden" name="status" id="filter-status" value="{{.FilterStatus}}">
     <button type="button" id="filter-status-btn"
-      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[155px] hover:border-slate-300 focus:outline-none transition-colors">
+      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[155px] hover:border-slate-300 focus:outline-hidden transition-colors">
       <span id="filter-status-display" class="flex-1 text-left text-slate-700">All statuses</span>
       <i class="hgi hgi-stroke hgi-rounded hgi-arrow-down-01 text-[11px] text-slate-400 shrink-0"></i>
     </button>
@@ -116,12 +116,12 @@
   <span class="flex-1"></span>
   <div class="inline-flex items-center rounded-md border border-line p-1 bg-surface" role="tablist" aria-label="Log view">
     <button type="button" id="view-table-btn" role="tab" aria-selected="true"
-      class="flex items-center gap-[6px] px-3 py-[6px] text-[12px] font-medium rounded bg-white text-slate-800 shadow-sm cursor-pointer transition-colors duration-150">
+      class="flex items-center gap-[6px] px-3 py-[6px] text-[12px] font-medium rounded-sm bg-white text-slate-800 shadow-xs cursor-pointer transition-colors duration-150">
       <i class="hgi hgi-stroke hgi-rounded hgi-menu-square text-[12px]"></i>
       Table
     </button>
     <button type="button" id="view-terminal-btn" role="tab" aria-selected="false"
-      class="flex items-center gap-[6px] px-3 py-[6px] text-[12px] font-medium rounded text-slate-500 cursor-pointer transition-colors duration-150">
+      class="flex items-center gap-[6px] px-3 py-[6px] text-[12px] font-medium rounded-sm text-slate-500 cursor-pointer transition-colors duration-150">
       <i class="hgi hgi-stroke hgi-rounded hgi-code text-[12px]"></i>
       Terminal
     </button>
@@ -201,7 +201,7 @@
   {{end}}
 </div>
 {{else}}
-<p id="table-format-hint" class="mono text-[12px] text-slate-300 mt-3">
+<p id="table-format-hint" class="font-mono text-[12px] text-slate-300 mt-3">
   Format: time · app · ip · method · path · status · duration · [action]
 </p>
 {{end}}
@@ -221,8 +221,8 @@
 
     <!-- Modal header bar -->
     <div class="flex items-center gap-3 px-6 py-4 border-b border-canvas shrink-0">
-      <span id="ld-method" class="mono text-[11px] font-bold bg-slate-100 text-slate-600 px-2 py-[3px] rounded shrink-0"></span>
-      <span id="ld-path"   class="mono text-[13px] text-slate-700 flex-1 truncate min-w-0"></span>
+      <span id="ld-method" class="font-mono text-[11px] font-bold bg-slate-100 text-slate-600 px-2 py-[3px] rounded-sm shrink-0"></span>
+      <span id="ld-path"   class="font-mono text-[13px] text-slate-700 flex-1 truncate min-w-0"></span>
       <span id="ld-status" class="font-bold text-[15px] shrink-0 tabular-nums"></span>
       <button id="log-detail-close"
               class="w-8 h-8 flex items-center justify-center rounded-md bg-surface border border-line text-slate-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors cursor-pointer shrink-0 ml-1">
@@ -237,11 +237,11 @@
       <div class="grid grid-cols-2 gap-x-8 gap-y-4">
         <div>
           <p class="ld-label">Timestamp (UTC)</p>
-          <p id="ld-ts" class="mono text-[13px] text-slate-700"></p>
+          <p id="ld-ts" class="font-mono text-[13px] text-slate-700"></p>
         </div>
         <div>
           <p class="ld-label">Duration</p>
-          <p id="ld-dur" class="mono text-[13px] text-slate-700"></p>
+          <p id="ld-dur" class="font-mono text-[13px] text-slate-700"></p>
         </div>
         <div>
           <p class="ld-label">App / Service</p>
@@ -253,11 +253,11 @@
         </div>
         <div>
           <p class="ld-label">Host</p>
-          <p id="ld-host" class="mono text-[13px] text-slate-700 truncate"></p>
+          <p id="ld-host" class="font-mono text-[13px] text-slate-700 truncate"></p>
         </div>
         <div>
           <p class="ld-label">Query String</p>
-          <p id="ld-query" class="mono text-[12px] text-slate-500 break-all"></p>
+          <p id="ld-query" class="font-mono text-[12px] text-slate-500 break-all"></p>
         </div>
         <div class="col-span-2">
           <p class="ld-label">User Agent</p>
@@ -265,7 +265,7 @@
         </div>
         <div class="col-span-2">
           <p class="ld-label">Request ID</p>
-          <p id="ld-reqid" class="mono text-[12px] text-slate-500 select-all"></p>
+          <p id="ld-reqid" class="font-mono text-[12px] text-slate-500 select-all"></p>
         </div>
       </div>
 
@@ -275,12 +275,12 @@
         <div class="grid grid-cols-2 gap-3">
           <div class="bg-amber-50 border border-amber-100 rounded-lg p-4">
             <p class="text-[10px] text-amber-600 font-semibold uppercase tracking-[.06em] mb-2">Real Client IP</p>
-            <p id="ld-real-ip" class="mono text-[15px] font-bold text-amber-700 break-all"></p>
+            <p id="ld-real-ip" class="font-mono text-[15px] font-bold text-amber-700 break-all"></p>
             <p class="text-[11px] text-amber-400 mt-1">CF-Connecting-IP / X-Forwarded-For</p>
           </div>
           <div class="bg-slate-50 border border-line rounded-lg p-4">
             <p class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.06em] mb-2">Proxy / CDN IP</p>
-            <p id="ld-proxy-ip" class="mono text-[15px] font-bold text-slate-600 break-all"></p>
+            <p id="ld-proxy-ip" class="font-mono text-[15px] font-bold text-slate-600 break-all"></p>
             <p class="text-[11px] text-slate-400 mt-1">direct TCP connection source</p>
           </div>
         </div>
@@ -294,7 +294,7 @@
             <i class="hgi hgi-stroke hgi-rounded hgi-wifi-router-01 text-slate-400 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
               <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">ASN</p>
-              <p id="ld-asn" class="mono text-[13px] text-slate-700"></p>
+              <p id="ld-asn" class="font-mono text-[13px] text-slate-700"></p>
             </div>
           </div>
           <div class="flex items-center gap-3 px-4 py-3">
@@ -315,21 +315,21 @@
             <i class="hgi hgi-stroke hgi-rounded hgi-layers-01 text-slate-400 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
               <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">Protocol</p>
-              <p id="ld-proto" class="mono text-[13px] text-slate-700"></p>
+              <p id="ld-proto" class="font-mono text-[13px] text-slate-700"></p>
             </div>
           </div>
           <div id="ld-tls-row" class="flex items-center gap-3 px-4 py-3 border-b border-line">
             <i class="hgi hgi-stroke hgi-rounded hgi-shield-key text-slate-400 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
               <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">TLS</p>
-              <p id="ld-tls" class="mono text-[13px] text-slate-700"></p>
+              <p id="ld-tls" class="font-mono text-[13px] text-slate-700"></p>
             </div>
           </div>
           <div id="ld-sni-row" class="flex items-center gap-3 px-4 py-3">
             <i class="hgi hgi-stroke hgi-rounded hgi-tag-01 text-slate-400 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
               <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">SNI (server name)</p>
-              <p id="ld-sni" class="mono text-[13px] text-slate-700"></p>
+              <p id="ld-sni" class="font-mono text-[13px] text-slate-700"></p>
             </div>
           </div>
         </div>
@@ -343,28 +343,28 @@
             <i class="hgi hgi-stroke hgi-rounded hgi-bot text-slate-400 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
               <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">Anomaly Score</p>
-              <p id="ld-bot-score" class="mono text-[13px] text-slate-700"></p>
+              <p id="ld-bot-score" class="font-mono text-[13px] text-slate-700"></p>
             </div>
           </div>
           <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
             <i class="hgi hgi-stroke hgi-rounded hgi-fingerprint-01 text-slate-400 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
               <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">JA4 Fingerprint</p>
-              <p id="ld-ja4" class="mono text-[13px] text-slate-700 break-all"></p>
+              <p id="ld-ja4" class="font-mono text-[13px] text-slate-700 break-all"></p>
             </div>
           </div>
           <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
             <i class="hgi hgi-stroke hgi-rounded hgi-fingerprint-01 text-slate-400 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
               <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">JA3 Fingerprint (legacy)</p>
-              <p id="ld-ja3" class="mono text-[13px] text-slate-700 break-all"></p>
+              <p id="ld-ja3" class="font-mono text-[13px] text-slate-700 break-all"></p>
             </div>
           </div>
           <div class="flex items-center gap-3 px-4 py-3">
             <i class="hgi hgi-stroke hgi-rounded hgi-user-circle text-slate-400 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
               <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">Visitor ID (browser fingerprint)</p>
-              <p id="ld-visitor" class="mono text-[13px] text-slate-700 break-all"></p>
+              <p id="ld-visitor" class="font-mono text-[13px] text-slate-700 break-all"></p>
             </div>
           </div>
         </div>
@@ -378,14 +378,14 @@
             <i class="hgi hgi-stroke hgi-rounded hgi-shield-energy text-slate-400 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
               <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">Composite Score (0–100)</p>
-              <p id="ld-threat-score" class="mono text-[13px] text-slate-700"></p>
+              <p id="ld-threat-score" class="font-mono text-[13px] text-slate-700"></p>
             </div>
           </div>
           <div class="flex items-center gap-3 px-4 py-3">
             <i class="hgi hgi-stroke hgi-rounded hgi-chart-breakout-square text-slate-400 text-[16px] shrink-0"></i>
             <div class="flex-1 min-w-0">
               <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-[.06em]">Breakdown</p>
-              <p id="ld-threat-breakdown" class="mono text-[13px] text-slate-700"></p>
+              <p id="ld-threat-breakdown" class="font-mono text-[13px] text-slate-700"></p>
             </div>
           </div>
         </div>

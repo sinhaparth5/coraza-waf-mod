@@ -13,7 +13,7 @@
             Country Code <span class="text-slate-300">(ISO 3166-1 α-2)</span>
           </label>
           <input name="country_code" type="text" placeholder="CN" maxlength="2" required
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-base font-mono font-bold uppercase tracking-[.2em] outline-none transition-[border] duration-150 text-slate-800 bg-white"
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-base font-mono font-bold uppercase tracking-[.2em] outline-hidden transition-[border] duration-150 text-slate-800 bg-white"
             />
           <p class="text-[11px] text-slate-500 mt-[6px]">Examples: US · CN · RU · IR · KP · DE</p>
         </div>
@@ -21,7 +21,7 @@
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Scope</label>
           <select name="app_name"
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none text-slate-800 bg-white transition-[border] duration-150"
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white transition-[border] duration-150"
             >
             <option value="">Global (all apps)</option>
             {{range .Apps}}<option value="{{.Name}}">{{.Name}} only</option>{{end}}
@@ -65,7 +65,7 @@
         <div>
           <p class="text-[13px] font-semibold text-amber-800 mb-1">GeoIP database bundled</p>
           <p class="text-[12px] text-amber-700 leading-[1.5]">
-            The binary includes MaxMind GeoLite2 Country data. Set <code class="bg-black/[.06] px-[5px] py-px rounded text-[11px]">geo.db_path</code>
+            The binary includes MaxMind GeoLite2 Country data. Set <code class="bg-black/[.06] px-[5px] py-px rounded-sm text-[11px]">geo.db_path</code>
             only when overriding it with a newer .mmdb file.
           </p>
         </div>

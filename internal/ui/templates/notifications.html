@@ -10,7 +10,7 @@
       <i class="hgi hgi-stroke hgi-rounded hgi-cancel-circle text-[13px] text-red-600"></i>
     </div>
     <div class="flex-1 min-w-0">
-      <p class="mono text-[13px] font-semibold text-slate-800 truncate">{{.RealIP}} <span class="text-slate-500 font-normal">&rarr; {{truncate .Path 22}}</span></p>
+      <p class="font-mono text-[13px] font-semibold text-slate-800 truncate">{{.RealIP}} <span class="text-slate-500 font-normal">&rarr; {{truncate .Path 22}}</span></p>
       <p class="text-[11px] text-slate-500">{{.AppName}} &middot; {{fmtTime .Timestamp}}{{if .RuleID}} &middot; rule #{{.RuleID}}{{end}}</p>
     </div>
   </div>

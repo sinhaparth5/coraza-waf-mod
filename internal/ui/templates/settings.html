@@ -30,25 +30,25 @@
       <div>
         <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="new_email">New email <span class="font-normal text-slate-400">(leave blank to keep current)</span></label>
         <input id="new_email" name="new_email" type="email" placeholder="new@example.com"
-               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition"/>
+               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition"/>
       </div>
 
       <div>
         <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="new_password">New password <span class="font-normal text-slate-400">(leave blank to keep current)</span></label>
         <input id="new_password" name="new_password" type="password" placeholder="Min 8 characters"
-               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition"/>
+               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition"/>
       </div>
 
       <div>
         <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="confirm_password">Confirm new password</label>
         <input id="confirm_password" name="confirm_password" type="password" placeholder="Repeat new password"
-               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition"/>
+               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition"/>
       </div>
 
       <div>
         <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="current_password">Current password <span class="text-red-500">*</span></label>
         <input id="current_password" name="current_password" type="password" placeholder="Required to confirm changes"
-               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition" required/>
+               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition" required/>
       </div>
 
       <div class="pt-1">
@@ -63,7 +63,7 @@
   <!-- ── Database backup ───────────────────────────────────────────────────── -->
   <div class="card p-5">
     <h2 class="text-[15px] font-bold text-slate-800 mb-1">Database backup</h2>
-    <p class="text-[13px] text-slate-500 mb-4">Downloads a consistent snapshot of <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded">waf.db</code>: all request logs, services, IP/geo rules, and settings. Safe to run while the WAF is live.</p>
+    <p class="text-[13px] text-slate-500 mb-4">Downloads a consistent snapshot of <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded-sm">waf.db</code>: all request logs, services, IP/geo rules, and settings. Safe to run while the WAF is live.</p>
     <form action="{{.AdminPath}}/settings/backup" method="POST">
       <input type="hidden" name="_csrf" value="{{.CSRF}}">
       <button type="submit"
@@ -77,7 +77,7 @@
   <!-- ── WAF hot-reload ────────────────────────────────────────────────────── -->
   <div class="card p-5">
     <h2 class="text-[15px] font-bold text-slate-800 mb-1">WAF rules</h2>
-    <p class="text-[13px] text-slate-500 mb-1">To reload custom WAF rules from <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded">rules_dir</code> without restarting, send SIGHUP to the process:</p>
+    <p class="text-[13px] text-slate-500 mb-1">To reload custom WAF rules from <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded-sm">rules_dir</code> without restarting, send SIGHUP to the process:</p>
     <pre class="mt-3 bg-slate-900 text-green-400 text-[12px] font-mono rounded-lg px-4 py-3 overflow-x-auto">kill -HUP $(pidof coraza-waf-mod)</pre>
     <p class="mt-2 text-[12px] text-slate-400">The engine swaps in place: in-flight requests finish on the old ruleset, new requests use the reloaded one.</p>
   </div>
@@ -124,13 +124,13 @@
         <div class="flex-1">
           <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="bot_threshold">Anomaly threshold</label>
           <input id="bot_threshold" name="bot_threshold" type="number" min="1" max="100" value="{{.BotThreshold}}"
-                 class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition"/>
+                 class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition"/>
           <p class="text-[11px] text-slate-400 mt-1">Score at which a challenge is issued. Scanners score ≥10; browsers typically score 0–2.</p>
         </div>
         <div class="flex-1">
           <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="bot_ttl">Bypass cookie TTL (seconds)</label>
           <input id="bot_ttl" name="bot_ttl" type="number" min="60" value="{{.BotTTL}}"
-                 class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition"/>
+                 class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition"/>
           <p class="text-[11px] text-slate-400 mt-1">How long a solved challenge stays valid. 3600 = 1 hour.</p>
         </div>
       </div>
@@ -146,7 +146,7 @@
 {{define "varnish-card"}}
 <div class="card p-5" id="varnish-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">Varnish Cache</h2>
-  <p class="text-[13px] text-slate-500 mb-5">Accelerate static assets and cache-eligible endpoints through a local Varnish daemon. Traffic is WAF-inspected first, then handed to Varnish with spoofable host headers scrubbed; cache misses return to the WAF, which routes them to the right backend automatically, so the Varnish config never needs editing when services change. Just enable caching per service on the <a href="{{.AdminPath}}/services" class="text-brand underline">Services</a> page. Varnish is set up by the installer (or see <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded">deploy/varnish/README.md</code>).</p>
+  <p class="text-[13px] text-slate-500 mb-5">Accelerate static assets and cache-eligible endpoints through a local Varnish daemon. Traffic is WAF-inspected first, then handed to Varnish with spoofable host headers scrubbed; cache misses return to the WAF, which routes them to the right backend automatically, so the Varnish config never needs editing when services change. Just enable caching per service on the <a href="{{.AdminPath}}/services" class="text-brand underline">Services</a> page. Varnish is set up by the installer (or see <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded-sm">deploy/varnish/README.md</code>).</p>
 
   {{if .VarnishSaveOK}}
   <div class="rounded-md bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Settings saved and applied. No restart needed.</div>
@@ -171,7 +171,7 @@
       <div>
         <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="varnish_addr">Varnish listen address</label>
         <input id="varnish_addr" name="varnish_addr" type="text" value="{{.VarnishAddr}}" placeholder="127.0.0.1:6081"
-               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition font-mono"/>
+               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"/>
         <p class="text-[11px] text-slate-400 mt-1">Must be a loopback address (127.0.0.1 / ::1 / localhost) so nothing reaches the cache without passing the WAF.</p>
       </div>
     </div>
@@ -210,13 +210,13 @@
     <div>
       <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="webhook_url">Endpoint URL</label>
       <input id="webhook_url" name="webhook_url" type="url" value="{{.WebhookURL}}" placeholder="https://your-siem.example.com/ingest"
-             class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition font-mono"/>
+             class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"/>
     </div>
 
     <div>
       <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="webhook_secret">Secret <span class="font-normal text-slate-400">(sent as <code class="font-mono text-[11px]">X-WAF-Secret</code> header)</span></label>
       <input id="webhook_secret" name="webhook_secret" type="text" value="{{.WebhookSecret}}" placeholder="leave blank for no authentication"
-             class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition font-mono"/>
+             class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"/>
     </div>
 
     <div>
@@ -275,14 +275,14 @@
     <div>
       <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="email_to">Recipients</label>
       <input id="email_to" name="email_to" type="text" value="{{.EmailTo}}" placeholder="you@example.com, ops@example.com"
-             class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition font-mono"/>
+             class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"/>
       <p class="text-[11px] text-slate-400 mt-1">Comma-separated list.</p>
     </div>
 
     <div>
       <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="email_token">Cloudflare API token{{if .EmailTokenSet}} <span class="font-normal text-slate-400">(saved; leave blank to keep)</span>{{end}}</label>
       <input id="email_token" name="email_token" type="password" autocomplete="off" placeholder="{{if .EmailTokenSet}}••••••••••••••••{{else}}Token with Email Sending: Edit permission{{end}}"
-             class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition"/>
+             class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition"/>
       <p class="text-[11px] text-slate-400 mt-1">Stored only in <code class="font-mono text-[11px]">waf.db</code> on this server, never in config files or releases, and never shown here again.</p>
     </div>
 
@@ -306,7 +306,7 @@
 {{define "api-keys-card"}}
 <div class="card p-5" id="api-keys-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">API Keys</h2>
-  <p class="text-[13px] text-slate-500 mb-5">Bearer tokens for programmatic management of services, IP rules, and bans at <code class="font-mono text-[11px] bg-surface px-1 py-0.5 rounded">{{.AdminPath}}/api/v1/*</code>. Send <code class="font-mono text-[11px]">Authorization: Bearer &lt;key&gt;</code>; no session cookie or CSRF token needed. Each key can do everything the admin session can (all-or-nothing in this version, no read-only keys yet).</p>
+  <p class="text-[13px] text-slate-500 mb-5">Bearer tokens for programmatic management of services, IP rules, and bans at <code class="font-mono text-[11px] bg-surface px-1 py-0.5 rounded-sm">{{.AdminPath}}/api/v1/*</code>. Send <code class="font-mono text-[11px]">Authorization: Bearer &lt;key&gt;</code>; no session cookie or CSRF token needed. Each key can do everything the admin session can (all-or-nothing in this version, no read-only keys yet).</p>
 
   {{if .NewAPIKey}}
   <div class="rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[13px] px-4 py-3 mb-4">
@@ -329,7 +329,7 @@
     <div class="flex-1">
       <label class="block text-[12px] text-slate-500 mb-[6px] font-medium" for="api_key_name">Key name</label>
       <input id="api_key_name" name="name" type="text" placeholder="ci-deploy, terraform, ..." required
-        class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-none transition-[border] duration-150 text-slate-800 bg-white"/>
+        class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden transition-[border] duration-150 text-slate-800 bg-white"/>
     </div>
     <button type="submit" class="btn-primary px-6 shrink-0">Generate key</button>
   </form>
@@ -348,7 +348,7 @@
   </div>
   <div class="flex-1 min-w-0">
     <div class="text-[14px] font-semibold text-slate-900 truncate">{{.Name}}</div>
-    <div class="text-[12px] text-slate-500 truncate mono">{{.Prefix}}••••••••••••••••••••••••••••••• · created {{fmtTime .CreatedAt}} · last used {{fmtLastUsed .LastUsedAt}}</div>
+    <div class="text-[12px] text-slate-500 truncate font-mono">{{.Prefix}}••••••••••••••••••••••••••••••• · created {{fmtTime .CreatedAt}} · last used {{fmtLastUsed .LastUsedAt}}</div>
   </div>
   {{template "remove-btn" (map "URL" (printf "%s/settings/api-keys/%d" $.AdminPath .ID) "Target" "#api-keys-body" "Confirm" (printf "Revoke API key %q? Anything using it will start getting 401s immediately." .Name))}}
 </div>
@@ -385,12 +385,12 @@
       <div class="flex-1">
         <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="rl_rps">Requests / second per IP</label>
         <input id="rl_rps" name="rl_rps" type="number" min="0.1" step="0.1" value="{{.RLRPS}}"
-               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition font-mono"/>
+               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"/>
       </div>
       <div class="flex-1">
         <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="rl_burst">Burst</label>
         <input id="rl_burst" name="rl_burst" type="number" min="1" step="1" value="{{.RLBurst}}"
-               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition font-mono"/>
+               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"/>
       </div>
     </div>
 
@@ -421,12 +421,12 @@
       <div>
         <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="rl_redis_addr">Redis address</label>
         <input id="rl_redis_addr" name="rl_redis_addr" type="text" value="{{.RLRedisAddr}}" placeholder="localhost:6379"
-               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition font-mono"/>
+               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"/>
       </div>
       <div>
         <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="rl_redis_password">Password <span class="font-normal text-slate-400">(leave blank if no auth)</span></label>
         <input id="rl_redis_password" name="rl_redis_password" type="password" placeholder="Redis AUTH password"
-               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-none focus-green focus:border-brand transition"/>
+               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition"/>
       </div>
       <div class="flex items-center gap-3">
         <button type="button"
@@ -479,7 +479,7 @@
       {{if .EnrollErr}}<p class="text-red-600 text-[12px] mb-2">{{.EnrollErr}}</p>{{end}}
       <form hx-post="{{.AdminPath}}/settings/2fa/confirm" hx-target="#twofa-card" hx-swap="outerHTML" class="flex items-center gap-2">
         <input name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456"
-               class="w-28 rounded-lg border border-line bg-white text-slate-800 text-[13px] text-center px-3 py-2 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"/>
+               class="w-28 rounded-lg border border-line bg-white text-slate-800 text-[13px] text-center px-3 py-2 outline-hidden focus:border-brand focus:ring-2 focus:ring-brand/20"/>
         <button type="submit" class="btn-primary px-5">Confirm &amp; enable</button>
       </form>
       <p class="text-[11px] text-slate-400 mt-2">Enter the code the app shows to prove the pairing works before it's enforced.</p>
@@ -492,7 +492,7 @@
         hx-confirm="Turn off two-factor authentication? Sign-in goes back to password only."
         class="flex items-center gap-2">
     <input name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="Code"
-           class="w-28 rounded-lg border border-line bg-white text-slate-800 text-[13px] text-center px-3 py-2 outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"/>
+           class="w-28 rounded-lg border border-line bg-white text-slate-800 text-[13px] text-center px-3 py-2 outline-hidden focus:border-brand focus:ring-2 focus:ring-brand/20"/>
     <button type="submit" class="rounded-md border border-red-200 text-red-600 text-[13px] font-medium px-5 py-2 hover:bg-red-50 transition-colors cursor-pointer">Disable 2FA</button>
   </form>
   <p class="text-[11px] text-slate-400 mt-2">Requires a current authenticator code or a backup code, so a stolen session cookie alone can't turn it off.</p>

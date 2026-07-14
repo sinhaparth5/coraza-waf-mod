@@ -1,22 +1,22 @@
 {{define "log-row"}}
 <div data-log-id="{{.ID}}" class="flex items-center gap-[22px] px-6 py-3 border-b border-canvas text-[13px] transition-colors duration-100 cursor-pointer hover:bg-surface {{if .Blocked}}bg-red-50 hover:bg-red-100{{end}}">
-  <span class="mono text-slate-500 shrink-0 w-[104px] whitespace-nowrap tabular-nums">{{fmtTime .Timestamp}}</span>
+  <span class="font-mono text-slate-500 shrink-0 w-[104px] whitespace-nowrap tabular-nums">{{fmtTime .Timestamp}}</span>
   <span class="text-brand font-semibold shrink-0 w-[94px] truncate">{{truncate .AppName 10}}</span>
   <span class="shrink-0 w-[150px] flex items-center gap-[7px]">
     {{if .Country}}<span class="{{flagClass .Country}} w-4 h-3 bg-cover inline-block rounded-[1px] shrink-0"></span>{{end}}
-    <span class="mono text-amber-500 truncate">{{.RealIP}}</span>
+    <span class="font-mono text-amber-500 truncate">{{.RealIP}}</span>
   </span>
   <span class="shrink-0 w-[58px]">
-    <span class="mono text-[11px] font-bold bg-slate-100 text-slate-500 px-[6px] py-[2px] rounded">{{.Method}}</span>
+    <span class="font-mono text-[11px] font-bold bg-slate-100 text-slate-500 px-[6px] py-[2px] rounded-sm">{{.Method}}</span>
   </span>
-  <span class="mono flex-1 text-slate-500 truncate">{{.Path}}</span>
+  <span class="font-mono flex-1 text-slate-500 truncate">{{.Path}}</span>
   <span class="shrink-0 w-[50px] text-right">
     {{if ge .Status 500}}<span class="font-bold text-red-500">{{.Status}}</span>
     {{else if ge .Status 400}}<span class="font-bold text-amber-500">{{.Status}}</span>
     {{else if ge .Status 300}}<span class="font-bold text-blue-500">{{.Status}}</span>
     {{else}}<span class="font-bold text-brand">{{.Status}}</span>{{end}}
   </span>
-  <span class="mono shrink-0 w-[50px] text-right text-slate-300">{{fmtDur .Duration}}</span>
+  <span class="font-mono shrink-0 w-[50px] text-right text-slate-300">{{fmtDur .Duration}}</span>
   <span class="shrink-0 w-20">
     {{if .Blocked}}
     <span class="flex items-center gap-1 text-red-600 font-semibold">

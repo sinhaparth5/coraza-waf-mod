@@ -145,7 +145,7 @@
     tabBtns.forEach(function (btn) {
       var active = btn.dataset.tab === name;
       btn.classList.toggle('bg-white', active);
-      btn.classList.toggle('shadow', active);
+      btn.classList.toggle('shadow-sm', active);
       btn.classList.toggle('text-slate-900', active);
       btn.classList.toggle('bg-transparent', !active);
       btn.classList.toggle('text-slate-500', !active);
