@@ -205,37 +205,38 @@ func (db *DB) Close() error {
 
 func (db *DB) migrate() error {
 	// Idempotent column migration for existing databases.
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN country TEXT NOT NULL DEFAULT ''`)             //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN proxy_ip TEXT NOT NULL DEFAULT ''`)            //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN headers_json TEXT NOT NULL DEFAULT ''`)        //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN request_id TEXT NOT NULL DEFAULT ''`)          //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN proto TEXT NOT NULL DEFAULT ''`)               //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_version TEXT NOT NULL DEFAULT ''`)         //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_cipher TEXT NOT NULL DEFAULT ''`)          //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_sni TEXT NOT NULL DEFAULT ''`)             //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN asn_num INTEGER NOT NULL DEFAULT 0`)           //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN org TEXT NOT NULL DEFAULT ''`)                 //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN query TEXT NOT NULL DEFAULT ''`)               //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN ja3_hash TEXT NOT NULL DEFAULT ''`)            //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN ja4 TEXT NOT NULL DEFAULT ''`)                 //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN visitor_id TEXT NOT NULL DEFAULT ''`)          //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN bot_score INTEGER NOT NULL DEFAULT 0`)         //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_mode TEXT NOT NULL DEFAULT 'none'`)        //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_cert_path TEXT NOT NULL DEFAULT ''`)       //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_key_path TEXT NOT NULL DEFAULT ''`)        //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_expires_at TEXT NOT NULL DEFAULT ''`)      //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_rps REAL NOT NULL DEFAULT 0`)       //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_burst INTEGER NOT NULL DEFAULT 0`)  //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN bot_mode TEXT NOT NULL DEFAULT 'inherit'`)     //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cert_id INTEGER NOT NULL DEFAULT 0`)           //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_enabled INTEGER NOT NULL DEFAULT 0`)     //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_by_session INTEGER NOT NULL DEFAULT 0`)  //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN session_cookie_name TEXT NOT NULL DEFAULT ''`) //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_ttl_floor INTEGER NOT NULL DEFAULT 0`)   //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_ttl_ceiling INTEGER NOT NULL DEFAULT 0`) //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_grace INTEGER NOT NULL DEFAULT 0`)       //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_keep INTEGER NOT NULL DEFAULT 0`)        //nolint
-	db.conn.Exec(`ALTER TABLE ip_rules ADD COLUMN note TEXT NOT NULL DEFAULT ''`)                //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN country TEXT NOT NULL DEFAULT ''`)                       //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN proxy_ip TEXT NOT NULL DEFAULT ''`)                      //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN headers_json TEXT NOT NULL DEFAULT ''`)                  //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN request_id TEXT NOT NULL DEFAULT ''`)                    //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN proto TEXT NOT NULL DEFAULT ''`)                         //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_version TEXT NOT NULL DEFAULT ''`)                   //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_cipher TEXT NOT NULL DEFAULT ''`)                    //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_sni TEXT NOT NULL DEFAULT ''`)                       //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN asn_num INTEGER NOT NULL DEFAULT 0`)                     //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN org TEXT NOT NULL DEFAULT ''`)                           //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN query TEXT NOT NULL DEFAULT ''`)                         //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN ja3_hash TEXT NOT NULL DEFAULT ''`)                      //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN ja4 TEXT NOT NULL DEFAULT ''`)                           //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN visitor_id TEXT NOT NULL DEFAULT ''`)                    //nolint
+	db.conn.Exec(`ALTER TABLE requests ADD COLUMN bot_score INTEGER NOT NULL DEFAULT 0`)                   //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_mode TEXT NOT NULL DEFAULT 'none'`)                  //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_cert_path TEXT NOT NULL DEFAULT ''`)                 //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_key_path TEXT NOT NULL DEFAULT ''`)                  //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_expires_at TEXT NOT NULL DEFAULT ''`)                //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_rps REAL NOT NULL DEFAULT 0`)                 //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_burst INTEGER NOT NULL DEFAULT 0`)            //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN bot_mode TEXT NOT NULL DEFAULT 'inherit'`)               //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cert_id INTEGER NOT NULL DEFAULT 0`)                     //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_enabled INTEGER NOT NULL DEFAULT 0`)               //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_by_session INTEGER NOT NULL DEFAULT 0`)            //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN session_cookie_name TEXT NOT NULL DEFAULT ''`)           //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_ttl_floor INTEGER NOT NULL DEFAULT 0`)             //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_ttl_ceiling INTEGER NOT NULL DEFAULT 0`)           //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_grace INTEGER NOT NULL DEFAULT 0`)                 //nolint
+	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_keep INTEGER NOT NULL DEFAULT 0`)                  //nolint
+	db.conn.Exec(`ALTER TABLE ip_rules ADD COLUMN note TEXT NOT NULL DEFAULT ''`)                          //nolint
+	db.conn.Exec(`ALTER TABLE webhook_config ADD COLUMN destination_type TEXT NOT NULL DEFAULT 'generic'`) //nolint
 
 	_, err := db.conn.Exec(`
 	CREATE TABLE IF NOT EXISTS requests (
@@ -387,11 +388,12 @@ func (db *DB) migrate() error {
 	);
 
 	CREATE TABLE IF NOT EXISTS webhook_config (
-		id      INTEGER PRIMARY KEY CHECK (id = 1),
-		url     TEXT    NOT NULL DEFAULT '',
-		secret  TEXT    NOT NULL DEFAULT '',
-		enabled INTEGER NOT NULL DEFAULT 0,
-		events  TEXT    NOT NULL DEFAULT 'blocked,challenged'
+		id               INTEGER PRIMARY KEY CHECK (id = 1),
+		url              TEXT    NOT NULL DEFAULT '',
+		secret           TEXT    NOT NULL DEFAULT '',
+		enabled          INTEGER NOT NULL DEFAULT 0,
+		events           TEXT    NOT NULL DEFAULT 'blocked,challenged',
+		destination_type TEXT    NOT NULL DEFAULT 'generic'
 	);
 	INSERT OR IGNORE INTO webhook_config (id) VALUES (1);
 
@@ -2590,22 +2592,36 @@ func (db *DB) GetTopFiringRules(limit int) ([]RuleHit, error) {
 
 // WebhookConfig is stored in the singleton webhook_config row (id=1).
 type WebhookConfig struct {
-	URL     string
-	Secret  string // sent as X-WAF-Secret header value
-	Enabled bool
-	Events  string // comma-separated event categories: "blocked", "challenged"
+	URL             string
+	Secret          string // sent as X-WAF-Secret header value
+	Enabled         bool
+	Events          string // comma-separated event categories: "blocked", "challenged"
+	DestinationType string // "generic" (default, unchanged JSON body), "slack" (Block Kit), "discord" (embeds)
+}
+
+// webhookDestinationTypes is the allowed set for WebhookConfig.DestinationType.
+// Anything else (empty, typo, a value from a future version rolled back) is
+// normalized to "generic" — the original unformatted-JSON behavior — rather
+// than silently failing to deliver.
+var webhookDestinationTypes = map[string]bool{
+	"generic": true,
+	"slack":   true,
+	"discord": true,
 }
 
 func (db *DB) GetWebhookConfig() (WebhookConfig, error) {
 	var cfg WebhookConfig
 	var enabled int
 	err := db.conn.QueryRow(
-		`SELECT url, secret, enabled, events FROM webhook_config WHERE id = 1`,
-	).Scan(&cfg.URL, &cfg.Secret, &enabled, &cfg.Events)
+		`SELECT url, secret, enabled, events, destination_type FROM webhook_config WHERE id = 1`,
+	).Scan(&cfg.URL, &cfg.Secret, &enabled, &cfg.Events, &cfg.DestinationType)
 	if err != nil {
 		return WebhookConfig{}, err
 	}
 	cfg.Enabled = enabled == 1
+	if !webhookDestinationTypes[cfg.DestinationType] {
+		cfg.DestinationType = "generic"
+	}
 	if cfg.Secret, err = db.openSecret(cfg.Secret); err != nil {
 		return WebhookConfig{}, fmt.Errorf("webhook secret: %w", err)
 	}
@@ -2617,9 +2633,12 @@ func (db *DB) SetWebhookConfig(cfg WebhookConfig) error {
 	if err != nil {
 		return err
 	}
+	if !webhookDestinationTypes[cfg.DestinationType] {
+		cfg.DestinationType = "generic"
+	}
 	_, err = db.conn.Exec(
-		`UPDATE webhook_config SET url=?, secret=?, enabled=?, events=? WHERE id=1`,
-		cfg.URL, sealed, boolToInt(cfg.Enabled), cfg.Events,
+		`UPDATE webhook_config SET url=?, secret=?, enabled=?, events=?, destination_type=? WHERE id=1`,
+		cfg.URL, sealed, boolToInt(cfg.Enabled), cfg.Events, cfg.DestinationType,
 	)
 	return err
 }

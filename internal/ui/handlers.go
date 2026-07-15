@@ -113,6 +113,7 @@ type Handler struct {
 	reloadWAF       func()
 	syncThreatIntel func(id int64)
 	sendReportNow   func() error
+	sendTestWebhook func() error
 	sendLoginCode   func(code string) error
 	reloadAutoban   func()
 	reloadAdaptive  func()
@@ -155,7 +156,7 @@ type atAGlanceCard struct {
 // (proxy.Handler.Handle, the same func registered for the catch-all "/*"
 // route in main.go); see hostGuard for why the admin/API routes need to be
 // able to hand a request off to it.
-func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, cssFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error, sendLoginCode func(string) error, reloadAutoban func(), scorer *threatscore.Scorer, reloadAdaptive func(), proxyHandle echo.HandlerFunc) (*Handler, error) {
+func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist, geoBl *geo.Blocker, registry *services.Registry, bc *LogBroadcaster, jsFS embed.FS, cssFS embed.FS, imgsFS embed.FS, reloadBot func(*challenge.Challenger), buildChallenger func(bool, int, int) *challenge.Challenger, reloadRateLimit func(), reloadWAF func(), syncThreatIntel func(int64), sendReportNow func() error, sendTestWebhook func() error, sendLoginCode func(string) error, reloadAutoban func(), scorer *threatscore.Scorer, reloadAdaptive func(), proxyHandle echo.HandlerFunc) (*Handler, error) {
 	sub, err := fs.Sub(jsFS, "static/js/dist")
 	if err != nil {
 		return nil, fmt.Errorf("sub static/js/dist: %w", err)
@@ -168,7 +169,7 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 	if err != nil {
 		return nil, fmt.Errorf("sub static/imgs: %w", err)
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticCSS: cssSub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, sendLoginCode: sendLoginCode, reloadAutoban: reloadAutoban, scorer: scorer, reloadAdaptive: reloadAdaptive, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), twoFA: newTwoFAStore(), trustedNets: parseTrustedNets(cfg.TrustedProxies), proxyHandle: proxyHandle}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticCSS: cssSub, staticImgs: imgsSub, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, sendTestWebhook: sendTestWebhook, sendLoginCode: sendLoginCode, reloadAutoban: reloadAutoban, scorer: scorer, reloadAdaptive: reloadAdaptive, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), twoFA: newTwoFAStore(), trustedNets: parseTrustedNets(cfg.TrustedProxies), proxyHandle: proxyHandle}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -329,6 +330,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/settings/ratelimit", h.SaveRateLimitConfig)
 	g.POST("/settings/ratelimit/test", h.TestRedisConnection)
 	g.POST("/settings/webhook", h.SaveWebhookConfig)
+	g.POST("/settings/webhook/test", h.TestWebhook)
 	g.POST("/settings/email", h.SaveEmailSettings)
 	g.POST("/settings/email/test", h.TestEmailReport)
 	g.POST("/settings/api-keys", h.CreateAPIKey)
@@ -2029,27 +2031,28 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 	apiKeys, _ := h.db.ListAPIKeys()
 	totpEnabled, _ := h.db.TOTPEnabled()
 	return h.render(c, "settings", map[string]any{
-		"AdminEmail":     email,
-		"TOTPEnabled":    totpEnabled,
-		"BotEnabled":     botEnabled,
-		"BotThreshold":   botThreshold,
-		"BotTTL":         botTTL,
-		"RLBackend":      rlBackend,
-		"RLRedisAddr":    redisAddr,
-		"RLEnabled":      rlEnabled,
-		"RLRPS":          rlRPS,
-		"RLBurst":        rlBurst,
-		"WebhookURL":     wh.URL,
-		"WebhookSecret":  wh.Secret,
-		"WebhookEnabled": wh.Enabled,
-		"WebhookEvents":  wh.Events,
-		"EmailEnabled":   ec.Enabled,
-		"EmailSender":    mailer.Sender,
-		"EmailTo":        ec.To,
-		"EmailTokenSet":  ec.Token != "",
-		"VarnishEnabled": vc.Enabled,
-		"VarnishAddr":    vc.Addr,
-		"APIKeys":        apiKeys,
+		"AdminEmail":             email,
+		"TOTPEnabled":            totpEnabled,
+		"BotEnabled":             botEnabled,
+		"BotThreshold":           botThreshold,
+		"BotTTL":                 botTTL,
+		"RLBackend":              rlBackend,
+		"RLRedisAddr":            redisAddr,
+		"RLEnabled":              rlEnabled,
+		"RLRPS":                  rlRPS,
+		"RLBurst":                rlBurst,
+		"WebhookURL":             wh.URL,
+		"WebhookSecret":          wh.Secret,
+		"WebhookEnabled":         wh.Enabled,
+		"WebhookEvents":          wh.Events,
+		"WebhookDestinationType": wh.DestinationType,
+		"EmailEnabled":           ec.Enabled,
+		"EmailSender":            mailer.Sender,
+		"EmailTo":                ec.To,
+		"EmailTokenSet":          ec.Token != "",
+		"VarnishEnabled":         vc.Enabled,
+		"VarnishAddr":            vc.Addr,
+		"APIKeys":                apiKeys,
 	})
 }
 
@@ -2402,13 +2405,14 @@ func (h *Handler) SaveWebhookConfig(c echo.Context) error {
 	url := strings.TrimSpace(c.FormValue("webhook_url"))
 	secret := strings.TrimSpace(c.FormValue("webhook_secret"))
 	enabled := c.FormValue("webhook_enabled") == "1"
+	destType := c.FormValue("webhook_destination_type")
 	// webhook_events is a multi-value checkbox; collect all checked values.
 	eventVals := c.Request().PostForm["webhook_events"]
 	events := strings.Join(eventVals, ",")
 	if events == "" {
 		events = "blocked"
 	}
-	cfg := storage.WebhookConfig{URL: url, Secret: secret, Enabled: enabled && url != "", Events: events}
+	cfg := storage.WebhookConfig{URL: url, Secret: secret, Enabled: enabled && url != "", Events: events, DestinationType: destType}
 	saveErr := ""
 	if url != "" {
 		if err := validateOutboundURL(url); err != nil {
@@ -2420,15 +2424,35 @@ func (h *Handler) SaveWebhookConfig(c echo.Context) error {
 			saveErr = err.Error()
 		}
 	}
+	// Re-read so the re-rendered card shows the normalized destination type
+	// (SetWebhookConfig falls back an unrecognized value to "generic").
+	saved, _ := h.db.GetWebhookConfig()
 	return h.renderPartial(c, "settings", "webhook-card", map[string]any{
-		"AdminPath":      h.cfg.Admin.Path,
-		"WebhookURL":     url,
-		"WebhookSecret":  secret,
-		"WebhookEnabled": cfg.Enabled,
-		"WebhookEvents":  events,
-		"WebhookSaveOK":  saveErr == "",
-		"WebhookSaveErr": saveErr,
+		"AdminPath":              h.cfg.Admin.Path,
+		"WebhookURL":             url,
+		"WebhookSecret":          secret,
+		"WebhookEnabled":         cfg.Enabled,
+		"WebhookEvents":          events,
+		"WebhookDestinationType": saved.DestinationType,
+		"WebhookSaveOK":          saveErr == "",
+		"WebhookSaveErr":         saveErr,
 	})
+}
+
+// TestWebhook sends a single synthetic "blocked" event to the currently
+// saved webhook URL/destination type, mirroring TestEmailReport's pattern
+// (test against saved settings, ignoring the enabled toggle).
+func (h *Handler) TestWebhook(c echo.Context) error {
+	if h.sendTestWebhook == nil {
+		return c.HTML(http.StatusOK,
+			`<span class="text-red-600 text-[13px]">Webhook delivery is not available.</span>`)
+	}
+	if err := h.sendTestWebhook(); err != nil {
+		return c.HTML(http.StatusOK,
+			`<span class="text-red-600 text-[13px]">Send failed: `+template.HTMLEscapeString(err.Error())+`</span>`)
+	}
+	return c.HTML(http.StatusOK,
+		`<span class="text-brand text-[13px] font-medium">Test alert sent.</span>`)
 }
 
 // SaveEmailSettings persists the daily-report email settings (recipients and

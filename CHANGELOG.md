@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Native Slack/Discord alert formatting for webhook delivery (issue #10).**
+  The webhook config now has a destination type — `generic` (unchanged raw
+  JSON, default), `slack` (Block Kit `attachments` with a colored border bar),
+  or `discord` (rich embeds) — selected from the Settings page and applied to
+  the same async delivery path with no new mechanism. A "Send test alert"
+  button posts one synthetic event to the saved endpoint, bypassing the
+  enabled toggle and event filters, mirroring the existing "Send test report"
+  button for email. Incoming webhook URL only, same trust model as the
+  existing generic webhook — no OAuth-based Slack app install flow.
 - **WAF verdict caching for repeated identical requests (issue #13).** Under
   scanning/flood conditions the same byte-identical request (method + host +
   path + query + body hash) no longer re-runs the full CRS rule engine on

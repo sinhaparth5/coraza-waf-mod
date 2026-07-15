@@ -208,13 +208,24 @@
     </div>
 
     <div>
+      <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="webhook_destination_type">Destination type</label>
+      <select id="webhook_destination_type" name="webhook_destination_type"
+              class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition">
+        <option value="generic" {{if eq .WebhookDestinationType "generic"}}selected{{end}}>Generic (raw JSON)</option>
+        <option value="slack" {{if eq .WebhookDestinationType "slack"}}selected{{end}}>Slack (Block Kit)</option>
+        <option value="discord" {{if eq .WebhookDestinationType "discord"}}selected{{end}}>Discord (embed)</option>
+      </select>
+      <p class="text-[11px] text-slate-400 mt-1">Slack/Discord: paste that platform's incoming webhook URL below — no app install or OAuth needed.</p>
+    </div>
+
+    <div>
       <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="webhook_url">Endpoint URL</label>
       <input id="webhook_url" name="webhook_url" type="url" value="{{.WebhookURL}}" placeholder="https://your-siem.example.com/ingest"
              class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"/>
     </div>
 
     <div>
-      <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="webhook_secret">Secret <span class="font-normal text-slate-400">(sent as <code class="font-mono text-[11px]">X-WAF-Secret</code> header)</span></label>
+      <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="webhook_secret">Secret <span class="font-normal text-slate-400">(sent as <code class="font-mono text-[11px]">X-WAF-Secret</code> header; unused by Slack/Discord)</span></label>
       <input id="webhook_secret" name="webhook_secret" type="text" value="{{.WebhookSecret}}" placeholder="leave blank for no authentication"
              class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"/>
     </div>
@@ -235,9 +246,19 @@
       </div>
     </div>
 
-    <div class="pt-1">
+    <div class="pt-1 flex items-center gap-3">
       <button type="submit" class="btn-primary px-6">Save &amp; apply</button>
+      <button type="button"
+              hx-post="{{.AdminPath}}/settings/webhook/test"
+              hx-target="#webhook-test-result"
+              hx-swap="innerHTML"
+              class="inline-flex items-center gap-2 rounded-md border border-line bg-surface text-slate-700 text-[13px] font-medium px-4 py-1.5 hover:bg-canvas transition-colors cursor-pointer">
+        <i class="hgi hgi-stroke hgi-rounded hgi-notification-03 text-base"></i>
+        Send test alert
+      </button>
+      <span id="webhook-test-result" class="text-[13px]"></span>
     </div>
+    <p class="text-[11px] text-slate-400 -mt-2">The test uses the <em>saved</em> settings, ignoring the enable toggle and event filters — save first, then test.</p>
   </form>
 </div>
 {{end}}
