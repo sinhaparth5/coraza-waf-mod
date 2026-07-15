@@ -1,0 +1,24 @@
+# Local/CI test databases for external-database backend development
+# (DATABASE_BACKENDS_PLAN.md). Not part of the production image or
+# docker-compose.yml — this is dev/test-only infrastructure, started with:
+#   docker compose -f docker-compose.test.yml up -d
+services:
+  test-mysql:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: test
+      MYSQL_DATABASE: coraza_test
+    ports:
+      - "3307:3306"
+    tmpfs:
+      - /var/lib/mysql
+
+  test-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: coraza_test
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data

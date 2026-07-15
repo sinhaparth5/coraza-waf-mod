@@ -47,6 +47,7 @@ type GeoConfig struct {
 
 type DBConfig struct {
 	Path             string
+	Driver           string // "sqlite" (default), "mysql"/"mariadb", or "postgres"/"postgresql"/"cockroachdb"/"neon" — see storage.resolveDialect
 	LogRetentionDays int
 }
 
@@ -75,7 +76,7 @@ func Defaults() *Config {
 		TrustedProxies: nil,
 		WAF:            WAFConfig{Enabled: true},
 		TLS:            TLSConfig{CacheDir: "./certs"},
-		DB:             DBConfig{Path: "waf.db", LogRetentionDays: 30},
+		DB:             DBConfig{Path: "waf.db", Driver: "sqlite", LogRetentionDays: 30},
 		Admin:          AdminConfig{Path: "/admin"},
 		RateLimit:      RateLimitConfig{RequestsPerSecond: 10, Burst: 20},
 		BotProtection:  BotProtectionConfig{AnomalyThreshold: 8, ChallengeTTLSeconds: 3600},
