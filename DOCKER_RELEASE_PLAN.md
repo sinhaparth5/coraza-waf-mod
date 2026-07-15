@@ -1,10 +1,30 @@
 # Docker image release plan (issue #47)
 
-Status: **implemented, pending Docker Hub secret setup + first tagged release.**
-Registry decision: **both** GHCR and Docker Hub. Docker Hub push will fail
-until `vars.DOCKERHUB_USERNAME` (repo variable) and `secrets.DOCKERHUB_TOKEN`
-(repo secret, a Docker Hub access token) are added in GitHub repo settings —
-the GHCR half needs no setup and will work on the first tag regardless.
+Status: **implemented, credentials configured, pending a real tagged release
+to confirm it goes green in CI.**
+Registry decision: **both** GHCR and Docker Hub, both via `secrets.*` (not
+`vars.*` — see "Fixed after first live run" below). GHCR needs no setup
+(uses the workflow's own `GITHUB_TOKEN`); Docker Hub needs `DOCKERHUB_
+USERNAME` + `DOCKERHUB_TOKEN` repo secrets, both now added.
+
+## Fixed after first live run
+
+The first tagged push failed at the `docker` job's "Log in to Docker Hub"
+step with `Error: Username required`. Root cause: the workflow originally
+read `${{ vars.DOCKERHUB_USERNAME }}` (GitHub Actions **repo variable**
+context), but the user had added `DOCKERHUB_USERNAME` under **Secrets**
+instead of **Variables** — confirmed via `gh secret list`/`gh variable list`
+— so `vars.DOCKERHUB_USERNAME` resolved to empty. Fixed by switching all
+three references in `ci.yml` (`docker/login-action`'s `username:`,
+`docker/metadata-action`'s `images:` list, and the release-notes heredoc) to
+`secrets.DOCKERHUB_USERNAME` instead of moving the value to the Variables
+tab — functionally identical since a Docker Hub username isn't actually
+sensitive, and less GitHub-settings shuffling. The release-notes heredoc was
+additionally simplified to say "Also published to Docker Hub." rather than
+interpolating the actual username into the public release body text, since
+GitHub's log-masking machinery treats any `secrets.*` value as sensitive
+wherever it's echoed, which would otherwise render as `***` in that public
+GitHub Release description.
 
 ## What exists today
 
@@ -105,15 +125,15 @@ the GHCR half needs no setup and will work on the first tag regardless.
 
 ## Remaining before this is actually "released"
 
-- [ ] User needs to add `DOCKERHUB_USERNAME` (repo **variable**, not secret —
-      a username isn't sensitive) and `DOCKERHUB_TOKEN` (repo **secret**, a
-      Docker Hub access token, not the account password) in GitHub repo
-      Settings → Secrets and variables → Actions, before the first tag push,
-      or the `docker` job's Docker Hub half will fail (GHCR half is
-      unaffected either way).
-- [ ] First real tagged release to confirm the `docker` job passes in CI
-      exactly as it did locally (buildx multi-arch in CI can occasionally
-      surface QEMU-emulation issues that a native-arch local build won't).
+- [x] `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` repo secrets added.
+- [ ] Re-tag and confirm the `docker` job goes green end-to-end in CI now
+      that the `vars.*`→`secrets.*` fix is in (buildx multi-arch in CI can
+      also occasionally surface QEMU-emulation issues a native-arch local
+      build wouldn't catch — watch for that on this next run too).
+- [ ] After the first successful push: flip the new GHCR package's
+      visibility from private (its default) to public on GitHub, per the
+      earlier conversation — otherwise `docker pull ghcr.io/...` needs auth
+      for anyone else.
 
 ## Explicitly out of scope
 
