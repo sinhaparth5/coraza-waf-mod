@@ -1,0 +1,10 @@
+.git
+.githooks
+.cache
+dist
+*.db
+*.db-wal
+*.db-shm
+waf.db*
+certs
+coraza-waf-mod

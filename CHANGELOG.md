@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.3] - 2026-07-15
+
 ### Added
+- **Multi-arch Docker image release (issue #47).** Tagged pushes now build
+  and publish a `linux/amd64`/`linux/arm64` image to both GHCR
+  (`ghcr.io/sinhaparth5/coraza-waf-mod`) and Docker Hub, tagged with the
+  release version and `latest`. The image bakes in the real `--version`
+  string (previously always reported `dev`) and now includes a CA
+  certificate bundle — without it, ACME, the Cloudflare mailer, threat-intel
+  sync, and Slack/Discord/webhook delivery would all silently fail TLS
+  verification inside a container. Persistent state (`waf.db`, `certs/`)
+  lives under a documented `/data` volume, matching `docker-compose.yml`'s
+  existing convention; `TMPDIR` is pointed at `/data` too, since Coraza's
+  filesystem-access check writes a temp file to `os.TempDir()` and `scratch`
+  has no `/tmp` directory of its own.
 - **Native Slack/Discord alert formatting for webhook delivery (issue #10).**
   The webhook config now has a destination type — `generic` (unchanged raw
   JSON, default), `slack` (Block Kit `attachments` with a colored border bar),
