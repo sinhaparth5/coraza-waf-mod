@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-07-16
+
+### Added
+- **Pluggable external database backends (issue #50).** The store now runs on
+  MySQL/MariaDB or Postgres (including the wire-compatible CockroachDB and
+  Neon) in addition to the SQLite default, selected at startup via the new
+  `--db-driver` flag with `--db` accepting a DSN for the external drivers.
+  Both new drivers are pure Go, so `CGO_ENABLED=0` cross-compiles are
+  unchanged. A small dialect layer covers the real SQL differences (DDL
+  column types, upsert syntax, index-idempotency quirks, MySQL TEXT-index
+  key lengths) while the existing query methods stay written once; the
+  schema is created automatically on any backend. The entire
+  `internal/storage` test suite runs identically against all three backends
+  — live MySQL 8 and Postgres 16, not just SQLite — via a new
+  `TEST_DB_DRIVER`/`TEST_DB_DSN` harness and `docker-compose.test.yml`, and
+  a new `test-external-db` CI matrix job gates every release on it.
+- **"Database connection" card on the Settings page.** Build a connection
+  from structured fields (host/port/credentials/SSL mode/extra params) or
+  paste a raw DSN, with correct escaping handled by each driver's own DSN
+  builder — a password containing `:` or `@` can no longer silently corrupt
+  the connection string. Includes a "Test connection" button (5s dial+ping,
+  never touches the live connection) and a one-click migration that copies
+  all configuration — services, rules, settings, secrets (re-encrypted for
+  the target), certificates, API keys — to the new backend. Request logs,
+  sessions, and transient rate-limit state are deliberately not migrated,
+  and the source database is never modified, so the original SQLite file
+  remains a fallback. The live connection is fixed at process start:
+  applying a switch means restarting with the shown flags.
+- **`build-dsn` one-shot subcommand.** Prints a dialect-correct,
+  properly-escaped DSN built from individual fields, for `install.sh` and
+  anyone else scripting a connection string in shell. The password is read
+  from stdin (empty allowed), never a flag.
+- **External-database option in `install.sh`.** Fresh installs can choose
+  MySQL/Postgres at the prompts; upgrades keep whatever backend the existing
+  systemd unit already uses, so re-running the installer never resets a
+  deployment back to SQLite.
+
+### Changed
+- **`prune --vacuum` is dialect-aware.** SQLite keeps the full
+  `VACUUM`-rebuild + WAL-truncate with a before/after size report; Postgres
+  runs its own in-place `VACUUM`; MySQL is a documented no-op (it has no
+  database-wide VACUUM).
+
+### Security
+- **Database passwords never appear on a command line.** `build-dsn` takes
+  the password on stdin rather than a `--password` flag — an argv value is
+  visible to every local user in `/proc/<pid>/cmdline` for as long as the
+  command runs, and lands in shell history when typed interactively
+  (flagged by CodeQL on the pre-release implementation; same convention
+  `setup` has always used for the admin password). The Settings card's
+  saved password/DSN are stored via the existing secrets-at-rest encryption
+  (`--db-key-file`) like every other credential.
+
 ## [1.5.3] - 2026-07-15
 
 ### Added
@@ -513,7 +566,9 @@ Initial release — a single-binary Go WAF + reverse proxy.
 - **All storage in SQLite** (`modernc.org/sqlite`, pure Go, no CGO) — one
   `waf.db` file for logs, rules, services, and TLS state.
 
-[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.5.2...main
+[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.6.0...main
+[1.6.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.5.3...v1.6.0
+[1.5.3]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.4.12...v1.5.0
