@@ -252,16 +252,27 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      # Tags are computed in plain shell from the tag ref rather than
+      # docker/metadata-action: the action fetches repo metadata from the
+      # GitHub REST API to build its default OCI labels, which made this
+      # step fail on GitHub API outages (v1.6.0's first release attempt died
+      # twice on a 503 "Unicorn" page here) even though everything it
+      # produced — "<semver> without the v" + "latest", and labels — is
+      # derivable locally from the event context with no network call.
       - name: Compute image tags
         id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ghcr.io/${{ github.repository }}
-            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.PACKAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=raw,value=latest
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          {
+            echo "tags<<EOF"
+            for image in \
+              "ghcr.io/${{ github.repository }}" \
+              "docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.PACKAGE_NAME }}"; do
+              echo "${image}:${VERSION}"
+              echo "${image}:latest"
+            done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -272,4 +283,8 @@ jobs:
           build-args: |
             VERSION=${{ github.ref_name }}
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          labels: |
+            org.opencontainers.image.title=${{ env.PACKAGE_NAME }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.revision=${{ github.sha }}
