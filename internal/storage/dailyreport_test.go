@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -10,11 +9,7 @@ import (
 // in particular COUNT(DISTINCT ...) FILTER, which not every SQLite build
 // supports — and the plain time-comparison window bounds.
 func TestGetDailyReport(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	day := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	insert := func(offset time.Duration, ip string, status int, blocked bool, ruleID int, action string) {

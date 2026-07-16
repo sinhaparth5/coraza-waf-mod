@@ -1,16 +1,11 @@
 package storage
 
 import (
-	"path/filepath"
 	"testing"
 )
 
 func TestRateLimitSettingsRoundtrip(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	// Unset: disabled with the documented defaults.
 	enabled, rps, burst, err := db.GetRateLimitSettings()

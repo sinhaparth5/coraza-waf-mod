@@ -13,11 +13,7 @@ import (
 // keep returning the original values. New writes while a key is active must
 // land sealed too.
 func TestSecretEncryptionMigratesAndRoundTrips(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	// Plaintext era: write one of each secret kind.
 	if err := db.SetEmailConfig(EmailConfig{Enabled: true, Token: "cf-token", To: "a@b.c"}); err != nil {

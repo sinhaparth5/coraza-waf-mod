@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"path/filepath"
 	"testing"
 )
 
@@ -10,11 +9,7 @@ import (
 // doc comment for why, unlike autoban), and a saved config round-trips
 // exactly, including the two float fields.
 func TestAdaptiveEnforcementConfigRoundtrip(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	cfg, err := db.GetAdaptiveEnforcementConfig()
 	if err != nil {

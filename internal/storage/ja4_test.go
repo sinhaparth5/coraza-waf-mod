@@ -9,11 +9,7 @@ import (
 // TestJA4RoundTrip verifies the ja4 column exists after migration and that a
 // fingerprint survives InsertRequest → GetRequestByID → ExportRequests.
 func TestJA4RoundTrip(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	const ja4 = "t13d1516h2_8daaf6152771_02713d6af862"
 	const visitorID = "a1b2c3d4e5f60718293a4b5c6d7e8f90"

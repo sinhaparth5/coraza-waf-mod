@@ -1,15 +1,16 @@
 # Pluggable external database backends (MySQL/MariaDB/Postgres/CockroachDB/Neon)
 
-Status: **Phases 0, 1, and 3 fully implemented. Phase 2 (schema/migration/
-upsert rewrite) implemented and verified end-to-end against live local
-MySQL 8 and Postgres 16 containers — every write path exercised (schema
-creation, idempotent re-open, IP-rule upsert, request insert with
-auto-generated id, JA4 reputation increment-on-conflict) passes on all
-three dialects. Full existing SQLite test suite still passes unmodified.
-build/test/gofmt/lint all green. Phase 2's boolean-handling audit item is
-resolved as a non-issue (see below). Remaining: broader test coverage across
-the full ~130-method surface (only the highest-risk subset was exercised
-live so far), Phase 4's CI wiring, Phase 5 docs.**
+Status: **Phases 0, 1, 2, 3, and 4 fully implemented and verified. All 33
+existing `internal/storage` tests (the full suite, not a subset) now run
+identically against SQLite, live local MySQL 8, and live local Postgres 16
+via a new `openTestDB(t)` test harness (`TEST_DB_DRIVER`/`TEST_DB_DSN` env
+vars) — and all 33 pass on all three backends. That full-suite run (not just
+the handful of methods the Phase 2 scratch tests touched) caught 4 more real
+bugs (#8-#11 below), on top of Phase 2's 7. `.github/workflows/ci.yml` now
+has a `test-external-db` matrix job running the same suite against MySQL/
+Postgres `services:` containers on every PR, gating `release`/`docker` exactly
+like the existing `test` job. build/test/gofmt/lint all green. Remaining:
+CockroachDB/Neon-specific smoke tests (Phase 4's last item) and Phase 5 docs.**
 
 ## Local test infrastructure
 
@@ -81,13 +82,71 @@ memory — several directly contradict what looked like a safe assumption:
    starting with `CREATE INDEX` to swallow the error, the same convention
    already used for SQLite's `ADD COLUMN`.
 
-## Boolean-handling audit (Phase 2 checklist item, resolved)
+## Boolean-handling audit (Phase 2 checklist item — revised, see bug #11)
 
-No dialect-specific handling needed: every boolean-shaped column in this
-schema (`blocked`, `enabled`, `cache_enabled`, etc.) is declared `INTEGER`
-storing a plain `0`/`1` — never any dialect's native `BOOLEAN` type — so all
-three backends round-trip the exact same Go `int`/`bool`-via-`boolToInt`
-conversion already in place with no changes.
+Phase 2 concluded no dialect-specific handling was needed since every
+boolean-shaped column is `INTEGER` storing `0`/`1`. That's true of the
+*schema*, but Phase 4's full-suite run against live Postgres found the audit
+missed two *call sites* that still passed a raw Go `bool` as a query arg
+instead of going through the existing `boolToInt` helper — see bug #11.
+SQLite and MySQL both silently coerce a Go `bool` into `0`/`1` for an
+`INTEGER` column; Postgres's `pgx` driver does not; it refuses to encode a
+`bool` value into an `int4` (`OID 23`) column at all. The fix wasn't a new
+mechanism, just applying the helper that already existed at two more sites.
+
+## More real bugs Phase 4's full-suite run caught (on top of Phase 2's 7)
+
+Running all 33 existing `internal/storage` tests — not just the small
+scratch-test slice from Phase 2 — against live MySQL/Postgres surfaced 4 more
+real bugs, none reachable by reasoning about SQL dialects alone:
+
+8. **go-sql-driver/mysql scans `DATETIME`/`TIMESTAMP` columns as raw
+   `[]byte`, not `time.Time`, unless the DSN has `parseTime=true`.** Every
+   `Scan(&someTime)` call site in the package failed with "unsupported Scan,
+   storing driver.Value type []uint8 into type *time.Time" against a
+   completely valid `root:test@tcp(host:port)/db` DSN with no
+   `parseTime`. Fixed in `dialect.openDB`'s `"mysql"` case: parses the DSN
+   via `mysql.ParseDSN`, forces `cfg.ParseTime = true` on the resulting
+   `mysql.Config` (overriding a user-supplied `parseTime=false` too, since
+   this package's Scan calls require it unconditionally), then reopens via
+   `cfg.FormatDSN()` — applies uniformly regardless of what DSN shape a
+   user's `--db` flag supplies, not a string-concatenated `?parseTime=true`
+   that would break on a DSN that already has query params.
+9. **`COUNT(*) FILTER (WHERE ...)` / `AVG(...) FILTER (WHERE ...)` /
+   `COUNT(DISTINCT ...) FILTER (WHERE ...)` — valid SQLite (3.25+) and
+   Postgres syntax — has no MySQL equivalent at all**, not even in MySQL 8;
+   `GetBotStats`, `GetStats`, `GetAtAGlanceStats`, and `GetDailyReport` (4
+   query blocks, 19 individual `FILTER` clauses) all failed with a MySQL
+   syntax error near the `FILTER` keyword. Rewritten to the dialect-portable
+   `SUM(CASE WHEN <cond> THEN 1 ELSE 0 END)` (wrapped in `COALESCE(..., 0)`
+   since, unlike `COUNT(*) FILTER`, a `SUM` over zero matching rows returns
+   `NULL` rather than `0` on all three backends and the destination is a
+   plain `int`, not a nullable type) for counts, `AVG(CASE WHEN <cond> THEN
+   col END)` for filtered averages (no `COALESCE` needed — the caller
+   already scans into `sql.NullFloat64`), and `COUNT(DISTINCT CASE WHEN
+   <cond> THEN col END)` for filtered distinct counts — all three forms
+   behave identically to the `FILTER` clause they replace on every backend,
+   confirmed by rerunning `TestGetDailyReport` on SQLite/MySQL/Postgres.
+10. **A test file bypassed the Phase 2 Rebind wrappers.** `sessions_test.go`
+    called `db.conn.Exec`/`db.conn.QueryRow` directly with raw `?`
+    placeholders instead of the package's own `db.exec`/`db.queryRow` (which
+    call `db.conn.Rebind` first) — a leftover from before those wrappers
+    existed that the original ~90-call-site mechanical sed pass over `db.go`
+    couldn't have caught since it only touched `db.go`, not test files. Broke
+    on Postgres exactly like bug #1, one file later. Fixed by switching
+    `TestPruneExpiredSessions`'s two raw-SQL helper closures to `db.exec`/
+    `db.queryRow`. (A repo-wide audit found no other test file with the same
+    pattern — the other two `db.conn.*` call sites left, in
+    `secretenc_test.go` and `ja4_test.go`, take no `?`-placeholder args and
+    need no rebinding.)
+11. **`SetServiceCache`/`SetServiceCacheSession` passed a raw Go `bool`
+    straight to `db.exec` for the `services.cache_enabled`/`cache_by_session`
+    `INTEGER` columns**, unlike every other boolean-writing call site in the
+    file, which already goes through `boolToInt`. SQLite and MySQL silently
+    coerce; Postgres's `pgx` driver errored "unable to encode true into
+    binary format for int4 (OID 23): cannot find encode plan" instead. Fixed
+    by wrapping both call sites in `boolToInt(enabled)`, the same helper
+    already used everywhere else — see the boolean-handling audit above.
 
 ## What the user asked for
 
@@ -262,21 +321,36 @@ throughout:
       production image) — `mysql:8` on `localhost:3307`, `postgres:16` on
       `localhost:5433`, both on `tmpfs` for a clean slate every restart.
       Used throughout Phase 2 to catch the 7 real bugs listed in the
-      progress log above; not yet wired into CI itself.
-- [ ] Wire the same MySQL/Postgres containers into `ci.yml` (`services:`
-      blocks) so Phase 2's coverage runs on every PR, not just locally.
-- [ ] Run the full existing `internal/storage` test suite (not just the
-      handful of methods exercised by the scratch tests during Phase 2)
-      against both new backends via a `TEST_DB_DSN`-driven `Open` in test
-      setup, gated so default `go test ./...` doesn't require Docker/network.
-      The scratch tests used during Phase 2 development covered: schema
-      creation + idempotent re-open, `AddIPRule`/`AddIPRuleWithNote` upsert,
-      `InsertRequest` (id generation), `BumpJA4Reputation` (increment
-      upsert) — a small, high-risk-weighted slice of the ~130 total methods,
-      not the full surface.
+      progress log above.
+- [x] Wired the same MySQL/Postgres containers into `ci.yml` as a new
+      `test-external-db` matrix job (`services:` blocks, one matrix leg per
+      driver) so this coverage runs on every PR, not just locally. MySQL's
+      health check gets `health-start-period: 30s` + 10 retries to ride out
+      its two-phase startup (temporary init server, then the real one) the
+      same way `docker-compose.test.yml`'s header comment documents locally.
+      `release` and `docker` now both list `test-external-db` in `needs:`
+      alongside `lint`/`test`, so a regression on either external backend
+      blocks a tagged release exactly like a SQLite test failure already does.
+- [x] Ran the full existing `internal/storage` test suite (all 33 tests, not
+      just the handful of methods the Phase 2 scratch tests touched) against
+      both new backends via a new `openTestDB(t)` helper
+      (`internal/storage/testdb_test.go`) that every test file now calls
+      instead of the old direct `Open(filepath.Join(t.TempDir(),
+      "test.db"))` — driven by `TEST_DB_DRIVER`/`TEST_DB_DSN` env vars
+      (unset/`sqlite` keeps today's hermetic temp-file behavior, so plain
+      `go test ./...` still needs no Docker/network). For MySQL/Postgres,
+      `createTestDatabase` gives every test its own throwaway
+      `CREATE DATABASE`-provisioned database (dropped in `t.Cleanup`) rather
+      than sharing one persistent database across the whole test binary,
+      since several tests assert on whole-table state (e.g. "empty table
+      counts = (0, 0)") that cross-test row accumulation would break. All 33
+      tests pass identically on SQLite, MySQL, and Postgres — this full run
+      (not the Phase 2 subset) is what caught bugs #8-#11 above.
 - [ ] Add CockroachDB- and Neon-specific smoke tests if feasible (may need
       real or CI-hosted instances — confirm feasibility before committing to
-      automating this vs. documenting manual verification only).
+      automating this vs. documenting manual verification only). Not started;
+      lowest-priority remaining item since both are Postgres-wire-compatible
+      and share every fix Phase 2/4 already made for Postgres itself.
 
 ### Phase 5 — docs
 - [ ] CLAUDE.md: update "SQLite concurrency" section (or add a sibling

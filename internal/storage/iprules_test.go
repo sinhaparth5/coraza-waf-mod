@@ -2,7 +2,6 @@ package storage
 
 import (
 	"fmt"
-	"path/filepath"
 	"testing"
 )
 
@@ -10,11 +9,7 @@ import (
 // upsert with a note, list it back, exact-rule lookup, and the Auto flag the
 // IP Rules template renders the badge from.
 func TestIPRuleNoteRoundtrip(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	if err := db.AddIPRule("", "1.2.3.4", "allow"); err != nil {
 		t.Fatal(err)
@@ -57,11 +52,7 @@ func TestIPRuleNoteRoundtrip(t *testing.T) {
 // accurate regardless of page, and an out-of-range offset returning no rows
 // without erroring.
 func TestListIPRulesPaginated(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	// Insert 5 rules with distinct IPs. created_at defaults to SQLite's
 	// CURRENT_TIMESTAMP, which only has second resolution, so rows inserted
@@ -125,11 +116,7 @@ func TestListIPRulesPaginated(t *testing.T) {
 // matters once the row list itself is paginated and can no longer be summed
 // client-side from the current page alone.
 func TestCountIPRulesByType(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	block, allow, err := db.CountIPRulesByType()
 	if err != nil {
@@ -158,11 +145,7 @@ func TestCountIPRulesByType(t *testing.T) {
 }
 
 func TestAutobanConfigRoundtrip(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	// Nothing stored yet: defaults (enabled).
 	cfg, err := db.GetAutobanConfig()

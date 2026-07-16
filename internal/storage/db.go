@@ -813,7 +813,7 @@ func (db *DB) SetServiceBotMode(id int, mode string) error {
 // (VarnishConfig.Enabled) is on — the flag is kept independent so per-service
 // choices survive the cache layer being switched off and on.
 func (db *DB) SetServiceCache(id int, enabled bool) error {
-	_, err := db.exec(`UPDATE services SET cache_enabled = ? WHERE id = ?`, enabled, id)
+	_, err := db.exec(`UPDATE services SET cache_enabled = ? WHERE id = ?`, boolToInt(enabled), id)
 	return err
 }
 
@@ -824,7 +824,7 @@ func (db *DB) SetServiceCache(id int, enabled bool) error {
 // cookieName is the name of this service's session cookie; enabled has no
 // effect until it's set to a non-empty value.
 func (db *DB) SetServiceCacheSession(id int, enabled bool, cookieName string) error {
-	_, err := db.exec(`UPDATE services SET cache_by_session = ?, session_cookie_name = ? WHERE id = ?`, enabled, cookieName, id)
+	_, err := db.exec(`UPDATE services SET cache_by_session = ?, session_cookie_name = ? WHERE id = ?`, boolToInt(enabled), cookieName, id)
 	return err
 }
 
@@ -1143,9 +1143,9 @@ func (db *DB) GetBotStats() BotStats {
 	var challenged, total, blocked int
 	db.queryRow(
 		`SELECT
-			COUNT(*) FILTER (WHERE action LIKE 'bot_challenge%'),
+			COALESCE(SUM(CASE WHEN action LIKE 'bot_challenge%' THEN 1 ELSE 0 END), 0),
 			COUNT(*),
-			COUNT(*) FILTER (WHERE blocked = 1)
+			COALESCE(SUM(CASE WHEN blocked = 1 THEN 1 ELSE 0 END), 0)
 		FROM requests WHERE ts >= ?`, startOfDay,
 	).Scan(&challenged, &total, &blocked) //nolint
 	passed := total - blocked
@@ -1167,10 +1167,10 @@ func (db *DB) GetStats() (Stats, error) {
 
 	row := db.queryRow(`
 		SELECT
-			COUNT(*) FILTER (WHERE ts >= ?),
-			COUNT(*) FILTER (WHERE ts >= ? AND blocked = 1),
+			COALESCE(SUM(CASE WHEN ts >= ? THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ts >= ? AND blocked = 1 THEN 1 ELSE 0 END), 0),
 			COUNT(*),
-			COUNT(*) FILTER (WHERE blocked = 1)
+			COALESCE(SUM(CASE WHEN blocked = 1 THEN 1 ELSE 0 END), 0)
 		FROM requests`, startOfDay, startOfDay)
 
 	err := row.Scan(&s.TotalToday, &s.BlockedToday, &s.TotalAll, &s.BlockedAll)
@@ -1192,16 +1192,16 @@ func (db *DB) GetAtAGlanceStats() (AtAGlanceStats, error) {
 	var avgLatency, prevAvgLatency sql.NullFloat64
 	err := db.queryRow(`
 		SELECT
-			COUNT(*) FILTER (WHERE ts >= ?),
-			COUNT(*) FILTER (WHERE ts >= ? AND ts < ?),
-			AVG(duration_ms) FILTER (WHERE ts >= ?),
-			AVG(duration_ms) FILTER (WHERE ts >= ? AND ts < ?),
-			COUNT(*) FILTER (WHERE ts >= ? AND blocked = 1),
-			COUNT(*) FILTER (WHERE ts >= ? AND ts < ? AND blocked = 1),
-			COUNT(*) FILTER (WHERE ts >= ? AND rule_id > 0 AND blocked = 1),
-			COUNT(*) FILTER (WHERE ts >= ? AND ts < ? AND rule_id > 0 AND blocked = 1),
-			COUNT(DISTINCT visitor_id) FILTER (WHERE ts >= ? AND visitor_id != ''),
-			COUNT(DISTINCT visitor_id) FILTER (WHERE ts >= ? AND ts < ? AND visitor_id != '')
+			COALESCE(SUM(CASE WHEN ts >= ? THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ts >= ? AND ts < ? THEN 1 ELSE 0 END), 0),
+			AVG(CASE WHEN ts >= ? THEN duration_ms END),
+			AVG(CASE WHEN ts >= ? AND ts < ? THEN duration_ms END),
+			COALESCE(SUM(CASE WHEN ts >= ? AND blocked = 1 THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ts >= ? AND ts < ? AND blocked = 1 THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ts >= ? AND rule_id > 0 AND blocked = 1 THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ts >= ? AND ts < ? AND rule_id > 0 AND blocked = 1 THEN 1 ELSE 0 END), 0),
+			COUNT(DISTINCT CASE WHEN ts >= ? AND visitor_id != '' THEN visitor_id END),
+			COUNT(DISTINCT CASE WHEN ts >= ? AND ts < ? AND visitor_id != '' THEN visitor_id END)
 		FROM requests`,
 		thisMinute,
 		prevMinute, thisMinute,
@@ -2631,14 +2631,14 @@ func (db *DB) GetDailyReport(from, to time.Time) (DailyReport, error) {
 	var rep DailyReport
 	err := db.queryRow(`
 		SELECT COUNT(*),
-		       COUNT(*) FILTER (WHERE blocked = 1),
-		       COUNT(*) FILTER (WHERE status = 403),
-		       COUNT(DISTINCT real_ip) FILTER (WHERE blocked = 1),
-		       COUNT(*) FILTER (WHERE blocked = 1 AND rule_id > 0),
-		       COUNT(*) FILTER (WHERE blocked = 1 AND action LIKE 'ip_blocked%'),
-		       COUNT(*) FILTER (WHERE blocked = 1 AND action LIKE 'geo_blocked%'),
-		       COUNT(*) FILTER (WHERE blocked = 1 AND action LIKE 'rate_limited%'),
-		       COUNT(*) FILTER (WHERE action LIKE 'bot_challenge%')
+		       COALESCE(SUM(CASE WHEN blocked = 1 THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN status = 403 THEN 1 ELSE 0 END), 0),
+		       COUNT(DISTINCT CASE WHEN blocked = 1 THEN real_ip END),
+		       COALESCE(SUM(CASE WHEN blocked = 1 AND rule_id > 0 THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN blocked = 1 AND action LIKE 'ip_blocked%' THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN blocked = 1 AND action LIKE 'geo_blocked%' THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN blocked = 1 AND action LIKE 'rate_limited%' THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN action LIKE 'bot_challenge%' THEN 1 ELSE 0 END), 0)
 		FROM requests WHERE ts >= ? AND ts < ?`,
 		from.UTC(), to.UTC(),
 	).Scan(&rep.Total, &rep.Blocked, &rep.Status403, &rep.UniqueBlockedIPs,

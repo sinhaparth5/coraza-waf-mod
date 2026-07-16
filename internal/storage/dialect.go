@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 
-	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 )
@@ -208,6 +208,27 @@ func (d dialect) openDB(dsn string) (*sqlx.DB, error) {
 		// with that one writer — so a small pool (rather than 1) lets
 		// reads (dashboard, logs page) avoid queuing behind writes
 		// (request logging).
+		conn.SetMaxOpenConns(8)
+		return conn, nil
+	case "mysql":
+		// go-sql-driver/mysql scans DATETIME/TIMESTAMP columns as raw
+		// []byte, not time.Time, unless parseTime is enabled — confirmed
+		// empirically against mysql:8 ("unsupported Scan, storing
+		// driver.Value type []uint8 into type *time.Time") on every one of
+		// this package's Scan(&someTime) call sites. Forced here via the
+		// driver's own Config (not a string-concatenated "?parseTime=true")
+		// so it applies uniformly regardless of what DSN shape a user's
+		// --db flag supplies, and so it can't be silently overridden by a
+		// user-supplied parseTime=false.
+		cfg, err := mysql.ParseDSN(dsn)
+		if err != nil {
+			return nil, fmt.Errorf("parse mysql dsn: %w", err)
+		}
+		cfg.ParseTime = true
+		conn, err := sqlx.Open(d.driverName, cfg.FormatDSN())
+		if err != nil {
+			return nil, err
+		}
 		conn.SetMaxOpenConns(8)
 		return conn, nil
 	default:

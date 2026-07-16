@@ -1,16 +1,11 @@
 package storage
 
 import (
-	"path/filepath"
 	"testing"
 )
 
 func TestWebhookConfigDefaultsToGenericDestination(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	cfg, err := db.GetWebhookConfig()
 	if err != nil {
@@ -22,11 +17,7 @@ func TestWebhookConfigDefaultsToGenericDestination(t *testing.T) {
 }
 
 func TestWebhookConfigRoundTripsDestinationType(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	for _, dt := range []string{"generic", "slack", "discord"} {
 		if err := db.SetWebhookConfig(WebhookConfig{URL: "https://hooks.example.com/x", Enabled: true, Events: "blocked", DestinationType: dt}); err != nil {
@@ -49,11 +40,7 @@ func TestWebhookConfigRoundTripsDestinationType(t *testing.T) {
 // falls back to generic — better to make that fallback visible in the
 // stored config too.
 func TestWebhookConfigNormalizesUnknownDestinationType(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	if err := db.SetWebhookConfig(WebhookConfig{URL: "https://x", DestinationType: "carrier-pigeon"}); err != nil {
 		t.Fatal(err)

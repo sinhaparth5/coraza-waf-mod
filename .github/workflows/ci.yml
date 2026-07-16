@@ -59,10 +59,75 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+  test-external-db:
+    name: Test (${{ matrix.driver }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - driver: mysql
+            dsn: 'root:test@tcp(127.0.0.1:3306)/'
+          - driver: postgres
+            dsn: 'postgres://postgres:test@127.0.0.1:5432/coraza_test?sslmode=disable'
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: test
+        ports:
+          - 3306:3306
+        # MySQL's entrypoint runs a temporary server for init scripts, shuts
+        # it down, then restarts as the real server — mysqladmin ping can
+        # succeed against that temporary instance, a false-positive matching
+        # docker-compose.test.yml's own header comment about the same
+        # ~20-25s two-phase startup. health-start-period + health-retries
+        # give the real server time to come up before any step that depends
+        # on `services.mysql` runs.
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot 2>/dev/null || exit 1"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+          --health-start-period=30s
+        # mysql:8 has no MYSQL_DATABASE env — internal/storage/testdb_test.go's
+        # createTestDatabase creates its own uniquely-named database per test
+        # via an admin DSN with no database selected.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: coraza_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Generate embedded assets
+        run: go generate ./...
+
+      - name: Run internal/storage tests against ${{ matrix.driver }}
+        env:
+          TEST_DB_DRIVER: ${{ matrix.driver }}
+          TEST_DB_DSN: ${{ matrix.dsn }}
+        run: go test ./internal/storage/... -v
+
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [lint, test, test-external-db]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
@@ -159,7 +224,7 @@ jobs:
   docker:
     name: Docker image
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [lint, test, test-external-db]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: read
