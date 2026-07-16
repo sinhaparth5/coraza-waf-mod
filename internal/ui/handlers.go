@@ -333,6 +333,9 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/settings/webhook/test", h.TestWebhook)
 	g.POST("/settings/email", h.SaveEmailSettings)
 	g.POST("/settings/email/test", h.TestEmailReport)
+	g.POST("/settings/dbconn", h.SaveDBConnConfig)
+	g.POST("/settings/dbconn/test", h.TestDBConnection)
+	g.POST("/settings/dbconn/migrate", h.MigrateDBConfig)
 	g.POST("/settings/api-keys", h.CreateAPIKey)
 	g.DELETE("/settings/api-keys/:id", h.DeleteAPIKey)
 	g.GET("/waf-rules", h.WAFRulesPage)
@@ -2030,7 +2033,20 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 	vc, _ := h.db.GetVarnishConfig()
 	apiKeys, _ := h.db.ListAPIKeys()
 	totpEnabled, _ := h.db.TOTPEnabled()
-	return h.render(c, "settings", map[string]any{
+	dbConnCfg, _ := h.db.GetDBConnConfig()
+	if dbConnCfg.Driver == "" {
+		// Never configured through this page yet — default the form to
+		// reflect what's actually running (see ActiveDBDriver/ActiveDBPath
+		// below) rather than starting blank. Only sqlite's Path doubles
+		// safely as a form field value here; a mysql/postgres DSN isn't
+		// picked apart into host/user/password since it may not have come
+		// from this page at all (e.g. set directly via --db at the CLI).
+		dbConnCfg.Driver = h.cfg.DB.Driver
+		if dbConnCfg.Driver == "sqlite" || dbConnCfg.Driver == "" {
+			dbConnCfg.Host = h.cfg.DB.Path
+		}
+	}
+	return h.render(c, "settings", h.dbConnCardData(dbConnCfg, false, "", map[string]any{
 		"AdminEmail":             email,
 		"TOTPEnabled":            totpEnabled,
 		"BotEnabled":             botEnabled,
@@ -2053,7 +2069,7 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 		"VarnishEnabled":         vc.Enabled,
 		"VarnishAddr":            vc.Addr,
 		"APIKeys":                apiKeys,
-	})
+	}))
 }
 
 // CreateAPIKey generates a new bearer token for the REST API and shows it to
@@ -2565,6 +2581,196 @@ func (h *Handler) TestRedisConnection(c echo.Context) error {
 	}
 	return c.HTML(http.StatusOK,
 		`<span class="text-brand text-[13px] font-medium">Connected successfully.</span>`)
+}
+
+// dbConnCardData builds the "Database connection" card's rendering state.
+// cfg.Password/cfg.DSN are deliberately never placed in the returned map —
+// only the derived *Set booleans are, matching the "never echo a stored
+// secret back to the browser" convention EmailConfig.Token already
+// established (see CLAUDE.md's secrets-at-rest section) — so a future
+// template change can't accidentally leak them into a value= attribute.
+func (h *Handler) dbConnCardData(cfg storage.DBConnConfig, saveOK bool, saveErr string, extra map[string]any) map[string]any {
+	data := map[string]any{
+		"AdminPath":         h.cfg.Admin.Path,
+		"ActiveDBDriver":    h.cfg.DB.Driver,
+		"ActiveDBPath":      h.cfg.DB.Path,
+		"DBConnDriver":      cfg.Driver,
+		"DBConnMode":        cfg.Mode,
+		"DBConnHost":        cfg.Host,
+		"DBConnPort":        cfg.Port,
+		"DBConnUsername":    cfg.Username,
+		"DBConnDBName":      cfg.DBName,
+		"DBConnSSLMode":     cfg.SSLMode,
+		"DBConnExtra":       cfg.Extra,
+		"DBConnPasswordSet": cfg.Password != "",
+		"DBConnDSNSet":      cfg.DSN != "",
+		"DBConnSaveOK":      saveOK,
+		"DBConnSaveErr":     saveErr,
+	}
+	for k, v := range extra {
+		data[k] = v
+	}
+	return data
+}
+
+// resolveDBConnInput turns the "Database connection" card's submitted form
+// fields into a driver name + final DSN, used by both SaveDBConnConfig (to
+// validate before persisting) and TestDBConnection (to actually dial it).
+// sqlite has no host/port/credentials, so its Host field doubles as the
+// database file path — the same convention storage.DBConnFields.Host uses.
+func resolveDBConnInput(c echo.Context) (driver, dsn string, err error) {
+	driver = strings.TrimSpace(c.FormValue("dbconn_driver"))
+	if driver == "" {
+		return "", "", fmt.Errorf("select a database driver")
+	}
+	host := strings.TrimSpace(c.FormValue("dbconn_host"))
+	if driver == "sqlite" {
+		if host == "" {
+			return "", "", fmt.Errorf("database file path is required")
+		}
+		return driver, host, nil
+	}
+	if c.FormValue("dbconn_mode") == "dsn" {
+		dsn = strings.TrimSpace(c.FormValue("dbconn_dsn"))
+		if dsn == "" {
+			return "", "", fmt.Errorf("connection string is required")
+		}
+		return driver, dsn, nil
+	}
+	if host == "" {
+		return "", "", fmt.Errorf("host is required")
+	}
+	dsn, err = storage.BuildDSN(storage.DBConnFields{
+		Driver:   driver,
+		Host:     host,
+		Port:     strings.TrimSpace(c.FormValue("dbconn_port")),
+		Username: strings.TrimSpace(c.FormValue("dbconn_username")),
+		Password: c.FormValue("dbconn_password"),
+		DBName:   strings.TrimSpace(c.FormValue("dbconn_dbname")),
+		SSLMode:  c.FormValue("dbconn_sslmode"),
+		Extra:    strings.TrimSpace(c.FormValue("dbconn_extra")),
+	})
+	return driver, dsn, err
+}
+
+// SaveDBConnConfig persists the admin-entered database connection to the
+// meta table purely for this page's own convenience — pre-filling the form
+// on the next visit. It has no effect on the live server: the DB connection
+// this process actually uses is fixed at startup via the --db-driver/--db
+// CLI flags (see main.go's "No config file, by design") and only changes
+// after a restart with the flags TestDBConnection shows on a successful
+// test. Saving here never touches that live connection or requires a
+// successful test first, so an admin can save a draft mid-edit.
+func (h *Handler) SaveDBConnConfig(c echo.Context) error {
+	cfg := storage.DBConnConfig{
+		Driver:   strings.TrimSpace(c.FormValue("dbconn_driver")),
+		Mode:     c.FormValue("dbconn_mode"),
+		DSN:      strings.TrimSpace(c.FormValue("dbconn_dsn")),
+		Host:     strings.TrimSpace(c.FormValue("dbconn_host")),
+		Port:     strings.TrimSpace(c.FormValue("dbconn_port")),
+		Username: strings.TrimSpace(c.FormValue("dbconn_username")),
+		Password: c.FormValue("dbconn_password"),
+		DBName:   strings.TrimSpace(c.FormValue("dbconn_dbname")),
+		SSLMode:  c.FormValue("dbconn_sslmode"),
+		Extra:    strings.TrimSpace(c.FormValue("dbconn_extra")),
+	}
+	if cfg.Mode != "dsn" {
+		cfg.Mode = "fields"
+	}
+
+	saveErr := ""
+	if cfg.Driver == "" {
+		saveErr = "Select a database driver."
+	}
+	if saveErr == "" {
+		if err := h.db.SetDBConnConfig(cfg); err != nil {
+			saveErr = "Failed to save: " + err.Error()
+		}
+	}
+
+	display := cfg
+	if saveErr == "" {
+		// Reload for the canonical roundtrip (e.g. a blank password field
+		// resolved to "keep the stored one" inside SetDBConnConfig/
+		// GetDBConnConfig) rather than trusting the just-submitted values.
+		if stored, err := h.db.GetDBConnConfig(); err == nil {
+			display = stored
+		}
+	}
+	return h.renderPartial(c, "settings", "dbconn-card", h.dbConnCardData(display, saveErr == "", saveErr, nil))
+}
+
+// TestDBConnection dials the connection described by the card's current
+// (not necessarily saved) form fields and reports reachability, exactly
+// like TestRedisConnection but for the database backend — and, on success,
+// shows the --db-driver/--db flag values needed to actually switch the
+// running server over, since that always requires a restart (see
+// SaveDBConnConfig's doc comment).
+func (h *Handler) TestDBConnection(c echo.Context) error {
+	driver, dsn, err := resolveDBConnInput(c)
+	if err != nil {
+		return c.HTML(http.StatusOK,
+			`<span class="text-red-600 text-[13px]">`+template.HTMLEscapeString(err.Error())+`</span>`)
+	}
+	if err := storage.TestConnection(driver, dsn); err != nil {
+		return c.HTML(http.StatusOK,
+			`<span class="text-red-600 text-[13px]">Connection failed: `+template.HTMLEscapeString(err.Error())+`</span>`)
+	}
+	flags := fmt.Sprintf("--db-driver %s --db '%s'", driver, dsn)
+	return c.HTML(http.StatusOK, ""+
+		`<div class="flex flex-col gap-2">`+
+		`<span class="text-brand text-[13px] font-medium">Connected successfully.</span>`+
+		`<p class="text-[12px] text-slate-500">Not applied yet — restart the server with these flags to switch to it:</p>`+
+		`<pre class="bg-slate-900 text-green-400 text-[11px] font-mono rounded-md px-3 py-2 overflow-x-auto">`+template.HTMLEscapeString(flags)+`</pre>`+
+		`</div>`)
+}
+
+// MigrateDBConfig copies this server's configuration (see
+// storage.MigrateConfigTo's doc comment for the exact table list and what's
+// deliberately excluded, e.g. the request log) into the connection
+// described by the card's current form fields — the same
+// resolveDBConnInput TestDBConnection uses. The source (this server's
+// actual live database) is never modified, so this is safe to run more
+// than once against different targets; it is NOT safe to run twice against
+// the same already-migrated target, which fails on duplicate keys rather
+// than overwriting (the confirm dialog on the button says this). Like
+// Save/Test, this never switches the live connection — that still needs a
+// restart with the flags TestDBConnection shows.
+func (h *Handler) MigrateDBConfig(c echo.Context) error {
+	driver, dsn, err := resolveDBConnInput(c)
+	if err != nil {
+		return c.HTML(http.StatusOK,
+			`<span class="text-red-600 text-[13px]">`+template.HTMLEscapeString(err.Error())+`</span>`)
+	}
+	report, err := h.db.MigrateConfigTo(driver, dsn)
+	if err != nil {
+		return c.HTML(http.StatusOK, ""+
+			`<div class="flex flex-col gap-2">`+
+			`<span class="text-red-600 text-[13px]">Migration failed: `+template.HTMLEscapeString(err.Error())+`</span>`+
+			migrationReportHTML(report)+
+			`</div>`)
+	}
+	return c.HTML(http.StatusOK, ""+
+		`<div class="flex flex-col gap-2">`+
+		`<span class="text-brand text-[13px] font-medium">Migrated `+fmt.Sprintf("%d", report.TotalRows)+` rows. Your current database is untouched.</span>`+
+		migrationReportHTML(report)+
+		`<p class="text-[12px] text-slate-500">Not applied yet — restart the server with the flags above (from "Test connection") to switch to it.</p>`+
+		`</div>`)
+}
+
+// migrationReportHTML renders a per-table row-count list for
+// MigrateDBConfig's result fragment. Table names come from a fixed Go
+// literal list in storage.MigrateConfigTo, never user input, but escaped
+// anyway on general principle for anything written via string
+// concatenation into an HTML response.
+func migrationReportHTML(report storage.MigrationReport) string {
+	var b strings.Builder
+	b.WriteString(`<ul class="text-[12px] text-slate-500 font-mono list-disc list-inside">`)
+	for _, t := range report.Tables {
+		fmt.Fprintf(&b, "<li>%s: %d</li>", template.HTMLEscapeString(t.Table), t.Rows)
+	}
+	b.WriteString(`</ul>`)
+	return b.String()
 }
 
 func (h *Handler) ChangeCredentials(c echo.Context) error {

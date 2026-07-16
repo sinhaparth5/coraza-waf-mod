@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -12,16 +11,12 @@ import (
 // mean the access.log writer (internal/notify/accesslog) never receives any
 // entries despite being wired up correctly in main.go.
 func TestAccessLogFnFires(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	got := make(chan RequestLog, 1)
 	db.SetAccessLogFn(func(e RequestLog) { got <- e })
 
-	db.QueueRequest(RequestLog{Method: "GET", Path: "/hook-test", Status: 200})
+	db.QueueRequest(RequestLog{Method: "GET", Path: "/hook-test", Status: 200, Timestamp: time.Now()})
 
 	select {
 	case e := <-got:
@@ -39,13 +34,9 @@ func TestAccessLogFnFires(t *testing.T) {
 // TestAccessLogFnNilIsSafe confirms a nil hook (the default — main.go only
 // calls SetAccessLogFn when --access-log is set) never panics runLogWorker.
 func TestAccessLogFnNilIsSafe(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
-	db.QueueRequest(RequestLog{Method: "GET", Path: "/no-hook", Status: 200})
+	db.QueueRequest(RequestLog{Method: "GET", Path: "/no-hook", Status: 200, Timestamp: time.Now()})
 	// If runLogWorker panicked on a nil accessLogFn, this Close (which drains
 	// the queue) would hang or the goroutine would have already crashed the
 	// process; reaching here at all is the assertion.

@@ -1,6 +1,152 @@
 # Pluggable external database backends (MySQL/MariaDB/Postgres/CockroachDB/Neon)
 
-Status: **not started**.
+Status: **Phases 0, 1, 2, 3, and 4 fully implemented and verified. All 33
+existing `internal/storage` tests (the full suite, not a subset) now run
+identically against SQLite, live local MySQL 8, and live local Postgres 16
+via a new `openTestDB(t)` test harness (`TEST_DB_DRIVER`/`TEST_DB_DSN` env
+vars) — and all 33 pass on all three backends. That full-suite run (not just
+the handful of methods the Phase 2 scratch tests touched) caught 4 more real
+bugs (#8-#11 below), on top of Phase 2's 7. `.github/workflows/ci.yml` now
+has a `test-external-db` matrix job running the same suite against MySQL/
+Postgres `services:` containers on every PR, gating `release`/`docker` exactly
+like the existing `test` job. build/test/gofmt/lint all green. Remaining:
+CockroachDB/Neon-specific smoke tests (Phase 4's last item) and Phase 5 docs.**
+
+## Local test infrastructure
+
+`docker-compose.test.yml` (new, dev/test-only, not part of the production
+image): `mysql:8` on `localhost:3307` and `postgres:16` on `localhost:5433`,
+both on `tmpfs` (ephemeral — a fresh schema every restart, which is
+deliberate for iterating on migrations). Start with `docker compose -f
+docker-compose.test.yml up -d`. **MySQL takes ~20s to become genuinely
+ready** after `docker compose up` — its entrypoint runs a temporary server
+for init scripts, shuts it down, then starts the real one; `mysqladmin ping`
+succeeds against the *temporary* instance, giving a false-positive
+readiness signal if you don't also grep its logs for a second "ready for
+connections" line (or just sleep ~25s) before connecting.
+
+## Real bugs this live-testing approach caught (would have shipped broken otherwise)
+
+Every one of these was found by actually running migrations and queries
+against live containers, not by reasoning about SQL dialect rules from
+memory — several directly contradict what looked like a safe assumption:
+
+1. **`?` placeholders silently break on Postgres.** Swapping to `*sqlx.DB`
+   in Phase 0 does *not* auto-rebind placeholders — `sqlx.DB.Rebind()` must
+   be called explicitly. Postgres rejected every one of the ~92 existing
+   `?`-based queries with a syntax error until `db.exec`/`db.query`/
+   `db.queryRow` wrapper methods (`internal/storage/db.go`) were added to
+   rebind on every call, and two hand-rolled transactions
+   (`SaveRateLimitState`, `ReplaceThreatIntelIPs`) were fixed to rebind
+   before `tx.Prepare`/`tx.Exec` individually (a `*sql.Tx` from
+   `db.conn.Begin()` has no `Rebind` of its own).
+2. **`res.LastInsertId()` is not supported by pgx at all.** Postgres has no
+   wire-protocol equivalent — every INSERT that needs the new row's id
+   (`InsertRequest`, `AddCertificate`, `CreateAPIKey`) now goes through a new
+   `db.insertReturningID` helper that appends `RETURNING id` and reads it
+   back via `QueryRow` on Postgres, keeping `LastInsertId()` for SQLite/MySQL.
+3. **MySQL rejects a literal `DEFAULT ''` on a `TEXT` column outright**
+   ("BLOB, TEXT, GEOMETRY or JSON column can't have a default value") even
+   on a current MySQL 8 — contradicts the assumption that 8.0.13+ lifted
+   this restriction; it only allows it via a *parenthesized expression
+   default* (`DEFAULT ('')`). Fixed with a MySQL-only regex post-processing
+   pass (`mysqlWrapTextDefaults` in `schema.go`) over the rendered DDL.
+4. **MySQL cannot index a full `TEXT` column at all** ("BLOB/TEXT column
+   ... used in key specification without a key length") — applies to
+   regular secondary indexes (`dialect.createIndexOnText` adds a MySQL-only
+   `(N)` prefix length) *and*, more seriously, to every `PRIMARY KEY`/
+   `UNIQUE` constraint on a string column, which MySQL refuses unconditionally
+   regardless of prefix length. Fixed by changing every PK/UNIQUE string
+   column across the schema from `TEXT` to a sized `VARCHAR(N)` — works
+   identically on SQLite (ignores the length) and Postgres (enforces it,
+   same as TEXT would) — rather than a MySQL-only special case.
+5. **`key` is a reserved word in MySQL.** The `meta` table's `key` column
+   (pre-existing name, used throughout `getMeta`/`setMeta`) caused a MySQL
+   syntax error on the bare `CREATE TABLE`/`SELECT`/`INSERT` text that works
+   fine unquoted on SQLite and Postgres. Fixed with a new
+   `dialect.quoteIdent()` (backtick-quotes only for MySQL) applied at the
+   4 call sites that reference it as a raw identifier.
+6. **Postgres requires the table name to qualify a self-referencing column
+   in `ON CONFLICT DO UPDATE SET` for increment-style updates** — confirmed
+   directly against `psql`: `hits = hits + 1` errors "ambiguous", while
+   `hits = ja4_reputation.hits + 1` works. SQLite and MySQL both accept the
+   bare unqualified form. `BumpJA4Reputation` (the one upsert that
+   increments rather than replaces a column, so it doesn't fit the generic
+   `dialect.upsertUpdate` helper) now has a dedicated
+   `bumpJA4ReputationSQL(dialect)` with all three variants spelled out.
+7. **MySQL's `CREATE INDEX` has no `IF NOT EXISTS` at all** (unlike its
+   `ALTER TABLE ADD COLUMN`, which gained one in 8.0.29) — a second
+   `OpenWithDriver` call against an existing MySQL database (i.e. every
+   normal server restart) always hit "Duplicate key name" on every index.
+   `migrate()`'s `schemaStatements()` loop now special-cases statements
+   starting with `CREATE INDEX` to swallow the error, the same convention
+   already used for SQLite's `ADD COLUMN`.
+
+## Boolean-handling audit (Phase 2 checklist item — revised, see bug #11)
+
+Phase 2 concluded no dialect-specific handling was needed since every
+boolean-shaped column is `INTEGER` storing `0`/`1`. That's true of the
+*schema*, but Phase 4's full-suite run against live Postgres found the audit
+missed two *call sites* that still passed a raw Go `bool` as a query arg
+instead of going through the existing `boolToInt` helper — see bug #11.
+SQLite and MySQL both silently coerce a Go `bool` into `0`/`1` for an
+`INTEGER` column; Postgres's `pgx` driver does not; it refuses to encode a
+`bool` value into an `int4` (`OID 23`) column at all. The fix wasn't a new
+mechanism, just applying the helper that already existed at two more sites.
+
+## More real bugs Phase 4's full-suite run caught (on top of Phase 2's 7)
+
+Running all 33 existing `internal/storage` tests — not just the small
+scratch-test slice from Phase 2 — against live MySQL/Postgres surfaced 4 more
+real bugs, none reachable by reasoning about SQL dialects alone:
+
+8. **go-sql-driver/mysql scans `DATETIME`/`TIMESTAMP` columns as raw
+   `[]byte`, not `time.Time`, unless the DSN has `parseTime=true`.** Every
+   `Scan(&someTime)` call site in the package failed with "unsupported Scan,
+   storing driver.Value type []uint8 into type *time.Time" against a
+   completely valid `root:test@tcp(host:port)/db` DSN with no
+   `parseTime`. Fixed in `dialect.openDB`'s `"mysql"` case: parses the DSN
+   via `mysql.ParseDSN`, forces `cfg.ParseTime = true` on the resulting
+   `mysql.Config` (overriding a user-supplied `parseTime=false` too, since
+   this package's Scan calls require it unconditionally), then reopens via
+   `cfg.FormatDSN()` — applies uniformly regardless of what DSN shape a
+   user's `--db` flag supplies, not a string-concatenated `?parseTime=true`
+   that would break on a DSN that already has query params.
+9. **`COUNT(*) FILTER (WHERE ...)` / `AVG(...) FILTER (WHERE ...)` /
+   `COUNT(DISTINCT ...) FILTER (WHERE ...)` — valid SQLite (3.25+) and
+   Postgres syntax — has no MySQL equivalent at all**, not even in MySQL 8;
+   `GetBotStats`, `GetStats`, `GetAtAGlanceStats`, and `GetDailyReport` (4
+   query blocks, 19 individual `FILTER` clauses) all failed with a MySQL
+   syntax error near the `FILTER` keyword. Rewritten to the dialect-portable
+   `SUM(CASE WHEN <cond> THEN 1 ELSE 0 END)` (wrapped in `COALESCE(..., 0)`
+   since, unlike `COUNT(*) FILTER`, a `SUM` over zero matching rows returns
+   `NULL` rather than `0` on all three backends and the destination is a
+   plain `int`, not a nullable type) for counts, `AVG(CASE WHEN <cond> THEN
+   col END)` for filtered averages (no `COALESCE` needed — the caller
+   already scans into `sql.NullFloat64`), and `COUNT(DISTINCT CASE WHEN
+   <cond> THEN col END)` for filtered distinct counts — all three forms
+   behave identically to the `FILTER` clause they replace on every backend,
+   confirmed by rerunning `TestGetDailyReport` on SQLite/MySQL/Postgres.
+10. **A test file bypassed the Phase 2 Rebind wrappers.** `sessions_test.go`
+    called `db.conn.Exec`/`db.conn.QueryRow` directly with raw `?`
+    placeholders instead of the package's own `db.exec`/`db.queryRow` (which
+    call `db.conn.Rebind` first) — a leftover from before those wrappers
+    existed that the original ~90-call-site mechanical sed pass over `db.go`
+    couldn't have caught since it only touched `db.go`, not test files. Broke
+    on Postgres exactly like bug #1, one file later. Fixed by switching
+    `TestPruneExpiredSessions`'s two raw-SQL helper closures to `db.exec`/
+    `db.queryRow`. (A repo-wide audit found no other test file with the same
+    pattern — the other two `db.conn.*` call sites left, in
+    `secretenc_test.go` and `ja4_test.go`, take no `?`-placeholder args and
+    need no rebinding.)
+11. **`SetServiceCache`/`SetServiceCacheSession` passed a raw Go `bool`
+    straight to `db.exec` for the `services.cache_enabled`/`cache_by_session`
+    `INTEGER` columns**, unlike every other boolean-writing call site in the
+    file, which already goes through `boolToInt`. SQLite and MySQL silently
+    coerce; Postgres's `pgx` driver errored "unable to encode true into
+    binary format for int4 (OID 23): cannot find encode plan" instead. Fixed
+    by wrapping both call sites in `boolToInt(enabled)`, the same helper
+    already used everywhere else — see the boolean-handling audit above.
 
 ## What the user asked for
 
@@ -93,55 +239,118 @@ throughout:
 ## Phased implementation plan
 
 ### Phase 0 — groundwork (no behavior change)
-- [ ] Add `sqlx`, `go-sql-driver/mysql`, `pgx/v5/stdlib` to `go.mod`.
-- [ ] Introduce a small `dialect` type in `internal/storage/` capturing:
-      driver name, autoincrement keyword, upsert-clause builder function,
-      placeholder rebind, connection-pool tuning (PRAGMA string for sqlite vs
-      `SetMaxOpenConns` etc. for the others).
-- [ ] Swap the single `sql.Open` + raw `*sql.DB` for `sqlx.Open` +
-      `*sqlx.DB` (drop-in compatible with existing `Exec`/`Query`/`QueryRow`
-      calls, since `sqlx.DB` embeds `*sql.DB`) — this step alone should be
-      a no-op for the SQLite path, provable by the full existing test suite
-      passing unmodified.
+- [x] Added `sqlx`, `go-sql-driver/mysql`, `pgx/v5/stdlib` to `go.mod`
+      (`go get` + `go mod tidy`).
+- [x] `internal/storage/dialect.go`: `dialect{name, driverName}` type,
+      `dialectSQLite`/`dialectMySQL`/`dialectPostgres` values,
+      `resolveDialect(driverName)` (accepts `mariadb` as a `mysql` synonym,
+      `postgresql`/`cockroachdb`/`cockroach`/`neon` as `postgres` synonyms),
+      `autoIncrementPK()`, `addColumnIfNotExists(table, columnDef)`, and
+      `openDB(dsn)` (SQLite keeps its `_pragma=` DSN tuning +
+      `SetMaxOpenConns(8)`; MySQL/Postgres get `SetMaxOpenConns(8)` with no
+      PRAGMA equivalent). Covered by `dialect_test.go`.
+- [x] Swapped `sql.Open`/`*sql.DB` for `sqlx.Open`/`*sqlx.DB` in
+      `internal/storage/db.go` (`DB.conn` field type only — `sqlx.DB` embeds
+      `*sql.DB`, so every existing `Exec`/`Query`/`QueryRow` call site needed
+      zero changes; `database/sql` import kept for `sql.ErrNoRows`/
+      `sql.NullFloat64`/`sql.NullTime`). Proven a no-op for SQLite: full
+      existing test suite (all 18 `internal/storage/*_test.go` files) passed
+      unmodified, no test changes needed.
 
 ### Phase 1 — CLI/config plumbing
-- [ ] Add `--db-driver` flag to `internal/config`, threaded through
-      `main.go`'s `storage.Open`-equivalent call.
-- [ ] `storage.Open` (or a new `storage.OpenWithDriver`) picks the DSN/driver
-      combination and applies dialect-appropriate connection tuning.
-- [ ] Keep the zero-flag default path (`sqlite`, `--db waf.db`) byte-for-byte
-      identical in behavior — every existing deployment must not need to
-      change anything.
+- [x] `internal/config.DBConfig` gained a `Driver string` field, defaulted
+      to `"sqlite"` in `config.Defaults()`.
+- [x] `storage.Open(path)` is now a thin wrapper around the new
+      `storage.OpenWithDriver(driverName, dsn)`, which resolves the dialect,
+      opens via `dialect.openDB`, and otherwise behaves identically to the
+      old `Open`. Every existing caller (`storage.Open` in 18 test files,
+      3 `main.go` call sites before this phase) needed no changes.
+- [x] Added `--db-driver` flag (default `"sqlite"`) alongside the existing
+      `--db` flag at all three `main.go` entry points (main server bootstrap,
+      `prune`, `setup`) — `--db`'s help text updated to
+      "database path (sqlite) or DSN (mysql/postgres)". `gencert` untouched
+      (doesn't open a DB).
+- [x] Zero-flag default path confirmed byte-for-byte unchanged (same test
+      suite, same behavior — `--db-driver` defaults to `"sqlite"` everywhere).
 
 ### Phase 2 — schema and migrations
-- [ ] Rewrite the 16 `CREATE TABLE IF NOT EXISTS` statements to be built via
-      the `dialect` type's autoincrement/type substitutions rather than
-      hardcoded SQLite syntax.
-- [ ] Rewrite the 33 `ALTER TABLE ADD COLUMN` migrations to branch on
-      dialect capability (native `IF NOT EXISTS` vs swallow-the-error).
-- [ ] Rewrite the 8 `ON CONFLICT` upserts per dialect (`ON DUPLICATE KEY
-      UPDATE` for MySQL).
-- [ ] Audit boolean-column handling across all three backends (SQLite has no
-      native `BOOLEAN`; confirm each driver round-trips Go `bool` the same
-      way the existing code already assumes).
+- [x] Rewrote the 16 `CREATE TABLE IF NOT EXISTS` statements into
+      `internal/storage/schema.go`'s `schemaStatements()`, built via the
+      `dialect` type's autoincrement/timestamp-type substitutions. Also had
+      to change every PK/UNIQUE string column from `TEXT` to a sized
+      `VARCHAR(N)` (MySQL can't key a TEXT column at all — see bug #4 in the
+      progress log above) and quote the `meta` table's `key` column for
+      MySQL (`dialect.quoteIdent` — `key` is a MySQL reserved word, bug #5).
+- [x] Rewrote the 33 `ALTER TABLE ADD COLUMN` migrations as a data-driven
+      `schemaMigrations` loop through `dialect.addColumnIfNotExists`.
+- [x] Rewrote all 8 `ON CONFLICT` upserts: 6 generic "replace with new
+      value" upserts (`AddIPRuleWithNote`, `AddGeoRule`, `setMeta`,
+      `DisableWAFRule`, `DisableWAFRuleForService`, `UpsertIPThreatScore`)
+      now go through `dialect.upsertUpdate`; the 2 "do nothing on conflict"
+      seeds (`webhook_config` singleton row, `meta` notifications baseline)
+      go through `dialect.upsertIgnore`. `BumpJA4Reputation` — an *increment*
+      upsert, not a replace — didn't fit the generic helper and needed its
+      own `bumpJA4ReputationSQL(dialect)` with a genuine Postgres-only
+      qualification quirk (bug #6). A ninth upsert surfaced during live
+      testing that the original 8-count missed: `ReplaceThreatIntelIPs`'s
+      `INSERT OR IGNORE INTO threat_intel_ips`, now `dialect.upsertIgnore`.
+- [x] Audited boolean-column handling: no dialect-specific handling needed
+      at all — every boolean-shaped column is `INTEGER` storing `0`/`1`,
+      never a dialect's native `BOOLEAN` type, so the existing `boolToInt`
+      conversion already works unchanged on all three backends.
 
 ### Phase 3 — dialect-specific behavior in one-shot commands
-- [ ] `coraza-waf-mod prune --vacuum`: implement or explicitly no-op/warn
-      per driver (SQLite `VACUUM`+WAL truncate already exists; decide
-      Postgres/MySQL behavior and document it — don't silently do nothing
-      without telling the operator).
-- [ ] Re-verify `coraza-waf-mod setup`/`gencert` (which touch the DB) work
-      unmodified against every backend.
+- [x] `coraza-waf-mod prune --vacuum`: `DB.Vacuum()` is now dialect-aware —
+      SQLite keeps `VACUUM` + `PRAGMA wal_checkpoint(TRUNCATE)`, Postgres
+      runs bare `VACUUM` (no WAL-checkpoint-equivalent pragma), MySQL is an
+      explicit no-op (no database-wide VACUUM exists; `OPTIMIZE TABLE` is
+      per-table and out of scope for now). `main.go`'s `runPruneOnly` no
+      longer computes a before/after disk-size delta for non-SQLite drivers
+      (that logic stats a local file path, meaningless for a DSN) and logs a
+      driver-appropriate message instead.
+- [x] `coraza-waf-mod setup` (`SeedAdmin`, `SetDomain`, `SetAcmeEmail`) needs
+      no dialect-specific changes — all go through the already-fixed
+      `getMeta`/`setMeta`. Not yet run end-to-end against live MySQL/Postgres
+      containers as its own explicit test (only exercised indirectly via
+      `setMeta`'s upsert path in the scratch tests below) — worth a direct
+      pass in Phase 4. `gencert` remains confirmed DB-free, no change needed.
 
 ### Phase 4 — testing
-- [ ] Stand up MySQL + Postgres service containers for CI (docker-compose
-      or `services:` blocks in `ci.yml`).
-- [ ] Run the full existing `internal/storage` test suite against both new
-      backends via a `TEST_DB_DSN`-driven `Open` in test setup, gated so
-      default `go test ./...` doesn't require Docker/network.
+- [x] Local MySQL + Postgres containers for dev-time testing:
+      `docker-compose.test.yml` (repo root, dev/test-only, not part of the
+      production image) — `mysql:8` on `localhost:3307`, `postgres:16` on
+      `localhost:5433`, both on `tmpfs` for a clean slate every restart.
+      Used throughout Phase 2 to catch the 7 real bugs listed in the
+      progress log above.
+- [x] Wired the same MySQL/Postgres containers into `ci.yml` as a new
+      `test-external-db` matrix job (`services:` blocks, one matrix leg per
+      driver) so this coverage runs on every PR, not just locally. MySQL's
+      health check gets `health-start-period: 30s` + 10 retries to ride out
+      its two-phase startup (temporary init server, then the real one) the
+      same way `docker-compose.test.yml`'s header comment documents locally.
+      `release` and `docker` now both list `test-external-db` in `needs:`
+      alongside `lint`/`test`, so a regression on either external backend
+      blocks a tagged release exactly like a SQLite test failure already does.
+- [x] Ran the full existing `internal/storage` test suite (all 33 tests, not
+      just the handful of methods the Phase 2 scratch tests touched) against
+      both new backends via a new `openTestDB(t)` helper
+      (`internal/storage/testdb_test.go`) that every test file now calls
+      instead of the old direct `Open(filepath.Join(t.TempDir(),
+      "test.db"))` — driven by `TEST_DB_DRIVER`/`TEST_DB_DSN` env vars
+      (unset/`sqlite` keeps today's hermetic temp-file behavior, so plain
+      `go test ./...` still needs no Docker/network). For MySQL/Postgres,
+      `createTestDatabase` gives every test its own throwaway
+      `CREATE DATABASE`-provisioned database (dropped in `t.Cleanup`) rather
+      than sharing one persistent database across the whole test binary,
+      since several tests assert on whole-table state (e.g. "empty table
+      counts = (0, 0)") that cross-test row accumulation would break. All 33
+      tests pass identically on SQLite, MySQL, and Postgres — this full run
+      (not the Phase 2 subset) is what caught bugs #8-#11 above.
 - [ ] Add CockroachDB- and Neon-specific smoke tests if feasible (may need
       real or CI-hosted instances — confirm feasibility before committing to
-      automating this vs. documenting manual verification only).
+      automating this vs. documenting manual verification only). Not started;
+      lowest-priority remaining item since both are Postgres-wire-compatible
+      and share every fix Phase 2/4 already made for Postgres itself.
 
 ### Phase 5 — docs
 - [ ] CLAUDE.md: update "SQLite concurrency" section (or add a sibling
@@ -151,6 +360,187 @@ throughout:
 - [ ] README / install docs: `--db-driver`/DSN flag usage examples for each
       backend.
 - [ ] CHANGELOG.md entry once shipped.
+
+## Settings-page "Database connection" card (admin UI, not a phase)
+
+Added after Phase 4: a card on `/admin/settings` (`internal/ui/templates/
+settings.html`'s `dbconn-card`, handlers in `internal/ui/handlers.go`) that
+lets an admin build and test a MySQL/Postgres (or Docker-internal, or
+managed-cloud like Neon/CockroachDB) connection from the browser, either by
+pasting a full DSN or filling in host/port/username/password/dbname/sslmode/
+extra-params fields separately. Deliberately **does not** switch the live
+server's DB connection — that's a CLI-flag-only, process-start-time decision
+(see "No config file, by design" in CLAUDE.md), and there is no live
+`db.Reload()`-style hot-swap for the storage layer the way there is for WAF/
+bot-protection/rate-limiting. Saving here only persists a draft (for the
+form's own convenience on a later visit, via new `db_conn_*` meta keys,
+password/DSN sealed through the existing secrets-at-rest mechanism); "Test
+connection" actually dials the target (`storage.TestConnection`, a
+Ping-only reachability check, no migration run) and, on success, shows the
+exact `--db-driver`/`--db` flag values to apply by restarting the process.
+
+- `internal/storage/dbconn.go` (new): `DBConnFields`/`BuildDSN` (builds a
+  correctly-escaped DSN per dialect via `mysql.Config.FormatDSN()` or
+  `net/url`, rather than string concatenation — a hand-rolled `fmt.Sprintf`
+  would corrupt the DSN on a password containing `:`/`@`/`/`, confirmed by
+  `TestBuildDSNEscapesSpecialCharacters`), `TestConnection` (dial + ping +
+  close, `connTestTimeout` 5s, mirrors `services.Probe`'s "any response
+  counts as reachable" shape but for a DB dial), `DBConnConfig` +
+  `GetDBConnConfig`/`SetDBConnConfig` (the persisted draft; blank
+  Password/DSN on save means "keep the stored value", matching
+  `EmailConfig.Token`'s existing convention).
+- `db_conn_password` and `db_conn_dsn` added to `secretMetaKeys`
+  (`internal/storage/secretenc.go`) — both can carry a live credential.
+- No SSRF/IMDS guard on the admin-supplied host:port (unlike
+  `services.Validate`'s cloud-metadata denylist for backend URLs) — mirrors
+  the existing Redis `PingRedis`/`TestRedisConnection` precedent, which has
+  none either, since the actor is already a fully-trusted authenticated
+  admin in both cases.
+- Verified live against local MySQL 8 + Postgres 16 (`docker-compose.test.yml`):
+  `BuildDSN`'s output actually connects (not just parses), and a wrong
+  password is correctly rejected — not just unit-tested against the same
+  driver's own DSN parser.
+
+## CLI persistence across installs/upgrades, and a Settings-page migration button
+
+Added after the Settings-page connection card, in response to two follow-up
+asks: (1) let `deploy/install.sh` choose the DB backend on first install and
+keep using that choice on every subsequent upgrade rather than resetting to
+SQLite, and (2) let an admin already running SQLite migrate to MySQL/Postgres
+from the Settings page without losing their existing configuration, without
+deleting the original SQLite file.
+
+**`build-dsn` CLI subcommand** (`main.go`'s `runBuildDSN`): prints a
+dialect-correct DSN built from `--driver`/`--host`/`--port`/`--username`/
+`--dbname`/`--sslmode`/`--extra` flags to stdout, via the same
+`storage.BuildDSN` the Settings-page card uses. The password is read from
+stdin (prompt on stderr, empty allowed for passwordless accounts), never a
+flag — the same convention `setup` uses for the admin password, since an
+argv value is visible in `/proc/<pid>/cmdline` to every local user while
+the command runs (this also addressed a CodeQL clear-text-credential
+finding on the original `--password` flag). Exists so `install.sh` (and
+anyone else scripting a connection string) never has to hand-roll DSN
+escaping in bash — a password containing `:`/`@`/`/` would silently corrupt
+a naive `fmt.Sprintf`-style concatenation, confirmed by
+`TestBuildDSNEscapesSpecialCharacters`.
+
+**`deploy/install.sh`**: on a fresh install, a new "Database backend" prompt
+(mirrors the existing admin-credentials/HTTPS prompts) asks whether to use
+an external database; if yes, gathers driver/host/port/user/password/dbname/
+sslmode and calls `build-dsn` once the binary is installed (DSN-building
+needs a runnable binary, so this happens after "Installing to
+${INSTALL_PATH}", even though the prompts themselves happen earlier
+alongside the other fresh-install-only questions). On an **upgrade**, the
+existing systemd unit's `ExecStart` line is parsed back (`grep`+`sed` for
+`--db-driver X`/`--db '...'`) and reused verbatim instead of re-prompting —
+necessary because the unit file is rewritten unconditionally on every run
+(fresh install and upgrade alike), so without this an upgrade would silently
+reset a MySQL/Postgres deployment back to the hardcoded SQLite default,
+exactly mirroring the pre-existing self-signed-TLS-cert preservation pattern
+already in the script. An old (pre-this-feature) unit file has no
+`--db-driver` at all — the extraction correctly comes back empty in that
+case and falls through to the standard SQLite default path, which was
+already the only value that kind of install could have had. Verified via
+`bash -n` (syntax), `DRY_RUN=1 bash install.sh` (full non-interactive
+code path), and a standalone extraction test against synthetic `ExecStart`
+lines covering old-format/new-format/postgres-with-escaped-password/mysql —
+all four parse correctly. The `--db '...'` value is always single-quoted in
+the generated unit now (previously unquoted, harmless for a bare SQLite
+path but necessary once the value can be an arbitrary DSN with `?`/`&`/`%`
+in it).
+
+**Settings-page "Migrate configuration here" button** (`storage.
+MigrateConfigTo`, `internal/storage/migrate_backend.go`): copies this
+server's *configuration* — services, IP/geo rules, meta (settings +
+secrets + admin credentials), certificates, API keys, WAF rule overrides,
+threat-intel sources + their synced IPs, webhook config, IP threat scores,
+JA4 reputation — into a freshly-`OpenWithDriver`-opened target (which
+creates the target's schema as a side effect, satisfying "tables should be
+created there" with no extra code). Deliberately excludes `requests` (the
+access log — could be millions of rows, disposable history exactly like the
+existing `prune` command already treats it), `sessions` (recreated on next
+login), and `rate_state` (transient token-bucket state) — a user-facing
+choice, not a default assumption (see the scope question below). The
+*source* database is never written to or closed, only read from, so the
+admin's existing SQLite file (or whatever backend is currently live) is
+left completely untouched regardless of outcome, and the button can be
+run again against a different target if the first attempt looks wrong.
+Matches the earlier architectural decision for the connection card: this
+never switches the live connection either — a restart with the flags
+"Test connection" shows is still required to actually cut over.
+
+Implementation had to be defensive in ways a naive generic byte-copy would
+get wrong, all confirmed empirically against live MySQL 8/Postgres 16
+before shipping:
+
+- **Primary keys are preserved verbatim**, not re-generated — `services.
+  cert_id` and `threat_intel_ips.source_id` reference other tables' ids by
+  value, so a re-generated id would silently break those references. Every
+  per-table migrator scans/inserts explicit ids.
+- **Postgres's `GENERATED ALWAYS AS IDENTITY` rejects an explicit id value
+  outright** ("cannot insert a non-DEFAULT value into column id") unless the
+  INSERT includes `OVERRIDING SYSTEM VALUE` — confirmed empirically, not
+  assumed, exactly like every other Postgres-specific quirk this project has
+  hit. MySQL's `AUTO_INCREMENT` and SQLite's `AUTOINCREMENT` both accept an
+  explicit id with no special syntax.
+- **Real bug caught live**: Postgres does **not** auto-advance a `GENERATED
+  ALWAYS AS IDENTITY` sequence for an `OVERRIDING SYSTEM VALUE` insert (only
+  inserts that actually draw from `nextval()` do) — without a fix, the very
+  next *normal* insert on the target (e.g. adding a service through the
+  admin UI after switching backends) could collide with an id that was just
+  migrated and fail with a duplicate-key error. `TestMigrateConfigTo`
+  against a live Postgres target caught this directly (a post-migration
+  `AddGeoRule` failed with "duplicate key value violates unique constraint").
+  Fixed with `fixPostgresIdentitySequence`: `SELECT setval(pg_get_serial_
+  sequence(table, 'id'), (SELECT MAX(id) FROM table))`, run once per table
+  after a migration that both targets Postgres and actually inserted rows
+  into a table with a real identity column (`hasIdentitySeq` — deliberately
+  excludes `webhook_config`'s literal non-identity `id INTEGER PRIMARY KEY
+  CHECK (id = 1)`, which has no sequence to advance at all).
+- **TIMESTAMP/DATETIME columns must be scanned and reinserted as typed
+  `time.Time`, never as a plain string.** Confirmed empirically that scanning
+  a MySQL `TIMESTAMP` column into a `*string` destination hands back an
+  ISO8601 `'T'/'Z'`-format string, and MySQL's own `TIMESTAMP` column then
+  **rejects that exact string** on insert ("Incorrect datetime value") —
+  a same-column string round-trip doesn't work even within MySQL alone, let
+  alone across dialects. A typed `time.Time` round-trips correctly through
+  every driver's own wire encoding on all three backends. This is also why
+  the migrators don't reuse `CertRecord.CreatedAt` (a plain `string` field,
+  untouched by Phase 2/4's live testing since no existing test exercised
+  it) — each migrator scans its own local `time.Time` variable regardless of
+  what Go type the corresponding public API struct happens to use.
+- **Secret-bearing meta keys are decrypted from the source and resealed
+  under the target's own key (or left plaintext if the target has none)**,
+  never copied as a raw stored value — a source encrypted under one
+  `--db-key-file` and a target with a different (or absent) one would
+  otherwise produce an undecryptable ciphertext blob. `migrateMetaTable`
+  branches on `secretMetaKeys` membership, using `source.openSecret`/
+  `target.setSecretMeta` for those and plain `target.setMeta` for everything
+  else.
+- **`webhook_config`'s singleton row always pre-exists on a freshly opened
+  target** (seeded by schema migration's own `upsertIgnore` seed statement),
+  so its migrator reuses the existing `Get`/`SetWebhookConfig` (an UPDATE,
+  not an INSERT) rather than hand-rolled SQL — simpler and automatically
+  correct for the secret column too.
+- **Not wrapped in a single cross-database transaction** — config-sized row
+  counts (dozens to low-thousands, given the requests-log exclusion above)
+  made the extra complexity of a `*sqlx.Tx`-backed rebind path across 12
+  table migrators disproportionate for a one-shot admin action. A failure
+  partway leaves the target with whatever tables completed; the returned
+  `MigrationReport` always reflects exactly how far it got (rendered as a
+  per-table row-count list in the UI even on error), and the recommended
+  recovery is a fresh, empty target rather than resuming in place — the
+  "Migrate" button's `hx-confirm` says this explicitly, and running it twice
+  against an already-migrated target fails on duplicate keys by design
+  (not idempotent).
+
+Tested via `TestMigrateConfigTo` (`internal/storage/migrate_backend_test.go`,
+uses the same `openTestDB`/`TEST_DB_DRIVER` harness as the rest of Phase 4 —
+sqlite-to-sqlite by default, sqlite-to-mysql/postgres in CI) and manually
+against live containers during development (the sequence bug above was
+caught this way, not by the permanent test — the permanent test was written
+*after* the fix, so it now guards the regression going forward via its
+"normal insert after migration still works" assertion).
 
 ## Explicitly out of scope (unless the user says otherwise later)
 

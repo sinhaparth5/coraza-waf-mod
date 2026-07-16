@@ -1,18 +1,13 @@
 package storage
 
 import (
-	"path/filepath"
 	"testing"
 )
 
 // TestTOTPEnrollmentLifecycle exercises the pending → enabled → disabled
 // flow backing the 2FA settings card (ui/handlers.go).
 func TestTOTPEnrollmentLifecycle(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	if enabled, _ := db.TOTPEnabled(); enabled {
 		t.Fatal("TOTPEnabled = true on a fresh DB")
@@ -52,11 +47,7 @@ func TestTOTPEnrollmentLifecycle(t *testing.T) {
 // TestTOTPBackupCodesSingleUse checks each stored hash works exactly once
 // and unknown hashes never match.
 func TestTOTPBackupCodesSingleUse(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	if err := db.SetPendingTOTPSecret("S"); err != nil {
 		t.Fatal(err)
@@ -83,11 +74,7 @@ func TestTOTPBackupCodesSingleUse(t *testing.T) {
 }
 
 func TestTOTPLastCounterRoundtrip(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	if n, err := db.GetTOTPLastCounter(); err != nil || n != 0 {
 		t.Fatalf("fresh GetTOTPLastCounter = %d, %v, want 0", n, err)

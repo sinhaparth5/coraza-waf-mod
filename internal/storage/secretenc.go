@@ -47,6 +47,8 @@ var secretMetaKeys = []string{
 	"admin_totp_pending_secret",
 	"redis_password",
 	"email_token",
+	"db_conn_password",
+	"db_conn_dsn",
 }
 
 // EnableSecretEncryption switches the DB into secrets-at-rest mode with a
@@ -154,7 +156,7 @@ func (db *DB) migrateSecrets() error {
 	}
 
 	var secret string
-	err := db.conn.QueryRow(`SELECT secret FROM webhook_config WHERE id = 1`).Scan(&secret)
+	err := db.queryRow(`SELECT secret FROM webhook_config WHERE id = 1`).Scan(&secret)
 	if err == sql.ErrNoRows {
 		return nil
 	}
@@ -168,6 +170,6 @@ func (db *DB) migrateSecrets() error {
 	if err != nil {
 		return err
 	}
-	_, err = db.conn.Exec(`UPDATE webhook_config SET secret=? WHERE id=1`, sealed)
+	_, err = db.exec(`UPDATE webhook_config SET secret=? WHERE id=1`, sealed)
 	return err
 }

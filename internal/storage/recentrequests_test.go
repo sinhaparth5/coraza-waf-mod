@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -12,11 +11,7 @@ import (
 // N), and the result coming back in chronological (oldest-first) order so
 // client-side appends read top-to-bottom like a real tail -f.
 func TestListRecentRequestLogs(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	base := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
 	insert := func(ts time.Time, path string) {

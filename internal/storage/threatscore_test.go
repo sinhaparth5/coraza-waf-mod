@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -10,11 +9,7 @@ import (
 // the persistence layer behind the threatscore package's composite per-IP
 // score (issue #12).
 func TestIPThreatScoreRoundtrip(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	if _, ok, err := db.GetIPThreatScore("203.0.113.1"); err != nil {
 		t.Fatal(err)
@@ -67,11 +62,7 @@ func TestIPThreatScoreRoundtrip(t *testing.T) {
 // absent (not zero-valued), and an empty input returns an empty map without
 // a query.
 func TestGetIPThreatScoresBulk(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	now := time.Now()
 	for ip, score := range map[string]int{"203.0.113.1": 10, "203.0.113.2": 90} {
@@ -107,11 +98,7 @@ func TestGetIPThreatScoresBulk(t *testing.T) {
 // across repeated calls for the same fingerprint, and that different
 // fingerprints don't share counters.
 func TestBumpJA4Reputation(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	const fp = "t13d1516h2_8daaf6152771_02713d6af862"
 

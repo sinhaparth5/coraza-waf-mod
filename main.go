@@ -74,6 +74,9 @@ func main() {
 		case "gencert":
 			runGencert(os.Args[2:])
 			return
+		case "build-dsn":
+			runBuildDSN(os.Args[2:])
+			return
 		}
 	}
 
@@ -84,7 +87,8 @@ func main() {
 	listen := fs.String("listen", ":8080", "HTTP listen address")
 	listenTLS := fs.String("listen-tls", "", "HTTPS listen address (empty = HTTP only)")
 	trustedProxies := fs.String("trusted-proxies", "", "comma-separated trusted proxy CIDRs for X-Forwarded-For/X-Real-IP")
-	dbPath := fs.String("db", "waf.db", "SQLite database path")
+	dbPath := fs.String("db", "waf.db", "database path (sqlite) or DSN (mysql/postgres)")
+	dbDriver := fs.String("db-driver", "sqlite", "database driver: sqlite, mysql (or mariadb), postgres (or postgresql/cockroachdb/neon)")
 	certsDir := fs.String("certs", "./certs", "TLS certificate cache directory")
 	wafRules := fs.String("waf-rules", "", "extra WAF rules directory (empty = OWASP CRS only)")
 	geoDBPath := fs.String("geo-db", "", "GeoIP2 database path (empty = bundled)")
@@ -102,6 +106,7 @@ func main() {
 	cfg.ListenAddrTLS = *listenTLS
 	cfg.TrustedProxies = splitCSV(*trustedProxies)
 	cfg.DB.Path = *dbPath
+	cfg.DB.Driver = *dbDriver
 	cfg.TLS.CacheDir = *certsDir
 	cfg.TLS.FallbackCertFile = *tlsCert
 	cfg.TLS.FallbackKeyFile = *tlsKey
@@ -109,7 +114,7 @@ func main() {
 	cfg.Geo.DBPath = *geoDBPath
 	cfg.DB.LogRetentionDays = *retention
 
-	db, err := storage.Open(cfg.DB.Path)
+	db, err := storage.OpenWithDriver(cfg.DB.Driver, cfg.DB.Path)
 	if err != nil {
 		log.Fatalf("db: %v", err)
 	}
@@ -637,12 +642,13 @@ func splitCSV(s string) []string {
 // Invoked as: coraza-waf-mod prune [--db path] [--retention days] [--vacuum]
 func runPruneOnly(args []string) {
 	fs := flag.NewFlagSet("prune", flag.ExitOnError)
-	dbPath := fs.String("db", "waf.db", "SQLite database path")
+	dbPath := fs.String("db", "waf.db", "database path (sqlite) or DSN (mysql/postgres)")
+	dbDriver := fs.String("db-driver", "sqlite", "database driver: sqlite, mysql (or mariadb), postgres (or postgresql/cockroachdb/neon)")
 	retention := fs.Int("retention", 30, "log retention in days (0 = keep forever)")
-	vacuum := fs.Bool("vacuum", false, "rebuild the DB file after pruning to reclaim disk space")
+	vacuum := fs.Bool("vacuum", false, "rebuild the DB file after pruning to reclaim disk space (sqlite/postgres; no-op on mysql, which has no database-wide VACUUM)")
 	fs.Parse(args) //nolint // ExitOnError: never returns an error to check
 
-	db, err := storage.Open(*dbPath)
+	db, err := storage.OpenWithDriver(*dbDriver, *dbPath)
 	if err != nil {
 		log.Fatalf("db: %v", err)
 	}
@@ -667,14 +673,28 @@ func runPruneOnly(args []string) {
 	}
 
 	if *vacuum {
-		before := dbDiskSize(*dbPath)
+		// dbDiskSize stats a SQLite file (plus -wal/-shm sidecars) on the
+		// local filesystem — meaningless for a MySQL/Postgres DSN, so the
+		// before/after size delta is only reported for the sqlite driver.
+		isSQLite := strings.EqualFold(*dbDriver, "") || strings.EqualFold(*dbDriver, "sqlite")
+		var before int64
+		if isSQLite {
+			before = dbDiskSize(*dbPath)
+		}
 		start := time.Now()
 		if err := db.Vacuum(); err != nil {
 			log.Fatalf("vacuum: failed after %s: %v", time.Since(start), err)
 		}
-		after := dbDiskSize(*dbPath)
-		log.Printf("vacuum: reclaimed %s (%s -> %s, took %s)",
-			formatBytes(before-after), formatBytes(before), formatBytes(after), time.Since(start))
+		switch {
+		case isSQLite:
+			after := dbDiskSize(*dbPath)
+			log.Printf("vacuum: reclaimed %s (%s -> %s, took %s)",
+				formatBytes(before-after), formatBytes(before), formatBytes(after), time.Since(start))
+		case strings.EqualFold(*dbDriver, "mysql") || strings.EqualFold(*dbDriver, "mariadb"):
+			log.Printf("vacuum: no-op on MySQL/MariaDB — there is no database-wide VACUUM; use OPTIMIZE TABLE per table if needed")
+		default:
+			log.Printf("vacuum: ran VACUUM (took %s) — Postgres/CockroachDB/Neon reclaim space in place, not via file rebuild, so no size delta is reported", time.Since(start))
+		}
 	}
 }
 
@@ -733,7 +753,8 @@ func formatBytes(n int64) string {
 // Password is read from stdin (one line).
 func runSetup(args []string) {
 	fs := flag.NewFlagSet("setup", flag.ExitOnError)
-	dbPath := fs.String("db", "waf.db", "SQLite database path")
+	dbPath := fs.String("db", "waf.db", "database path (sqlite) or DSN (mysql/postgres)")
+	dbDriver := fs.String("db-driver", "sqlite", "database driver: sqlite, mysql (or mariadb), postgres (or postgresql/cockroachdb/neon)")
 	adminEmail := fs.String("admin-email", "", "admin email address")
 	domain := fs.String("domain", "", "primary domain for ACME (Let's Encrypt)")
 	acmeEmail := fs.String("acme-email", "", "ACME contact email (defaults to admin email)")
@@ -751,7 +772,7 @@ func runSetup(args []string) {
 		log.Fatal("setup: password cannot be empty")
 	}
 
-	db, err := storage.Open(*dbPath)
+	db, err := storage.OpenWithDriver(*dbDriver, *dbPath)
 	if err != nil {
 		log.Fatalf("db: %v", err)
 	}
@@ -838,6 +859,46 @@ func runGencert(args []string) {
 	pem.Encode(kf, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}) //nolint:errcheck
 
 	log.Printf("gencert: wrote %s and %s (valid %d days, hosts: %s)", *certFile, *keyFile, *days, *hosts)
+}
+
+// runBuildDSN prints a dialect-correct DSN built from individual fields to
+// stdout, then exits — a thin CLI wrapper around storage.BuildDSN so
+// deploy/install.sh (and anyone else scripting a MySQL/Postgres connection
+// string) doesn't have to hand-roll escaping in shell for a password
+// containing ":"/"@"/"/", which would silently corrupt a naive
+// fmt.Sprintf-style concatenation. Mirrors the admin Settings page's
+// "Database connection" card, which calls the same storage.BuildDSN.
+// The password is read from stdin (one line, empty allowed for passwordless
+// accounts), never a flag — the same rule runSetup follows for the admin
+// password, since an argv value is visible to every local user in
+// /proc/<pid>/cmdline for as long as the command runs, and lands in shell
+// history when typed interactively. The prompt goes to stderr so it never
+// contaminates the captured stdout the DSN itself is printed to.
+// Invoked as: printf '%s\n' "$PASSWORD" | coraza-waf-mod build-dsn --driver ...
+func runBuildDSN(args []string) {
+	fs := flag.NewFlagSet("build-dsn", flag.ExitOnError)
+	driver := fs.String("driver", "", "database driver: mysql (or mariadb), postgres (or postgresql/cockroachdb/neon)")
+	host := fs.String("host", "", "database host: hostname, IP, or Docker service name")
+	port := fs.String("port", "", "database port (defaults: mysql 3306, postgres 5432)")
+	username := fs.String("username", "", "database username")
+	dbname := fs.String("dbname", "", "database name")
+	sslmode := fs.String("sslmode", "", "mysql: true/false/skip-verify/preferred; postgres: disable/allow/prefer/require/verify-ca/verify-full")
+	extra := fs.String("extra", "", "extra DSN parameters as key=value&key2=value2")
+	fs.Parse(args) //nolint // ExitOnError: never returns an error to check
+
+	fmt.Fprint(os.Stderr, "Database password (empty if none): ")
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Scan()
+	password := strings.TrimSpace(scanner.Text())
+
+	dsn, err := storage.BuildDSN(storage.DBConnFields{
+		Driver: *driver, Host: *host, Port: *port, Username: *username,
+		Password: password, DBName: *dbname, SSLMode: *sslmode, Extra: *extra,
+	})
+	if err != nil {
+		log.Fatalf("build-dsn: %v", err)
+	}
+	fmt.Println(dsn)
 }
 
 func httpsRedirect(w http.ResponseWriter, r *http.Request) {

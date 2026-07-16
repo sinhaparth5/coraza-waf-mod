@@ -1,18 +1,13 @@
 package storage
 
 import (
-	"path/filepath"
 	"testing"
 )
 
 // TestAPIKeyRoundtrip exercises create/list/validate/revoke for the api_keys
 // table backing the REST API's bearer-token auth (see ui/api.go).
 func TestAPIKeyRoundtrip(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	const hash = "deadbeef00000000000000000000000000000000000000000000000000000000"
 	id, err := db.CreateAPIKey("ci-deploy", "cwaf_ab12cd34", hash)

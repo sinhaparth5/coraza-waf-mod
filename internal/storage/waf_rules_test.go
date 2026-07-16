@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"path/filepath"
 	"testing"
 )
 
@@ -11,11 +10,7 @@ import (
 // service must not appear as disabled for another, and the global list
 // (used to seed every engine) must never include service-scoped rows.
 func TestWAFServiceRuleExceptions(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	// Global disable for rule 942100, unrelated to any service.
 	if err := db.DisableWAFRule(942100, "global false positive"); err != nil {

@@ -5,6 +5,9 @@ go 1.25.6
 require (
 	github.com/corazawaf/coraza-coreruleset v0.0.0-20240226094324-415b1017abdc
 	github.com/corazawaf/coraza/v3 v3.7.0
+	github.com/go-sql-driver/mysql v1.10.0
+	github.com/jackc/pgx/v5 v5.10.0
+	github.com/jmoiron/sqlx v1.4.0
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/oschwald/geoip2-golang v1.13.0
 	github.com/prometheus/client_golang v1.23.2
@@ -17,6 +20,7 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/corazawaf/libinjection-go v0.3.2 // indirect
@@ -26,6 +30,9 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gotnospirit/makeplural v0.0.0-20180622080156-a5f48d94d976 // indirect
 	github.com/gotnospirit/messageformat v0.0.0-20221001023931-dfe49f1eb092 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/kaptinlin/go-i18n v0.1.4 // indirect
 	github.com/kaptinlin/jsonschema v0.4.6 // indirect
 	github.com/kr/text v0.2.0 // indirect

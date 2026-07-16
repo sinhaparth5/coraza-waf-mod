@@ -1,16 +1,11 @@
 package storage
 
 import (
-	"path/filepath"
 	"testing"
 )
 
 func TestVarnishConfigRoundtrip(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	// Unset: disabled with the deploy default address.
 	cfg, err := db.GetVarnishConfig()
@@ -31,11 +26,7 @@ func TestVarnishConfigRoundtrip(t *testing.T) {
 }
 
 func TestServiceCacheEnabledRoundtrip(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	if err := db.AddService("app", "app.example.com", "", "http://127.0.0.1:3000", 0, 0); err != nil {
 		t.Fatal(err)

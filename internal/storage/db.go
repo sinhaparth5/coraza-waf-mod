@@ -13,8 +13,8 @@ import (
 
 	"coraza-waf-mod/internal/security/ratelimit"
 
+	"github.com/jmoiron/sqlx"
 	"golang.org/x/crypto/bcrypt"
-	_ "modernc.org/sqlite"
 )
 
 // logQueueSize bounds how many request-log entries can be buffered waiting
@@ -30,7 +30,8 @@ const logQueueSize = 10000
 const slowWriteThreshold = 500 * time.Millisecond
 
 type DB struct {
-	conn          *sql.DB
+	conn          *sqlx.DB
+	dialect       dialect
 	logQueue      chan RequestLog
 	logDone       chan struct{}
 	broadcastFn   func(RequestLog)
@@ -110,29 +111,37 @@ type RequestLog struct {
 	BotScore    int    // anomaly score from bot signal analysis (0 = clean)
 }
 
+// Open opens the default SQLite-backed store at path. It is a thin wrapper
+// around OpenWithDriver("sqlite", path) kept for backward compatibility with
+// every existing caller (main.go's default bootstrap path, every storage
+// test) that only ever spoke SQLite before external-database support (issue
+// database-backends) was added — none of them need to change.
 func Open(path string) (*DB, error) {
-	// PRAGMAs are passed via the DSN (modernc.org/sqlite applies "_pragma"
-	// query params to every new physical connection as it's opened — see
-	// applyQueryParams in its driver), not via a one-off Exec after Open:
-	// database/sql pools multiple connections, and an Exec only configures
-	// whichever single connection happens to run it, silently leaving every
-	// other pooled connection with no busy_timeout at all. journal_mode=WAL
-	// lets readers proceed without blocking on a writer; busy_timeout makes
-	// concurrent writers wait their turn at the SQLite engine level instead
-	// of failing instantly with SQLITE_BUSY.
-	dsn := path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)"
-	conn, err := sql.Open("sqlite", dsn)
+	return OpenWithDriver("sqlite", path)
+}
+
+// OpenWithDriver opens a store against the given backend. driverName is one
+// of "sqlite" (default), "mysql" (also accepts "mariadb"), or "postgres"
+// (also accepts "postgresql", "cockroachdb"/"cockroach", or "neon" — all
+// four speak the Postgres wire protocol and share the same driver/dialect,
+// so there is no separate code path per provider, only DSN differences the
+// caller supplies). dsn is a plain SQLite file path for the sqlite dialect,
+// or a driver-appropriate connection string for the others (e.g.
+// "user:pass@tcp(host:3306)/dbname" for MySQL, "postgres://user:pass@host/db
+// ?sslmode=require" for Postgres/CockroachDB/Neon).
+func OpenWithDriver(driverName, dsn string) (*DB, error) {
+	d, err := resolveDialect(driverName)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := d.openDB(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
-	// SQLite still only allows one writer at a time regardless of pool size,
-	// but WAL mode lets multiple readers proceed concurrently with that one
-	// writer — so a small pool (rather than 1) lets reads (dashboard, logs
-	// page) avoid queuing behind writes (request logging).
-	conn.SetMaxOpenConns(8)
 
 	db := &DB{
 		conn:     conn,
+		dialect:  d,
 		logQueue: make(chan RequestLog, logQueueSize),
 		logDone:  make(chan struct{}),
 	}
@@ -197,233 +206,128 @@ func (db *DB) QueueDepth() int {
 	return len(db.logQueue)
 }
 
+// exec, query, and queryRow are the rebinding equivalents of db.conn's own
+// Exec/Query/QueryRow. Every query in this package is written once against
+// "?" placeholders; sqlx.DB.Rebind translates that to the target dialect's
+// native placeholder syntax before the query reaches the driver — a no-op
+// for SQLite and MySQL (both accept "?" natively), but required for
+// Postgres, which only understands positional "$1, $2, ..." placeholders
+// and returns a syntax error on a literal "?". Centralizing the Rebind call
+// here means every existing call site written against "?" keeps working
+// unmodified across all three dialects instead of needing its own Rebind.
+func (db *DB) exec(query string, args ...any) (sql.Result, error) {
+	return db.conn.Exec(db.conn.Rebind(query), args...)
+}
+
+func (db *DB) query(query string, args ...any) (*sql.Rows, error) {
+	return db.conn.Query(db.conn.Rebind(query), args...)
+}
+
+func (db *DB) queryRow(query string, args ...any) *sql.Row {
+	return db.conn.QueryRow(db.conn.Rebind(query), args...)
+}
+
+// insertReturningID runs an INSERT and returns the id of the new row.
+// SQLite and MySQL support this via the driver's LastInsertId(); Postgres
+// has no equivalent at the wire-protocol level, so an INSERT there must
+// instead append "RETURNING id" and read the new id back like any other
+// query result. Every call site's INSERT targets a table whose primary key
+// column is literally named "id".
+func (db *DB) insertReturningID(query string, args ...any) (int64, error) {
+	if db.dialect.name == "postgres" {
+		var id int64
+		err := db.queryRow(query+" RETURNING id", args...).Scan(&id)
+		return id, err
+	}
+	res, err := db.exec(query, args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
 func (db *DB) Close() error {
 	close(db.logQueue)
 	<-db.logDone
 	return db.conn.Close()
 }
 
+// schemaMigrations lists every idempotent "ALTER TABLE ... ADD COLUMN ..."
+// applied to an existing database on every startup, rendered per dialect via
+// dialect.addColumnIfNotExists. Table/column-def pairs, in the same order
+// they were historically added as a single hardcoded SQLite string each —
+// preserved here so a fresh database and an upgraded one converge on an
+// identical schema regardless of dialect.
+var schemaMigrations = []struct{ table, columnDef string }{
+	{"requests", "country TEXT NOT NULL DEFAULT ''"},
+	{"requests", "proxy_ip TEXT NOT NULL DEFAULT ''"},
+	{"requests", "headers_json TEXT NOT NULL DEFAULT ''"},
+	{"requests", "request_id TEXT NOT NULL DEFAULT ''"},
+	{"requests", "proto TEXT NOT NULL DEFAULT ''"},
+	{"requests", "tls_version TEXT NOT NULL DEFAULT ''"},
+	{"requests", "tls_cipher TEXT NOT NULL DEFAULT ''"},
+	{"requests", "tls_sni TEXT NOT NULL DEFAULT ''"},
+	{"requests", "asn_num INTEGER NOT NULL DEFAULT 0"},
+	{"requests", "org TEXT NOT NULL DEFAULT ''"},
+	{"requests", "query TEXT NOT NULL DEFAULT ''"},
+	{"requests", "ja3_hash TEXT NOT NULL DEFAULT ''"},
+	{"requests", "ja4 TEXT NOT NULL DEFAULT ''"},
+	{"requests", "visitor_id TEXT NOT NULL DEFAULT ''"},
+	{"requests", "bot_score INTEGER NOT NULL DEFAULT 0"},
+	{"services", "tls_mode TEXT NOT NULL DEFAULT 'none'"},
+	{"services", "tls_cert_path TEXT NOT NULL DEFAULT ''"},
+	{"services", "tls_key_path TEXT NOT NULL DEFAULT ''"},
+	{"services", "tls_expires_at TEXT NOT NULL DEFAULT ''"},
+	{"services", "rate_limit_rps REAL NOT NULL DEFAULT 0"},
+	{"services", "rate_limit_burst INTEGER NOT NULL DEFAULT 0"},
+	{"services", "bot_mode TEXT NOT NULL DEFAULT 'inherit'"},
+	{"services", "cert_id INTEGER NOT NULL DEFAULT 0"},
+	{"services", "cache_enabled INTEGER NOT NULL DEFAULT 0"},
+	{"services", "cache_by_session INTEGER NOT NULL DEFAULT 0"},
+	{"services", "session_cookie_name TEXT NOT NULL DEFAULT ''"},
+	{"services", "cache_ttl_floor INTEGER NOT NULL DEFAULT 0"},
+	{"services", "cache_ttl_ceiling INTEGER NOT NULL DEFAULT 0"},
+	{"services", "cache_grace INTEGER NOT NULL DEFAULT 0"},
+	{"services", "cache_keep INTEGER NOT NULL DEFAULT 0"},
+	{"ip_rules", "note TEXT NOT NULL DEFAULT ''"},
+	{"webhook_config", "destination_type TEXT NOT NULL DEFAULT 'generic'"},
+}
+
 func (db *DB) migrate() error {
-	// Idempotent column migration for existing databases.
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN country TEXT NOT NULL DEFAULT ''`)                       //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN proxy_ip TEXT NOT NULL DEFAULT ''`)                      //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN headers_json TEXT NOT NULL DEFAULT ''`)                  //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN request_id TEXT NOT NULL DEFAULT ''`)                    //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN proto TEXT NOT NULL DEFAULT ''`)                         //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_version TEXT NOT NULL DEFAULT ''`)                   //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_cipher TEXT NOT NULL DEFAULT ''`)                    //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN tls_sni TEXT NOT NULL DEFAULT ''`)                       //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN asn_num INTEGER NOT NULL DEFAULT 0`)                     //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN org TEXT NOT NULL DEFAULT ''`)                           //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN query TEXT NOT NULL DEFAULT ''`)                         //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN ja3_hash TEXT NOT NULL DEFAULT ''`)                      //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN ja4 TEXT NOT NULL DEFAULT ''`)                           //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN visitor_id TEXT NOT NULL DEFAULT ''`)                    //nolint
-	db.conn.Exec(`ALTER TABLE requests ADD COLUMN bot_score INTEGER NOT NULL DEFAULT 0`)                   //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_mode TEXT NOT NULL DEFAULT 'none'`)                  //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_cert_path TEXT NOT NULL DEFAULT ''`)                 //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_key_path TEXT NOT NULL DEFAULT ''`)                  //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN tls_expires_at TEXT NOT NULL DEFAULT ''`)                //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_rps REAL NOT NULL DEFAULT 0`)                 //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN rate_limit_burst INTEGER NOT NULL DEFAULT 0`)            //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN bot_mode TEXT NOT NULL DEFAULT 'inherit'`)               //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cert_id INTEGER NOT NULL DEFAULT 0`)                     //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_enabled INTEGER NOT NULL DEFAULT 0`)               //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_by_session INTEGER NOT NULL DEFAULT 0`)            //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN session_cookie_name TEXT NOT NULL DEFAULT ''`)           //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_ttl_floor INTEGER NOT NULL DEFAULT 0`)             //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_ttl_ceiling INTEGER NOT NULL DEFAULT 0`)           //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_grace INTEGER NOT NULL DEFAULT 0`)                 //nolint
-	db.conn.Exec(`ALTER TABLE services ADD COLUMN cache_keep INTEGER NOT NULL DEFAULT 0`)                  //nolint
-	db.conn.Exec(`ALTER TABLE ip_rules ADD COLUMN note TEXT NOT NULL DEFAULT ''`)                          //nolint
-	db.conn.Exec(`ALTER TABLE webhook_config ADD COLUMN destination_type TEXT NOT NULL DEFAULT 'generic'`) //nolint
+	// Idempotent column migration for existing databases. MySQL/Postgres
+	// use native "ADD COLUMN IF NOT EXISTS" (see addColumnIfNotExists) and
+	// so never actually error here; SQLite has no such clause and always
+	// errors with "duplicate column" once a column already exists — that
+	// error is expected and intentionally ignored on every startup after
+	// the first, exactly as the single hardcoded statements this loop
+	// replaced always did (each was itself an ignored, //nolint'd Exec).
+	for _, m := range schemaMigrations {
+		db.exec(db.dialect.addColumnIfNotExists(m.table, m.columnDef)) //nolint
+	}
 
-	_, err := db.conn.Exec(`
-	CREATE TABLE IF NOT EXISTS requests (
-		id           INTEGER PRIMARY KEY AUTOINCREMENT,
-		ts           DATETIME NOT NULL,
-		app_name     TEXT NOT NULL,
-		real_ip      TEXT NOT NULL,
-		proxy_ip     TEXT NOT NULL DEFAULT '',
-		country      TEXT NOT NULL DEFAULT '',
-		method       TEXT NOT NULL,
-		host         TEXT NOT NULL,
-		path         TEXT NOT NULL,
-		query        TEXT NOT NULL DEFAULT '',
-		status       INTEGER NOT NULL,
-		blocked      INTEGER NOT NULL DEFAULT 0,
-		rule_id      INTEGER NOT NULL DEFAULT 0,
-		action       TEXT NOT NULL DEFAULT '',
-		user_agent   TEXT NOT NULL DEFAULT '',
-		duration_ms  INTEGER NOT NULL DEFAULT 0,
-		headers_json TEXT NOT NULL DEFAULT '',
-		request_id   TEXT NOT NULL DEFAULT '',
-		proto        TEXT NOT NULL DEFAULT '',
-		tls_version  TEXT NOT NULL DEFAULT '',
-		tls_cipher   TEXT NOT NULL DEFAULT '',
-		tls_sni      TEXT NOT NULL DEFAULT '',
-		asn_num      INTEGER NOT NULL DEFAULT 0,
-		org          TEXT NOT NULL DEFAULT '',
-		ja3_hash     TEXT NOT NULL DEFAULT '',
-		ja4          TEXT NOT NULL DEFAULT '',
-		visitor_id   TEXT NOT NULL DEFAULT '',
-		bot_score    INTEGER NOT NULL DEFAULT 0
-	);
-	CREATE INDEX IF NOT EXISTS idx_requests_ts         ON requests(ts);
-	CREATE INDEX IF NOT EXISTS idx_requests_ip         ON requests(real_ip);
-	CREATE INDEX IF NOT EXISTS idx_requests_blocked    ON requests(blocked);
-	CREATE INDEX IF NOT EXISTS idx_requests_app        ON requests(app_name);
-	CREATE INDEX IF NOT EXISTS idx_requests_blocked_ts ON requests(blocked, ts);
-
-	CREATE TABLE IF NOT EXISTS ip_rules (
-		id         INTEGER PRIMARY KEY AUTOINCREMENT,
-		app_name   TEXT NOT NULL DEFAULT '',
-		ip         TEXT NOT NULL,
-		rule_type  TEXT NOT NULL CHECK(rule_type IN ('block','allow')),
-		note       TEXT NOT NULL DEFAULT '',
-		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		UNIQUE(app_name, ip)
-	);
-
-	CREATE TABLE IF NOT EXISTS geo_rules (
-		id           INTEGER PRIMARY KEY AUTOINCREMENT,
-		app_name     TEXT NOT NULL DEFAULT '',
-		country_code TEXT NOT NULL,
-		rule_type    TEXT NOT NULL CHECK(rule_type IN ('block','allow')),
-		created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		UNIQUE(app_name, country_code)
-	);
-
-	CREATE TABLE IF NOT EXISTS meta (
-		key   TEXT PRIMARY KEY,
-		value TEXT NOT NULL
-	);
-
-	CREATE TABLE IF NOT EXISTS services (
-		id               INTEGER PRIMARY KEY AUTOINCREMENT,
-		name             TEXT NOT NULL UNIQUE,
-		host             TEXT NOT NULL DEFAULT '',
-		prefix           TEXT NOT NULL DEFAULT '',
-		backend          TEXT NOT NULL,
-		created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		tls_mode         TEXT NOT NULL DEFAULT 'none',
-		tls_cert_path    TEXT NOT NULL DEFAULT '',
-		tls_key_path     TEXT NOT NULL DEFAULT '',
-		tls_expires_at   TEXT NOT NULL DEFAULT '',
-		rate_limit_rps   REAL NOT NULL DEFAULT 0,
-		rate_limit_burst INTEGER NOT NULL DEFAULT 0,
-		bot_mode         TEXT NOT NULL DEFAULT 'inherit',
-		cert_id          INTEGER NOT NULL DEFAULT 0,
-		cache_enabled    INTEGER NOT NULL DEFAULT 0,
-		cache_by_session INTEGER NOT NULL DEFAULT 0,
-		session_cookie_name TEXT NOT NULL DEFAULT '',
-		cache_ttl_floor    INTEGER NOT NULL DEFAULT 0,
-		cache_ttl_ceiling  INTEGER NOT NULL DEFAULT 0,
-		cache_grace        INTEGER NOT NULL DEFAULT 0,
-		cache_keep         INTEGER NOT NULL DEFAULT 0
-	);
-
-	CREATE TABLE IF NOT EXISTS certificates (
-		id          INTEGER  PRIMARY KEY AUTOINCREMENT,
-		name        TEXT     NOT NULL UNIQUE,
-		domains     TEXT     NOT NULL DEFAULT '',
-		expires_at  TEXT     NOT NULL DEFAULT '',
-		cert_path   TEXT     NOT NULL DEFAULT '',
-		key_path    TEXT     NOT NULL DEFAULT '',
-		created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-	);
-
-	CREATE TABLE IF NOT EXISTS sessions (
-		token      TEXT PRIMARY KEY,
-		created_at TEXT NOT NULL
-	);
-
-	CREATE TABLE IF NOT EXISTS api_keys (
-		id           INTEGER PRIMARY KEY AUTOINCREMENT,
-		name         TEXT NOT NULL,
-		key_prefix   TEXT NOT NULL,
-		key_hash     TEXT NOT NULL UNIQUE,
-		created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		last_used_at DATETIME
-	);
-
-	CREATE TABLE IF NOT EXISTS rate_state (
-		ip          TEXT PRIMARY KEY,
-		tokens      REAL NOT NULL,
-		last_refill TEXT NOT NULL
-	);
-
-	CREATE TABLE IF NOT EXISTS waf_disabled_rules (
-		id         INTEGER PRIMARY KEY AUTOINCREMENT,
-		rule_id    INTEGER NOT NULL UNIQUE,
-		reason     TEXT NOT NULL DEFAULT '',
-		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-	);
-
-	CREATE TABLE IF NOT EXISTS waf_service_rule_exceptions (
-		id           INTEGER PRIMARY KEY AUTOINCREMENT,
-		service_name TEXT NOT NULL,
-		rule_id      INTEGER NOT NULL,
-		reason       TEXT NOT NULL DEFAULT '',
-		created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		UNIQUE(service_name, rule_id)
-	);
-
-	CREATE TABLE IF NOT EXISTS threat_intel_sources (
-		id             INTEGER PRIMARY KEY AUTOINCREMENT,
-		label          TEXT NOT NULL,
-		url            TEXT NOT NULL UNIQUE,
-		interval_hours INTEGER NOT NULL DEFAULT 24,
-		enabled        INTEGER NOT NULL DEFAULT 1,
-		last_synced_at TEXT NOT NULL DEFAULT '',
-		last_error     TEXT NOT NULL DEFAULT '',
-		ip_count       INTEGER NOT NULL DEFAULT 0,
-		created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-	);
-
-	CREATE TABLE IF NOT EXISTS threat_intel_ips (
-		source_id INTEGER NOT NULL,
-		ip        TEXT NOT NULL,
-		PRIMARY KEY (source_id, ip)
-	);
-
-	CREATE TABLE IF NOT EXISTS webhook_config (
-		id               INTEGER PRIMARY KEY CHECK (id = 1),
-		url              TEXT    NOT NULL DEFAULT '',
-		secret           TEXT    NOT NULL DEFAULT '',
-		enabled          INTEGER NOT NULL DEFAULT 0,
-		events           TEXT    NOT NULL DEFAULT 'blocked,challenged',
-		destination_type TEXT    NOT NULL DEFAULT 'generic'
-	);
-	INSERT OR IGNORE INTO webhook_config (id) VALUES (1);
-
-	CREATE TABLE IF NOT EXISTS ip_threat_scores (
-		ip            TEXT PRIMARY KEY,
-		total_score   INTEGER NOT NULL DEFAULT 0,
-		autoban_score INTEGER NOT NULL DEFAULT 0,
-		bot_score     INTEGER NOT NULL DEFAULT 0,
-		asn_score     INTEGER NOT NULL DEFAULT 0,
-		geo_score     INTEGER NOT NULL DEFAULT 0,
-		ja4_score     INTEGER NOT NULL DEFAULT 0,
-		updated_at    DATETIME NOT NULL
-	);
-
-	CREATE TABLE IF NOT EXISTS ja4_reputation (
-		ja4          TEXT PRIMARY KEY,
-		hits         INTEGER NOT NULL DEFAULT 0,
-		blocked_hits INTEGER NOT NULL DEFAULT 0,
-		last_seen    DATETIME NOT NULL
-	);
-	`)
-	if err != nil {
-		return err
+	for _, stmt := range db.schemaStatements() {
+		// CREATE INDEX statements are the one schemaStatements() entry not
+		// safely rerunnable on every dialect: MySQL's CREATE INDEX has no
+		// IF NOT EXISTS clause at all (see dialect.createIndexIfNotExists/
+		// createIndexOnText), so re-running migrate() against an existing
+		// MySQL database (e.g. every server restart) always errors
+		// "Duplicate key name" here — expected and ignored, the same
+		// swallow-the-error convention the ALTER TABLE loop above uses.
+		if strings.HasPrefix(stmt, "CREATE INDEX") {
+			db.exec(stmt) //nolint
+			continue
+		}
+		if _, err := db.exec(stmt); err != nil {
+			return fmt.Errorf("schema: %w", err)
+		}
 	}
 
 	// Seed the notifications baseline at startup (not lazily on first access)
 	// so a block that happens before any admin page has ever been loaded
 	// still counts as "unread" instead of racing the lazy-init.
-	_, err = db.conn.Exec(
-		`INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING`,
+	metaKeyCol := db.dialect.quoteIdent("key")
+	_, err := db.exec(
+		db.dialect.upsertIgnore("meta", []string{metaKeyCol, "value"}, "?, ?", []string{metaKeyCol}),
 		metaKeyNotificationsSeenAt, time.Now().UTC().Format(time.RFC3339Nano),
 	)
 	return err
@@ -451,9 +355,9 @@ func (db *DB) AddIPRule(appName, ip, ruleType string) error {
 // AddIPRuleWithNote upserts an IP rule carrying a note (shown on the IP Rules
 // page). The autoban package uses the note to record why an IP was banned.
 func (db *DB) AddIPRuleWithNote(appName, ip, ruleType, note string) error {
-	_, err := db.conn.Exec(
-		`INSERT INTO ip_rules (app_name, ip, rule_type, note) VALUES (?, ?, ?, ?)
-		 ON CONFLICT(app_name, ip) DO UPDATE SET rule_type = excluded.rule_type, note = excluded.note`,
+	_, err := db.exec(
+		db.dialect.upsertUpdate("ip_rules", []string{"app_name", "ip", "rule_type", "note"}, "?, ?, ?, ?",
+			[]string{"app_name", "ip"}, []string{"rule_type", "note"}),
 		appName, ip, ruleType, note,
 	)
 	return err
@@ -465,7 +369,7 @@ func (db *DB) AddIPRuleWithNote(appName, ip, ruleType, note string) error {
 // overwritten.
 func (db *DB) GetIPRuleType(appName, ip string) (string, error) {
 	var rt string
-	err := db.conn.QueryRow(
+	err := db.queryRow(
 		`SELECT rule_type FROM ip_rules WHERE app_name = ? AND ip = ?`, appName, ip,
 	).Scan(&rt)
 	if err == sql.ErrNoRows {
@@ -475,12 +379,12 @@ func (db *DB) GetIPRuleType(appName, ip string) (string, error) {
 }
 
 func (db *DB) RemoveIPRule(id int) error {
-	_, err := db.conn.Exec(`DELETE FROM ip_rules WHERE id = ?`, id)
+	_, err := db.exec(`DELETE FROM ip_rules WHERE id = ?`, id)
 	return err
 }
 
 func (db *DB) ListIPRules() ([]IPRule, error) {
-	rows, err := db.conn.Query(
+	rows, err := db.query(
 		`SELECT id, app_name, ip, rule_type, note, created_at FROM ip_rules ORDER BY created_at DESC`,
 	)
 	if err != nil {
@@ -505,11 +409,11 @@ func (db *DB) ListIPRules() ([]IPRule, error) {
 // autoban-grown ip_rules table is never pulled into memory in one query.
 func (db *DB) ListIPRulesPaginated(limit, offset int) ([]IPRule, int, error) {
 	var total int
-	if err := db.conn.QueryRow(`SELECT COUNT(*) FROM ip_rules`).Scan(&total); err != nil {
+	if err := db.queryRow(`SELECT COUNT(*) FROM ip_rules`).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
-	rows, err := db.conn.Query(
+	rows, err := db.query(
 		`SELECT id, app_name, ip, rule_type, note, created_at FROM ip_rules ORDER BY created_at DESC LIMIT ? OFFSET ?`,
 		limit, offset,
 	)
@@ -534,7 +438,7 @@ func (db *DB) ListIPRulesPaginated(limit, offset int) ([]IPRule, int, error) {
 // "Rules overview" percentages, which must reflect the full table regardless
 // of which page is currently displayed.
 func (db *DB) CountIPRulesByType() (blockCount, allowCount int, err error) {
-	rows, err := db.conn.Query(`SELECT rule_type, COUNT(*) FROM ip_rules GROUP BY rule_type`)
+	rows, err := db.query(`SELECT rule_type, COUNT(*) FROM ip_rules GROUP BY rule_type`)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -764,21 +668,21 @@ type GeoRule struct {
 }
 
 func (db *DB) AddGeoRule(appName, countryCode, ruleType string) error {
-	_, err := db.conn.Exec(
-		`INSERT INTO geo_rules (app_name, country_code, rule_type) VALUES (?, ?, ?)
-		 ON CONFLICT(app_name, country_code) DO UPDATE SET rule_type = excluded.rule_type`,
+	_, err := db.exec(
+		db.dialect.upsertUpdate("geo_rules", []string{"app_name", "country_code", "rule_type"}, "?, ?, ?",
+			[]string{"app_name", "country_code"}, []string{"rule_type"}),
 		appName, countryCode, ruleType,
 	)
 	return err
 }
 
 func (db *DB) RemoveGeoRule(id int) error {
-	_, err := db.conn.Exec(`DELETE FROM geo_rules WHERE id = ?`, id)
+	_, err := db.exec(`DELETE FROM geo_rules WHERE id = ?`, id)
 	return err
 }
 
 func (db *DB) ListGeoRules() ([]GeoRule, error) {
-	rows, err := db.conn.Query(
+	rows, err := db.query(
 		`SELECT id, app_name, country_code, rule_type, created_at FROM geo_rules ORDER BY created_at DESC`,
 	)
 	if err != nil {
@@ -833,7 +737,7 @@ type Service struct {
 }
 
 func (db *DB) AddService(name, host, prefix, backend string, rps float64, burst int) error {
-	_, err := db.conn.Exec(
+	_, err := db.exec(
 		`INSERT INTO services (name, host, prefix, backend, rate_limit_rps, rate_limit_burst) VALUES (?, ?, ?, ?, ?, ?)`,
 		name, host, prefix, backend, rps, burst,
 	)
@@ -841,7 +745,7 @@ func (db *DB) AddService(name, host, prefix, backend string, rps float64, burst 
 }
 
 func (db *DB) UpdateService(id int, name, host, prefix, backend string) error {
-	_, err := db.conn.Exec(
+	_, err := db.exec(
 		`UPDATE services SET name = ?, host = ?, prefix = ?, backend = ? WHERE id = ?`,
 		name, host, prefix, backend, id,
 	)
@@ -849,7 +753,7 @@ func (db *DB) UpdateService(id int, name, host, prefix, backend string) error {
 }
 
 func (db *DB) RemoveService(id int) error {
-	_, err := db.conn.Exec(`DELETE FROM services WHERE id = ?`, id)
+	_, err := db.exec(`DELETE FROM services WHERE id = ?`, id)
 	return err
 }
 
@@ -857,7 +761,7 @@ func (db *DB) RemoveService(id int) error {
 // certPath/keyPath point at files on disk (see services.SaveCustomCert);
 // for mode "auto" they're left empty since autocert manages its own cache.
 func (db *DB) SetServiceTLS(id int, mode, certPath, keyPath, expiresAt string) error {
-	_, err := db.conn.Exec(
+	_, err := db.exec(
 		`UPDATE services SET tls_mode = ?, tls_cert_path = ?, tls_key_path = ?, tls_expires_at = ? WHERE id = ?`,
 		mode, certPath, keyPath, expiresAt, id,
 	)
@@ -867,7 +771,7 @@ func (db *DB) SetServiceTLS(id int, mode, certPath, keyPath, expiresAt string) e
 // ClearServiceTLS reverts a service to plain HTTP (no TLS), including clearing
 // any reference to a pool cert.
 func (db *DB) ClearServiceTLS(id int) error {
-	_, err := db.conn.Exec(
+	_, err := db.exec(
 		`UPDATE services SET tls_mode = 'none', tls_cert_path = '', tls_key_path = '', tls_expires_at = '', cert_id = 0 WHERE id = ?`,
 		id,
 	)
@@ -879,7 +783,7 @@ func (db *DB) ClearServiceTLS(id int) error {
 // from the pool. Set certID to 0 to remove the pool association (use
 // ClearServiceTLS to fully revert to plain HTTP).
 func (db *DB) SetServiceCertID(serviceID int, certID int64) error {
-	_, err := db.conn.Exec(
+	_, err := db.exec(
 		`UPDATE services SET cert_id = ?, tls_mode = 'custom', tls_cert_path = '', tls_key_path = '', tls_expires_at = '' WHERE id = ?`,
 		certID, serviceID,
 	)
@@ -890,7 +794,7 @@ func (db *DB) SetServiceCertID(serviceID int, certID int64) error {
 // rps=0 disables per-service limiting for this service (falls through to the
 // global limiter only).
 func (db *DB) SetServiceRateLimit(id int, rps float64, burst int) error {
-	_, err := db.conn.Exec(
+	_, err := db.exec(
 		`UPDATE services SET rate_limit_rps = ?, rate_limit_burst = ? WHERE id = ?`,
 		rps, burst, id,
 	)
@@ -900,7 +804,7 @@ func (db *DB) SetServiceRateLimit(id int, rps float64, burst int) error {
 // SetServiceBotMode sets the per-service bot protection override.
 // mode must be one of "inherit", "always", or "off".
 func (db *DB) SetServiceBotMode(id int, mode string) error {
-	_, err := db.conn.Exec(`UPDATE services SET bot_mode = ? WHERE id = ?`, mode, id)
+	_, err := db.exec(`UPDATE services SET bot_mode = ? WHERE id = ?`, mode, id)
 	return err
 }
 
@@ -909,7 +813,7 @@ func (db *DB) SetServiceBotMode(id int, mode string) error {
 // (VarnishConfig.Enabled) is on — the flag is kept independent so per-service
 // choices survive the cache layer being switched off and on.
 func (db *DB) SetServiceCache(id int, enabled bool) error {
-	_, err := db.conn.Exec(`UPDATE services SET cache_enabled = ? WHERE id = ?`, enabled, id)
+	_, err := db.exec(`UPDATE services SET cache_enabled = ? WHERE id = ?`, boolToInt(enabled), id)
 	return err
 }
 
@@ -920,7 +824,7 @@ func (db *DB) SetServiceCache(id int, enabled bool) error {
 // cookieName is the name of this service's session cookie; enabled has no
 // effect until it's set to a non-empty value.
 func (db *DB) SetServiceCacheSession(id int, enabled bool, cookieName string) error {
-	_, err := db.conn.Exec(`UPDATE services SET cache_by_session = ?, session_cookie_name = ? WHERE id = ?`, enabled, cookieName, id)
+	_, err := db.exec(`UPDATE services SET cache_by_session = ?, session_cookie_name = ? WHERE id = ?`, boolToInt(enabled), cookieName, id)
 	return err
 }
 
@@ -930,7 +834,7 @@ func (db *DB) SetServiceCacheSession(id int, enabled bool, cookieName string) er
 // Each value is seconds; 0 means "unset", falling back to the VCL's own
 // defaults (a 1h floor for static assets, no ceiling, 30s grace/keep).
 func (db *DB) SetServiceCacheTuning(id, ttlFloor, ttlCeiling, grace, keep int) error {
-	_, err := db.conn.Exec(
+	_, err := db.exec(
 		`UPDATE services SET cache_ttl_floor = ?, cache_ttl_ceiling = ?, cache_grace = ?, cache_keep = ? WHERE id = ?`,
 		ttlFloor, ttlCeiling, grace, keep, id,
 	)
@@ -954,20 +858,16 @@ type CertRecord struct {
 // AddCertificate inserts a new certificate pool entry. Cert+key paths may be
 // empty initially and updated with UpdateCertificatePaths once files are saved.
 func (db *DB) AddCertificate(name, domains, expiresAt, certPath, keyPath string) (int64, error) {
-	res, err := db.conn.Exec(
+	return db.insertReturningID(
 		`INSERT INTO certificates (name, domains, expires_at, cert_path, key_path) VALUES (?, ?, ?, ?, ?)`,
 		name, domains, expiresAt, certPath, keyPath,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
 }
 
 // UpdateCertificatePaths stores the on-disk file paths after the files have
 // been written (called immediately after AddCertificate + SavePoolCert).
 func (db *DB) UpdateCertificatePaths(id int64, certPath, keyPath string) error {
-	_, err := db.conn.Exec(
+	_, err := db.exec(
 		`UPDATE certificates SET cert_path = ?, key_path = ? WHERE id = ?`,
 		certPath, keyPath, id,
 	)
@@ -975,7 +875,7 @@ func (db *DB) UpdateCertificatePaths(id int64, certPath, keyPath string) error {
 }
 
 func (db *DB) ListCertificates() ([]CertRecord, error) {
-	rows, err := db.conn.Query(
+	rows, err := db.query(
 		`SELECT id, name, domains, expires_at, cert_path, key_path, created_at FROM certificates ORDER BY created_at ASC`,
 	)
 	if err != nil {
@@ -995,7 +895,7 @@ func (db *DB) ListCertificates() ([]CertRecord, error) {
 
 func (db *DB) GetCertificate(id int64) (CertRecord, error) {
 	var c CertRecord
-	err := db.conn.QueryRow(
+	err := db.queryRow(
 		`SELECT id, name, domains, expires_at, cert_path, key_path, created_at FROM certificates WHERE id = ?`, id,
 	).Scan(&c.ID, &c.Name, &c.Domains, &c.ExpiresAt, &c.CertPath, &c.KeyPath, &c.CreatedAt)
 	return c, err
@@ -1004,13 +904,13 @@ func (db *DB) GetCertificate(id int64) (CertRecord, error) {
 // DeleteCertificate removes a cert-pool entry. Services that referenced it
 // via cert_id are reset to tls_mode='none' so they don't silently lose TLS.
 func (db *DB) DeleteCertificate(id int64) error {
-	if _, err := db.conn.Exec(
+	if _, err := db.exec(
 		`UPDATE services SET tls_mode = 'none', cert_id = 0, tls_cert_path = '', tls_key_path = '', tls_expires_at = '' WHERE cert_id = ?`,
 		id,
 	); err != nil {
 		return err
 	}
-	_, err := db.conn.Exec(`DELETE FROM certificates WHERE id = ?`, id)
+	_, err := db.exec(`DELETE FROM certificates WHERE id = ?`, id)
 	return err
 }
 
@@ -1060,7 +960,7 @@ func (db *DB) scanService(row interface{ Scan(...any) error }) (Service, error) 
 }
 
 func (db *DB) ListServices() ([]Service, error) {
-	rows, err := db.conn.Query(`SELECT ` + serviceColumns + ` FROM services ORDER BY created_at ASC`)
+	rows, err := db.query(`SELECT ` + serviceColumns + ` FROM services ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -1079,7 +979,7 @@ func (db *DB) ListServices() ([]Service, error) {
 
 // GetService fetches a single service by ID.
 func (db *DB) GetService(id int) (Service, error) {
-	return db.scanService(db.conn.QueryRow(`SELECT `+serviceColumns+` FROM services WHERE id = ?`, id))
+	return db.scanService(db.queryRow(`SELECT `+serviceColumns+` FROM services WHERE id = ?`, id))
 }
 
 const metaKeyServicesMigrated = "services_migrated_from_config"
@@ -1112,7 +1012,7 @@ func (db *DB) MigrateConfigApps(apps []ConfigApp) error {
 
 // InsertRequest writes one request log entry and returns the new row ID.
 func (db *DB) InsertRequest(r RequestLog) (int64, error) {
-	res, err := db.conn.Exec(`
+	return db.insertReturningID(`
 		INSERT INTO requests
 			(ts, app_name, real_ip, proxy_ip, country, method, host, path, query,
 			 status, blocked, rule_id, action, user_agent, duration_ms, headers_json,
@@ -1147,11 +1047,6 @@ func (db *DB) InsertRequest(r RequestLog) (int64, error) {
 		r.VisitorID,
 		r.BotScore,
 	)
-	if err != nil {
-		return 0, err
-	}
-	id, err := res.LastInsertId()
-	return id, err
 }
 
 // LogDetail is the full representation of one request log row, including
@@ -1192,7 +1087,7 @@ type LogDetail struct {
 func (db *DB) GetRequestByID(id int) (*LogDetail, error) {
 	var d LogDetail
 	var blocked int
-	err := db.conn.QueryRow(`
+	err := db.queryRow(`
 		SELECT id, ts, app_name, real_ip, proxy_ip, country, method, host, path, query,
 		       status, blocked, rule_id, action, user_agent, duration_ms, headers_json,
 		       request_id, proto, tls_version, tls_cipher, tls_sni, asn_num, org,
@@ -1246,11 +1141,11 @@ func (db *DB) GetBotStats() BotStats {
 	now := time.Now().UTC()
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	var challenged, total, blocked int
-	db.conn.QueryRow(
+	db.queryRow(
 		`SELECT
-			COUNT(*) FILTER (WHERE action LIKE 'bot_challenge%'),
+			COALESCE(SUM(CASE WHEN action LIKE 'bot_challenge%' THEN 1 ELSE 0 END), 0),
 			COUNT(*),
-			COUNT(*) FILTER (WHERE blocked = 1)
+			COALESCE(SUM(CASE WHEN blocked = 1 THEN 1 ELSE 0 END), 0)
 		FROM requests WHERE ts >= ?`, startOfDay,
 	).Scan(&challenged, &total, &blocked) //nolint
 	passed := total - blocked
@@ -1270,12 +1165,12 @@ func (db *DB) GetStats() (Stats, error) {
 	now := time.Now().UTC()
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 
-	row := db.conn.QueryRow(`
+	row := db.queryRow(`
 		SELECT
-			COUNT(*) FILTER (WHERE ts >= ?),
-			COUNT(*) FILTER (WHERE ts >= ? AND blocked = 1),
+			COALESCE(SUM(CASE WHEN ts >= ? THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ts >= ? AND blocked = 1 THEN 1 ELSE 0 END), 0),
 			COUNT(*),
-			COUNT(*) FILTER (WHERE blocked = 1)
+			COALESCE(SUM(CASE WHEN blocked = 1 THEN 1 ELSE 0 END), 0)
 		FROM requests`, startOfDay, startOfDay)
 
 	err := row.Scan(&s.TotalToday, &s.BlockedToday, &s.TotalAll, &s.BlockedAll)
@@ -1295,18 +1190,18 @@ func (db *DB) GetAtAGlanceStats() (AtAGlanceStats, error) {
 
 	var s AtAGlanceStats
 	var avgLatency, prevAvgLatency sql.NullFloat64
-	err := db.conn.QueryRow(`
+	err := db.queryRow(`
 		SELECT
-			COUNT(*) FILTER (WHERE ts >= ?),
-			COUNT(*) FILTER (WHERE ts >= ? AND ts < ?),
-			AVG(duration_ms) FILTER (WHERE ts >= ?),
-			AVG(duration_ms) FILTER (WHERE ts >= ? AND ts < ?),
-			COUNT(*) FILTER (WHERE ts >= ? AND blocked = 1),
-			COUNT(*) FILTER (WHERE ts >= ? AND ts < ? AND blocked = 1),
-			COUNT(*) FILTER (WHERE ts >= ? AND rule_id > 0 AND blocked = 1),
-			COUNT(*) FILTER (WHERE ts >= ? AND ts < ? AND rule_id > 0 AND blocked = 1),
-			COUNT(DISTINCT visitor_id) FILTER (WHERE ts >= ? AND visitor_id != ''),
-			COUNT(DISTINCT visitor_id) FILTER (WHERE ts >= ? AND ts < ? AND visitor_id != '')
+			COALESCE(SUM(CASE WHEN ts >= ? THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ts >= ? AND ts < ? THEN 1 ELSE 0 END), 0),
+			AVG(CASE WHEN ts >= ? THEN duration_ms END),
+			AVG(CASE WHEN ts >= ? AND ts < ? THEN duration_ms END),
+			COALESCE(SUM(CASE WHEN ts >= ? AND blocked = 1 THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ts >= ? AND ts < ? AND blocked = 1 THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ts >= ? AND rule_id > 0 AND blocked = 1 THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ts >= ? AND ts < ? AND rule_id > 0 AND blocked = 1 THEN 1 ELSE 0 END), 0),
+			COUNT(DISTINCT CASE WHEN ts >= ? AND visitor_id != '' THEN visitor_id END),
+			COUNT(DISTINCT CASE WHEN ts >= ? AND ts < ? AND visitor_id != '' THEN visitor_id END)
 		FROM requests`,
 		thisMinute,
 		prevMinute, thisMinute,
@@ -1371,7 +1266,7 @@ type LogRow struct {
 // these client-side in the returned order reads top-to-bottom like a real
 // tail -f, newest at the bottom, matching how live lines get appended.
 func (db *DB) ListRecentRequestLogs(since time.Time, limit int) ([]RequestLog, error) {
-	rows, err := db.conn.Query(
+	rows, err := db.query(
 		`SELECT ts, real_ip, method, path, query, proto, status, user_agent
 		 FROM requests WHERE ts >= ? ORDER BY ts DESC LIMIT ?`,
 		since.UTC(), limit,
@@ -1415,7 +1310,7 @@ func (db *DB) ListRequests(blockedOnly bool, ip string, limit, offset int) ([]Lo
 	query += " ORDER BY ts DESC LIMIT ? OFFSET ?"
 	args = append(args, limit, offset)
 
-	rows, err := db.conn.Query(query, args...)
+	rows, err := db.query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1486,7 +1381,7 @@ func (db *DB) ListRequestsFiltered(f LogFilter) ([]LogRow, int, error) {
 	clause, args := f.where()
 
 	var total int
-	if err := db.conn.QueryRow(`SELECT COUNT(*) FROM requests `+clause, args...).Scan(&total); err != nil {
+	if err := db.queryRow(`SELECT COUNT(*) FROM requests `+clause, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
@@ -1494,7 +1389,7 @@ func (db *DB) ListRequestsFiltered(f LogFilter) ([]LogRow, int, error) {
 	          FROM requests ` + clause + ` ORDER BY ts DESC LIMIT ? OFFSET ?`
 	qargs := append(append([]any{}, args...), f.Limit, f.Offset)
 
-	rows, err := db.conn.Query(query, qargs...)
+	rows, err := db.query(query, qargs...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1534,7 +1429,7 @@ type HourlyPoint struct {
 // NULL bucket.
 func (db *DB) GetHourlyTraffic(hours int) ([]HourlyPoint, error) {
 	since := time.Now().UTC().Add(-time.Duration(hours) * time.Hour)
-	rows, err := db.conn.Query(`SELECT ts, blocked FROM requests WHERE ts >= ? ORDER BY ts ASC`, since)
+	rows, err := db.query(`SELECT ts, blocked FROM requests WHERE ts >= ? ORDER BY ts ASC`, since)
 	if err != nil {
 		return nil, err
 	}
@@ -1581,7 +1476,7 @@ type CountryCount struct {
 // requests in the last `hours` hours, descending, capped at `limit`.
 func (db *DB) GetTopBlockedCountries(limit, hours int) ([]CountryCount, error) {
 	since := time.Now().UTC().Add(-time.Duration(hours) * time.Hour)
-	rows, err := db.conn.Query(`
+	rows, err := db.query(`
 		SELECT country, COUNT(*) AS c
 		FROM requests
 		WHERE blocked = 1 AND ts >= ? AND country != ''
@@ -1608,7 +1503,7 @@ func (db *DB) GetTopBlockedCountries(limit, hours int) ([]CountryCount, error) {
 // or allowed) in the last `hours` hours, descending, capped at `limit`.
 func (db *DB) GetTopCountries(limit, hours int) ([]CountryCount, error) {
 	since := time.Now().UTC().Add(-time.Duration(hours) * time.Hour)
-	rows, err := db.conn.Query(`
+	rows, err := db.query(`
 		SELECT country, COUNT(*) AS c
 		FROM requests
 		WHERE ts >= ? AND country != ''
@@ -1635,7 +1530,7 @@ func (db *DB) GetTopCountries(limit, hours int) ([]CountryCount, error) {
 // Used to drive the notification badge.
 func (db *DB) CountBlockedSince(t time.Time) (int, error) {
 	var n int
-	err := db.conn.QueryRow(`SELECT COUNT(*) FROM requests WHERE blocked = 1 AND ts >= ?`, t.UTC()).Scan(&n)
+	err := db.queryRow(`SELECT COUNT(*) FROM requests WHERE blocked = 1 AND ts >= ?`, t.UTC()).Scan(&n)
 	return n, err
 }
 
@@ -1655,7 +1550,7 @@ func (db *DB) PruneOldRequests(days int) (int64, error) {
 	cutoff := time.Now().UTC().AddDate(0, 0, -days)
 	var total int64
 	for {
-		res, err := db.conn.Exec(
+		res, err := db.exec(
 			`DELETE FROM requests WHERE id IN (SELECT id FROM requests WHERE ts < ? LIMIT ?)`,
 			cutoff, pruneBatchSize,
 		)
@@ -1718,7 +1613,8 @@ func (db *DB) SetAcmeEmail(email string) error { return db.setMeta("acme_email",
 
 func (db *DB) getMeta(key string) (string, error) {
 	var v string
-	err := db.conn.QueryRow(`SELECT value FROM meta WHERE key = ?`, key).Scan(&v)
+	query := fmt.Sprintf(`SELECT value FROM meta WHERE %s = ?`, db.dialect.quoteIdent("key"))
+	err := db.queryRow(query, key).Scan(&v)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
@@ -1726,8 +1622,9 @@ func (db *DB) getMeta(key string) (string, error) {
 }
 
 func (db *DB) setMeta(key, value string) error {
-	_, err := db.conn.Exec(
-		`INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+	keyCol := db.dialect.quoteIdent("key")
+	_, err := db.exec(
+		db.dialect.upsertUpdate("meta", []string{keyCol, "value"}, "?, ?", []string{keyCol}, []string{"value"}),
 		key, value,
 	)
 	return err
@@ -1764,7 +1661,7 @@ func (db *DB) MarkNotificationsSeen() error {
 // VACUUM INTO is safe to call while the DB is live — SQLite holds a read lock
 // for the duration and writes a fresh, defragmented file.
 func (db *DB) BackupTo(path string) error {
-	_, err := db.conn.Exec(`VACUUM INTO ?`, path)
+	_, err := db.exec(`VACUUM INTO ?`, path)
 	return err
 }
 
@@ -1776,12 +1673,32 @@ func (db *DB) BackupTo(path string) error {
 // the whole rebuild. The TRUNCATE checkpoint afterwards matters because the
 // rebuild is written through the WAL — without it the reclaimed space just
 // sits in a ballooned -wal file until the last connection closes.
+// Vacuum reclaims disk space after a prune. Behavior is dialect-specific:
+// SQLite's plain DELETE never shrinks the file (pages are only free-listed
+// for reuse), so this runs a full VACUUM rebuild followed by a WAL
+// checkpoint truncate — see the "prune --vacuum" one-shot command for why
+// this must never run inside the live server. Postgres has its own VACUUM
+// with different semantics (reclaims space for reuse in place, no rebuild,
+// no WAL-checkpoint-equivalent pragma to run afterward) but supports the
+// same bare statement. MySQL has no database-wide VACUUM at all — space
+// reclamation there is a per-table OPTIMIZE TABLE, and managed/cloud
+// Postgres-family deployments (CockroachDB, Neon) typically handle storage
+// reclamation server-side already — so this is a documented no-op for MySQL
+// rather than a guess at equivalent behavior.
 func (db *DB) Vacuum() error {
-	if _, err := db.conn.Exec(`VACUUM`); err != nil {
+	switch db.dialect.name {
+	case "mysql":
+		return nil
+	case "postgres":
+		_, err := db.exec(`VACUUM`)
+		return err
+	default:
+		if _, err := db.exec(`VACUUM`); err != nil {
+			return err
+		}
+		_, err := db.exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
 		return err
 	}
-	_, err := db.conn.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
-	return err
 }
 
 // ── Admin auth & sessions ─────────────────────────────────────────────────────
@@ -1828,7 +1745,7 @@ func (db *DB) UpdateAdminCredentials(email, newPassword string) error {
 		}
 	}
 	// Invalidate all sessions — anyone logged in must re-authenticate.
-	_, err := db.conn.Exec(`DELETE FROM sessions`)
+	_, err := db.exec(`DELETE FROM sessions`)
 	return err
 }
 
@@ -1956,7 +1873,7 @@ func (db *DB) SetTOTPLastCounter(counter uint64) error {
 // chronologically as a plain string — no SQLite date functions needed.
 func (db *DB) PruneExpiredSessions() (int64, error) {
 	cutoff := time.Now().UTC().Add(-sessionTTL).Format(time.RFC3339)
-	res, err := db.conn.Exec(`DELETE FROM sessions WHERE created_at < ?`, cutoff)
+	res, err := db.exec(`DELETE FROM sessions WHERE created_at < ?`, cutoff)
 	if err != nil {
 		return 0, err
 	}
@@ -1975,7 +1892,7 @@ func (db *DB) CreateSession() (string, error) {
 	b := make([]byte, 32)
 	rand.Read(b) //nolint — never errors on modern platforms
 	token := hex.EncodeToString(b)
-	_, err := db.conn.Exec(
+	_, err := db.exec(
 		`INSERT INTO sessions (token, created_at) VALUES (?, ?)`,
 		token, time.Now().UTC().Format(time.RFC3339),
 	)
@@ -1986,7 +1903,7 @@ func (db *DB) CreateSession() (string, error) {
 // within the last 24 hours.
 func (db *DB) ValidateSession(token string) (bool, error) {
 	var createdAt string
-	err := db.conn.QueryRow(`SELECT created_at FROM sessions WHERE token = ?`, token).Scan(&createdAt)
+	err := db.queryRow(`SELECT created_at FROM sessions WHERE token = ?`, token).Scan(&createdAt)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
@@ -2002,7 +1919,7 @@ func (db *DB) ValidateSession(token string) (bool, error) {
 
 // DeleteSession removes the token on logout.
 func (db *DB) DeleteSession(token string) error {
-	_, err := db.conn.Exec(`DELETE FROM sessions WHERE token = ?`, token)
+	_, err := db.exec(`DELETE FROM sessions WHERE token = ?`, token)
 	return err
 }
 
@@ -2024,21 +1941,17 @@ type APIKey struct {
 // hex digest of the raw key; the raw key itself is shown to the admin exactly
 // once by the caller and never persisted.
 func (db *DB) CreateAPIKey(name, prefix, hash string) (int, error) {
-	res, err := db.conn.Exec(
+	id, err := db.insertReturningID(
 		`INSERT INTO api_keys (name, key_prefix, key_hash) VALUES (?, ?, ?)`,
 		name, prefix, hash,
 	)
-	if err != nil {
-		return 0, err
-	}
-	id, err := res.LastInsertId()
 	return int(id), err
 }
 
 // ListAPIKeys returns every key's metadata, newest first. key_hash is
 // intentionally never selected.
 func (db *DB) ListAPIKeys() ([]APIKey, error) {
-	rows, err := db.conn.Query(
+	rows, err := db.query(
 		`SELECT id, name, key_prefix, created_at, last_used_at FROM api_keys ORDER BY created_at DESC`,
 	)
 	if err != nil {
@@ -2064,7 +1977,7 @@ func (db *DB) ListAPIKeys() ([]APIKey, error) {
 // RemoveAPIKey revokes a key by hard-deleting its row — matching this
 // codebase's existing no-soft-delete convention (RemoveService, RemoveIPRule).
 func (db *DB) RemoveAPIKey(id int) error {
-	_, err := db.conn.Exec(`DELETE FROM api_keys WHERE id = ?`, id)
+	_, err := db.exec(`DELETE FROM api_keys WHERE id = ?`, id)
 	return err
 }
 
@@ -2074,7 +1987,7 @@ func (db *DB) RemoveAPIKey(id int) error {
 func (db *DB) ValidateAPIKey(hash string) (*APIKey, error) {
 	var k APIKey
 	var lastUsed sql.NullTime
-	err := db.conn.QueryRow(
+	err := db.queryRow(
 		`SELECT id, name, key_prefix, created_at, last_used_at FROM api_keys WHERE key_hash = ?`, hash,
 	).Scan(&k.ID, &k.Name, &k.Prefix, &k.CreatedAt, &lastUsed)
 	if err == sql.ErrNoRows {
@@ -2093,7 +2006,7 @@ func (db *DB) ValidateAPIKey(hash string) (*APIKey, error) {
 // Callers should throttle how often this is invoked per key (see
 // ui.apiKeyAuth) rather than calling it on every request.
 func (db *DB) TouchAPIKey(id int) error {
-	_, err := db.conn.Exec(`UPDATE api_keys SET last_used_at = ? WHERE id = ?`, time.Now().UTC(), id)
+	_, err := db.exec(`UPDATE api_keys SET last_used_at = ? WHERE id = ?`, time.Now().UTC(), id)
 	return err
 }
 
@@ -2111,7 +2024,7 @@ func (db *DB) SaveRateLimitState(states []ratelimit.BucketState) error {
 	if _, err := tx.Exec(`DELETE FROM rate_state`); err != nil {
 		return err
 	}
-	stmt, err := tx.Prepare(`INSERT INTO rate_state (ip, tokens, last_refill) VALUES (?, ?, ?)`)
+	stmt, err := tx.Prepare(db.conn.Rebind(`INSERT INTO rate_state (ip, tokens, last_refill) VALUES (?, ?, ?)`))
 	if err != nil {
 		return err
 	}
@@ -2127,7 +2040,7 @@ func (db *DB) SaveRateLimitState(states []ratelimit.BucketState) error {
 // LoadRateLimitState reads all persisted bucket states. Called once at startup
 // before traffic starts, so there's no concurrency concern.
 func (db *DB) LoadRateLimitState() ([]ratelimit.BucketState, error) {
-	rows, err := db.conn.Query(`SELECT ip, tokens, last_refill FROM rate_state`)
+	rows, err := db.query(`SELECT ip, tokens, last_refill FROM rate_state`)
 	if err != nil {
 		return nil, err
 	}
@@ -2150,7 +2063,7 @@ func (db *DB) LoadRateLimitState() ([]ratelimit.BucketState, error) {
 // PurgeRateLimitState deletes bucket states whose last_refill is before before,
 // keeping the rate_state table from growing unboundedly.
 func (db *DB) PurgeRateLimitState(before time.Time) error {
-	_, err := db.conn.Exec(
+	_, err := db.exec(
 		`DELETE FROM rate_state WHERE last_refill < ?`,
 		before.UTC().Format(time.RFC3339Nano),
 	)
@@ -2232,7 +2145,7 @@ type ThreatIntelSource struct {
 }
 
 func (db *DB) AddThreatIntelSource(label, url string, intervalHours int) error {
-	_, err := db.conn.Exec(
+	_, err := db.exec(
 		`INSERT INTO threat_intel_sources (label, url, interval_hours) VALUES (?, ?, ?)`,
 		label, url, intervalHours,
 	)
@@ -2240,19 +2153,19 @@ func (db *DB) AddThreatIntelSource(label, url string, intervalHours int) error {
 }
 
 func (db *DB) DeleteThreatIntelSource(id int64) error {
-	_, err := db.conn.Exec(`DELETE FROM threat_intel_sources WHERE id = ?`, id)
+	_, err := db.exec(`DELETE FROM threat_intel_sources WHERE id = ?`, id)
 	return err
 }
 
 func (db *DB) SetThreatIntelSourceEnabled(id int64, enabled bool) error {
-	_, err := db.conn.Exec(
+	_, err := db.exec(
 		`UPDATE threat_intel_sources SET enabled = ? WHERE id = ?`, boolToInt(enabled), id,
 	)
 	return err
 }
 
 func (db *DB) ListThreatIntelSources() ([]ThreatIntelSource, error) {
-	rows, err := db.conn.Query(`
+	rows, err := db.query(`
 		SELECT id, label, url, interval_hours, enabled,
 		       last_synced_at, last_error, ip_count, created_at
 		FROM threat_intel_sources ORDER BY created_at ASC`)
@@ -2283,13 +2196,13 @@ func (db *DB) ListThreatIntelSources() ([]ThreatIntelSource, error) {
 // value so the UI still shows how many IPs were loaded from the previous run.
 func (db *DB) UpdateThreatIntelSync(id int64, ipCount int, lastError string) error {
 	if lastError != "" {
-		_, err := db.conn.Exec(
+		_, err := db.exec(
 			`UPDATE threat_intel_sources SET last_synced_at = ?, last_error = ? WHERE id = ?`,
 			time.Now().UTC(), lastError, id,
 		)
 		return err
 	}
-	_, err := db.conn.Exec(
+	_, err := db.exec(
 		`UPDATE threat_intel_sources SET last_synced_at = ?, last_error = '', ip_count = ? WHERE id = ?`,
 		time.Now().UTC(), ipCount, id,
 	)
@@ -2304,10 +2217,11 @@ func (db *DB) ReplaceThreatIntelIPs(sourceID int64, ips []string) error {
 		return err
 	}
 	defer tx.Rollback() //nolint
-	if _, err := tx.Exec(`DELETE FROM threat_intel_ips WHERE source_id = ?`, sourceID); err != nil {
+	if _, err := tx.Exec(db.conn.Rebind(`DELETE FROM threat_intel_ips WHERE source_id = ?`), sourceID); err != nil {
 		return err
 	}
-	stmt, err := tx.Prepare(`INSERT OR IGNORE INTO threat_intel_ips (source_id, ip) VALUES (?, ?)`)
+	insertStmt := db.dialect.upsertIgnore("threat_intel_ips", []string{"source_id", "ip"}, "?, ?", []string{"source_id", "ip"})
+	stmt, err := tx.Prepare(db.conn.Rebind(insertStmt))
 	if err != nil {
 		return err
 	}
@@ -2323,7 +2237,7 @@ func (db *DB) ReplaceThreatIntelIPs(sourceID int64, ips []string) error {
 // ListThreatIntelIPs returns all distinct IPs/CIDRs from enabled sources.
 // Used by IPBlocklist.Reload to populate the in-memory intel block set.
 func (db *DB) ListThreatIntelIPs() ([]string, error) {
-	rows, err := db.conn.Query(`
+	rows, err := db.query(`
 		SELECT DISTINCT ti.ip
 		FROM threat_intel_ips ti
 		JOIN threat_intel_sources ts ON ti.source_id = ts.id
@@ -2370,10 +2284,9 @@ type RuleHit struct {
 
 // DisableWAFRule adds (or updates the reason for) a disabled rule.
 func (db *DB) DisableWAFRule(ruleID int, reason string) error {
-	_, err := db.conn.Exec(
-		`INSERT INTO waf_disabled_rules (rule_id, reason)
-		 VALUES (?, ?)
-		 ON CONFLICT(rule_id) DO UPDATE SET reason = excluded.reason`,
+	_, err := db.exec(
+		db.dialect.upsertUpdate("waf_disabled_rules", []string{"rule_id", "reason"}, "?, ?",
+			[]string{"rule_id"}, []string{"reason"}),
 		ruleID, reason,
 	)
 	return err
@@ -2381,13 +2294,13 @@ func (db *DB) DisableWAFRule(ruleID int, reason string) error {
 
 // EnableWAFRule removes a disabled rule by its row ID.
 func (db *DB) EnableWAFRule(id int64) error {
-	_, err := db.conn.Exec(`DELETE FROM waf_disabled_rules WHERE id = ?`, id)
+	_, err := db.exec(`DELETE FROM waf_disabled_rules WHERE id = ?`, id)
 	return err
 }
 
 // ListDisabledWAFRules returns all disabled rules, newest first.
 func (db *DB) ListDisabledWAFRules() ([]DisabledWAFRule, error) {
-	rows, err := db.conn.Query(
+	rows, err := db.query(
 		`SELECT id, rule_id, reason, created_at FROM waf_disabled_rules ORDER BY created_at DESC`,
 	)
 	if err != nil {
@@ -2408,7 +2321,7 @@ func (db *DB) ListDisabledWAFRules() ([]DisabledWAFRule, error) {
 // GetDisabledWAFRuleIDs returns just the rule IDs of all disabled rules.
 // Used by the WAF engine to inject SecRuleRemoveById directives at startup.
 func (db *DB) GetDisabledWAFRuleIDs() ([]int, error) {
-	rows, err := db.conn.Query(`SELECT rule_id FROM waf_disabled_rules`)
+	rows, err := db.query(`SELECT rule_id FROM waf_disabled_rules`)
 	if err != nil {
 		return nil, err
 	}
@@ -2446,10 +2359,9 @@ type WAFServiceException struct {
 // DisableWAFRuleForService adds (or updates the reason for) a rule exception
 // scoped to one service.
 func (db *DB) DisableWAFRuleForService(serviceName string, ruleID int, reason string) error {
-	_, err := db.conn.Exec(
-		`INSERT INTO waf_service_rule_exceptions (service_name, rule_id, reason)
-		 VALUES (?, ?, ?)
-		 ON CONFLICT(service_name, rule_id) DO UPDATE SET reason = excluded.reason`,
+	_, err := db.exec(
+		db.dialect.upsertUpdate("waf_service_rule_exceptions", []string{"service_name", "rule_id", "reason"}, "?, ?, ?",
+			[]string{"service_name", "rule_id"}, []string{"reason"}),
 		serviceName, ruleID, reason,
 	)
 	return err
@@ -2457,13 +2369,13 @@ func (db *DB) DisableWAFRuleForService(serviceName string, ruleID int, reason st
 
 // EnableWAFRuleForService removes a per-service rule exception by its row ID.
 func (db *DB) EnableWAFRuleForService(id int64) error {
-	_, err := db.conn.Exec(`DELETE FROM waf_service_rule_exceptions WHERE id = ?`, id)
+	_, err := db.exec(`DELETE FROM waf_service_rule_exceptions WHERE id = ?`, id)
 	return err
 }
 
 // ListWAFServiceExceptions returns all per-service rule exceptions, newest first.
 func (db *DB) ListWAFServiceExceptions() ([]WAFServiceException, error) {
-	rows, err := db.conn.Query(
+	rows, err := db.query(
 		`SELECT id, service_name, rule_id, reason, created_at
 		 FROM waf_service_rule_exceptions ORDER BY created_at DESC`,
 	)
@@ -2486,7 +2398,7 @@ func (db *DB) ListWAFServiceExceptions() ([]WAFServiceException, error) {
 // serviceName. It does not include globally-disabled rules — callers union
 // this with GetDisabledWAFRuleIDs themselves.
 func (db *DB) GetWAFRuleIDsForService(serviceName string) ([]int, error) {
-	rows, err := db.conn.Query(
+	rows, err := db.query(
 		`SELECT rule_id FROM waf_service_rule_exceptions WHERE service_name = ?`, serviceName,
 	)
 	if err != nil {
@@ -2508,7 +2420,7 @@ func (db *DB) GetWAFRuleIDsForService(serviceName string) ([]int, error) {
 // at least one per-service rule exception. Used to know which services need
 // their own compiled WAF engine on top of the shared default one.
 func (db *DB) ListWAFExceptionServiceNames() ([]string, error) {
-	rows, err := db.conn.Query(`SELECT DISTINCT service_name FROM waf_service_rule_exceptions`)
+	rows, err := db.query(`SELECT DISTINCT service_name FROM waf_service_rule_exceptions`)
 	if err != nil {
 		return nil, err
 	}
@@ -2548,7 +2460,7 @@ func parseTS(s string) time.Time {
 // GetTopFiringRules returns the most-blocked WAF rule IDs from request history,
 // annotated with whether each rule is currently disabled.
 func (db *DB) GetTopFiringRules(limit int) ([]RuleHit, error) {
-	rows, err := db.conn.Query(
+	rows, err := db.query(
 		`SELECT rule_id, COUNT(*) AS hit_count, MAX(ts) AS last_seen
 		 FROM requests
 		 WHERE rule_id > 0 AND blocked = 1
@@ -2612,7 +2524,7 @@ var webhookDestinationTypes = map[string]bool{
 func (db *DB) GetWebhookConfig() (WebhookConfig, error) {
 	var cfg WebhookConfig
 	var enabled int
-	err := db.conn.QueryRow(
+	err := db.queryRow(
 		`SELECT url, secret, enabled, events, destination_type FROM webhook_config WHERE id = 1`,
 	).Scan(&cfg.URL, &cfg.Secret, &enabled, &cfg.Events, &cfg.DestinationType)
 	if err != nil {
@@ -2636,7 +2548,7 @@ func (db *DB) SetWebhookConfig(cfg WebhookConfig) error {
 	if !webhookDestinationTypes[cfg.DestinationType] {
 		cfg.DestinationType = "generic"
 	}
-	_, err = db.conn.Exec(
+	_, err = db.exec(
 		`UPDATE webhook_config SET url=?, secret=?, enabled=?, events=?, destination_type=? WHERE id=1`,
 		cfg.URL, sealed, boolToInt(cfg.Enabled), cfg.Events, cfg.DestinationType,
 	)
@@ -2717,16 +2629,16 @@ type DailyReport struct {
 // Go time format modernc/sqlite stores (see GetHourlyTraffic).
 func (db *DB) GetDailyReport(from, to time.Time) (DailyReport, error) {
 	var rep DailyReport
-	err := db.conn.QueryRow(`
+	err := db.queryRow(`
 		SELECT COUNT(*),
-		       COUNT(*) FILTER (WHERE blocked = 1),
-		       COUNT(*) FILTER (WHERE status = 403),
-		       COUNT(DISTINCT real_ip) FILTER (WHERE blocked = 1),
-		       COUNT(*) FILTER (WHERE blocked = 1 AND rule_id > 0),
-		       COUNT(*) FILTER (WHERE blocked = 1 AND action LIKE 'ip_blocked%'),
-		       COUNT(*) FILTER (WHERE blocked = 1 AND action LIKE 'geo_blocked%'),
-		       COUNT(*) FILTER (WHERE blocked = 1 AND action LIKE 'rate_limited%'),
-		       COUNT(*) FILTER (WHERE action LIKE 'bot_challenge%')
+		       COALESCE(SUM(CASE WHEN blocked = 1 THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN status = 403 THEN 1 ELSE 0 END), 0),
+		       COUNT(DISTINCT CASE WHEN blocked = 1 THEN real_ip END),
+		       COALESCE(SUM(CASE WHEN blocked = 1 AND rule_id > 0 THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN blocked = 1 AND action LIKE 'ip_blocked%' THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN blocked = 1 AND action LIKE 'geo_blocked%' THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN blocked = 1 AND action LIKE 'rate_limited%' THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN action LIKE 'bot_challenge%' THEN 1 ELSE 0 END), 0)
 		FROM requests WHERE ts >= ? AND ts < ?`,
 		from.UTC(), to.UTC(),
 	).Scan(&rep.Total, &rep.Blocked, &rep.Status403, &rep.UniqueBlockedIPs,
@@ -2745,7 +2657,7 @@ func (db *DB) ExportRequests(f LogFilter, fn func(RequestLog) bool) error {
 	                 status, blocked, rule_id, action, user_agent, duration_ms, headers_json,
 	                 request_id, proto, tls_version, tls_cipher, tls_sni, asn_num, org, ja3_hash, ja4, visitor_id, bot_score
 	          FROM requests ` + where + ` ORDER BY ts DESC`
-	rows, err := db.conn.Query(query, args...)
+	rows, err := db.query(query, args...)
 	if err != nil {
 		return err
 	}
@@ -2796,17 +2708,10 @@ type IPThreatScore struct {
 // UpsertIPThreatScore stores s's latest composite score, replacing any
 // previous score for the same IP.
 func (db *DB) UpsertIPThreatScore(s IPThreatScore) error {
-	_, err := db.conn.Exec(
-		`INSERT INTO ip_threat_scores (ip, total_score, autoban_score, bot_score, asn_score, geo_score, ja4_score, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(ip) DO UPDATE SET
-		   total_score = excluded.total_score,
-		   autoban_score = excluded.autoban_score,
-		   bot_score = excluded.bot_score,
-		   asn_score = excluded.asn_score,
-		   geo_score = excluded.geo_score,
-		   ja4_score = excluded.ja4_score,
-		   updated_at = excluded.updated_at`,
+	cols := []string{"ip", "total_score", "autoban_score", "bot_score", "asn_score", "geo_score", "ja4_score", "updated_at"}
+	updateCols := []string{"total_score", "autoban_score", "bot_score", "asn_score", "geo_score", "ja4_score", "updated_at"}
+	_, err := db.exec(
+		db.dialect.upsertUpdate("ip_threat_scores", cols, "?, ?, ?, ?, ?, ?, ?, ?", []string{"ip"}, updateCols),
 		s.IP, s.Total, s.AutobanScore, s.BotScore, s.ASNScore, s.GeoScore, s.JA4Score, s.UpdatedAt.UTC(),
 	)
 	return err
@@ -2817,7 +2722,7 @@ func (db *DB) UpsertIPThreatScore(s IPThreatScore) error {
 func (db *DB) GetIPThreatScore(ip string) (IPThreatScore, bool, error) {
 	var s IPThreatScore
 	s.IP = ip
-	err := db.conn.QueryRow(
+	err := db.queryRow(
 		`SELECT total_score, autoban_score, bot_score, asn_score, geo_score, ja4_score, updated_at
 		 FROM ip_threat_scores WHERE ip = ?`, ip,
 	).Scan(&s.Total, &s.AutobanScore, &s.BotScore, &s.ASNScore, &s.GeoScore, &s.JA4Score, &s.UpdatedAt)
@@ -2847,7 +2752,7 @@ func (db *DB) GetIPThreatScores(ips []string) (map[string]int, error) {
 		args[i] = ip
 	}
 
-	rows, err := db.conn.Query(
+	rows, err := db.query(
 		`SELECT ip, total_score FROM ip_threat_scores WHERE ip IN (`+placeholders+`)`, args...,
 	)
 	if err != nil {
@@ -2871,23 +2776,54 @@ func (db *DB) GetIPThreatScores(ips []string) (map[string]int, error) {
 // blocked traffic across many IPs/connections — the ja4 package's own store
 // is connection-scoped and forgets fingerprints as soon as the connection
 // closes.
+// bumpJA4ReputationSQL returns the dialect-specific "INSERT ... increment on
+// conflict" statement for BumpJA4Reputation. Unlike every other upsert in
+// this file (a plain "replace with the newly-inserted value", handled
+// generically by dialect.upsertUpdate), this one increments the *existing*
+// row's columns — which needs a different clause per dialect: MySQL's
+// "ON DUPLICATE KEY UPDATE" allows a bare "hits = hits + 1" (unqualified
+// column names there refer to the existing row; VALUES(col) refers to the
+// proposed one), and so does SQLite's "ON CONFLICT DO UPDATE SET". Postgres
+// alone requires the existing-row reference to be qualified with the table
+// name — "hits = hits + 1" is rejected as "ambiguous" (confirmed
+// empirically against a live Postgres instance, not assumed), needing
+// "hits = ja4_reputation.hits + 1" instead.
+func bumpJA4ReputationSQL(d dialect) string {
+	switch d.name {
+	case "mysql":
+		return `INSERT INTO ja4_reputation (ja4, hits, blocked_hits, last_seen) VALUES (?, 1, ?, ?)
+		 ON DUPLICATE KEY UPDATE
+		   hits = hits + 1,
+		   blocked_hits = blocked_hits + ?,
+		   last_seen = VALUES(last_seen)`
+	case "postgres":
+		return `INSERT INTO ja4_reputation (ja4, hits, blocked_hits, last_seen) VALUES (?, 1, ?, ?)
+		 ON CONFLICT(ja4) DO UPDATE SET
+		   hits = ja4_reputation.hits + 1,
+		   blocked_hits = ja4_reputation.blocked_hits + ?,
+		   last_seen = excluded.last_seen`
+	default:
+		return `INSERT INTO ja4_reputation (ja4, hits, blocked_hits, last_seen) VALUES (?, 1, ?, ?)
+		 ON CONFLICT(ja4) DO UPDATE SET
+		   hits = hits + 1,
+		   blocked_hits = blocked_hits + ?,
+		   last_seen = excluded.last_seen`
+	}
+}
+
 func (db *DB) BumpJA4Reputation(ja4 string, blocked bool) (hits, blockedHits int, err error) {
 	blockedInc := 0
 	if blocked {
 		blockedInc = 1
 	}
-	_, err = db.conn.Exec(
-		`INSERT INTO ja4_reputation (ja4, hits, blocked_hits, last_seen) VALUES (?, 1, ?, ?)
-		 ON CONFLICT(ja4) DO UPDATE SET
-		   hits = hits + 1,
-		   blocked_hits = blocked_hits + ?,
-		   last_seen = excluded.last_seen`,
+	_, err = db.exec(
+		bumpJA4ReputationSQL(db.dialect),
 		ja4, blockedInc, time.Now().UTC(), blockedInc,
 	)
 	if err != nil {
 		return 0, 0, err
 	}
-	err = db.conn.QueryRow(
+	err = db.queryRow(
 		`SELECT hits, blocked_hits FROM ja4_reputation WHERE ja4 = ?`, ja4,
 	).Scan(&hits, &blockedHits)
 	return hits, blockedHits, err

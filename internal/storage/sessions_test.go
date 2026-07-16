@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -10,15 +9,11 @@ import (
 // just rejected at read time by ValidateSession) while live sessions survive,
 // and that CreateSession sweeps opportunistically on login.
 func TestPruneExpiredSessions(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := openTestDB(t)
 
 	insert := func(token string, age time.Duration) {
 		t.Helper()
-		_, err := db.conn.Exec(
+		_, err := db.exec(
 			`INSERT INTO sessions (token, created_at) VALUES (?, ?)`,
 			token, time.Now().UTC().Add(-age).Format(time.RFC3339),
 		)
@@ -29,7 +24,7 @@ func TestPruneExpiredSessions(t *testing.T) {
 	count := func() int {
 		t.Helper()
 		var n int
-		if err := db.conn.QueryRow(`SELECT COUNT(*) FROM sessions`).Scan(&n); err != nil {
+		if err := db.queryRow(`SELECT COUNT(*) FROM sessions`).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		return n

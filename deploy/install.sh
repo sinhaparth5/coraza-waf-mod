@@ -136,6 +136,23 @@ if [ -f "${INSTALL_PATH}" ]; then
 	IS_UPGRADE=1
 fi
 
+# ── Detect existing database backend (upgrade only) ──────────────────────────
+# The systemd unit is rewritten unconditionally on every run (see "Systemd
+# units" below), so without this the ExecStart line would silently reset
+# back to the hardcoded SQLite default on every upgrade, undoing a MySQL/
+# Postgres switch made either interactively on a previous fresh install or
+# later via the admin UI's Settings -> Database connection card. The unit
+# file's own ExecStart line is the source of truth for "what's running now"
+# — mirrors how the self-signed TLS cert flags are already preserved across
+# upgrades further down this script.
+EXISTING_DB_DRIVER=""
+EXISTING_DB_DSN=""
+if [ "$IS_UPGRADE" = "1" ] && [ -f "${UNIT_PATH}" ]; then
+	EXISTING_EXEC_LINE="$(grep '^ExecStart=' "${UNIT_PATH}" | head -1)"
+	EXISTING_DB_DRIVER="$(printf '%s' "$EXISTING_EXEC_LINE" | sed -n "s/.*--db-driver  *\([^ ]*\).*/\1/p")"
+	EXISTING_DB_DSN="$(printf '%s' "$EXISTING_EXEC_LINE" | sed -n "s/.*--db  *'\([^']*\)'.*/\1/p")"
+fi
+
 # ── Detect latest release version ────────────────────────────────────────────
 
 if [ -z "$CORAZA_VERSION" ]; then
@@ -170,6 +187,23 @@ ADMIN_EMAIL=""
 ADMIN_PASSWORD=""
 DOMAIN=""
 USE_ACME=0
+
+# Database backend — only ever asked on a fresh install. DB_DSN is computed
+# later, once the binary is actually installed (it's built via the binary's
+# own `build-dsn` subcommand so a password containing ":"/"@"/"/" gets
+# escaped correctly instead of a shell string concatenation corrupting it).
+# On upgrade, whatever was chosen before is read back from the existing
+# systemd unit's ExecStart line (see "Detect existing database backend"
+# below) instead of asked again, so re-running this installer never resets
+# a MySQL/Postgres deployment back to the SQLite default.
+DB_DRIVER="sqlite"
+DB_DSN=""
+DB_HOST=""
+DB_PORT=""
+DB_USER=""
+DB_PASSWORD=""
+DB_NAME=""
+DB_SSLMODE=""
 
 if [ "$IS_UPGRADE" = "0" ] && [ "$DRY_RUN" != "1" ]; then
 	# When piped from curl, stdin is the pipe — reconnect to the terminal.
@@ -219,6 +253,35 @@ if [ "$IS_UPGRADE" = "0" ] && [ "$DRY_RUN" != "1" ]; then
 		detail "Browsers will show a security warning — you can add an exception."
 	fi
 	echo
+
+	# ── Database backend ────────────────────────────────────────────────────
+	step "Database backend"
+	detail "SQLite (default) needs nothing else — recommended unless you already"
+	detail "run a shared/managed MySQL, MariaDB, or Postgres-compatible server."
+	echo
+	read -rp "${C_CYAN}  Use an external database instead of SQLite? [y/N]:${C_RESET} " USE_EXTERNAL_DB
+
+	if [[ "$USE_EXTERNAL_DB" =~ ^[Yy] ]]; then
+		while true; do
+			read -rp "${C_CYAN}  Driver (mysql/postgres):${C_RESET} " DB_DRIVER
+			case "$(printf '%s' "$DB_DRIVER" | tr '[:upper:]' '[:lower:]')" in
+				mysql | mariadb | postgres | postgresql | cockroachdb | neon) break ;;
+				*) printf '  %sEnter mysql or postgres.%s\n' "$C_RED" "$C_RESET" ;;
+			esac
+		done
+		read -rp "${C_CYAN}  Host (hostname, IP, or Docker service name):${C_RESET} " DB_HOST
+		read -rp "${C_CYAN}  Port (leave empty for the driver default):${C_RESET} " DB_PORT
+		read -rp "${C_CYAN}  Username:${C_RESET} " DB_USER
+		read -rsp "${C_CYAN}  Password:${C_RESET} " DB_PASSWORD
+		echo
+		read -rp "${C_CYAN}  Database name:${C_RESET} " DB_NAME
+		read -rp "${C_CYAN}  SSL mode (leave empty for the driver default; Postgres/Neon/CockroachDB usually want 'require'):${C_RESET} " DB_SSLMODE
+		echo
+		detail "Connection details recorded — verified once the binary is installed below."
+	else
+		DB_DRIVER="sqlite"
+	fi
+	echo
 elif [ "$DRY_RUN" = "1" ]; then
 	ADMIN_EMAIL="admin@example.com"
 	ADMIN_PASSWORD="<prompted-at-runtime>"
@@ -250,6 +313,37 @@ else
 
 	step "Installing to ${INSTALL_PATH}"
 	install -m 0755 "${WORKDIR}/${ASSET}" "${INSTALL_PATH}"
+fi
+
+# ── Resolve database driver/DSN ───────────────────────────────────────────────
+# Only now (binary installed) can build-dsn actually run. Three cases:
+#   upgrade + a non-sqlite driver was already configured -> keep it verbatim
+#   upgrade + sqlite (or an unrecognized/pre-existing unit) -> the one true
+#     SQLite default path, same as every version of this installer has used
+#   fresh install + external DB chosen above -> build the DSN now
+if [ "$IS_UPGRADE" = "1" ]; then
+	if [ -n "$EXISTING_DB_DRIVER" ] && [ "$EXISTING_DB_DRIVER" != "sqlite" ]; then
+		DB_DRIVER="$EXISTING_DB_DRIVER"
+		DB_DSN="$EXISTING_DB_DSN"
+		step "Keeping existing database backend: ${DB_DRIVER}"
+	else
+		DB_DRIVER="sqlite"
+		DB_DSN="${VAR_DIR}/waf.db"
+	fi
+elif [ "$DB_DRIVER" != "sqlite" ] && [ "$DRY_RUN" != "1" ]; then
+	step "Building database connection string"
+	# Password on stdin (printf is a shell builtin, so it never appears in
+	# ps/argv), same pattern as the `setup` invocations below — build-dsn
+	# deliberately has no --password flag.
+	DB_DSN="$(printf '%s\n' "$DB_PASSWORD" \
+		| "${INSTALL_PATH}" build-dsn \
+			--driver "$DB_DRIVER" --host "$DB_HOST" --port "$DB_PORT" \
+			--username "$DB_USER" --dbname "$DB_NAME" --sslmode "$DB_SSLMODE")"
+	ok "Connection string built for ${DB_DRIVER}"
+elif [ "$DRY_RUN" = "1" ] && [ "$DB_DRIVER" != "sqlite" ]; then
+	DB_DSN="<built-from-prompted-values>"
+else
+	DB_DSN="${VAR_DIR}/waf.db"
 fi
 
 # ── System user ───────────────────────────────────────────────────────────────
@@ -310,11 +404,11 @@ if [ "$IS_UPGRADE" = "0" ] && [ "$DRY_RUN" != "1" ]; then
 		# Store the domain and admin email so startTLS includes it in the host policy.
 		printf '%s\n' "${ADMIN_PASSWORD}" \
 			| "${INSTALL_PATH}" setup \
-				--db "${VAR_DIR}/waf.db" \
+				--db-driver "${DB_DRIVER}" --db "${DB_DSN}" \
 				--admin-email "${ADMIN_EMAIL}" \
 				--domain "${DOMAIN}" \
 				--acme-email "${ADMIN_EMAIL}"
-		chown "${SERVICE_USER}:${SERVICE_USER}" "${VAR_DIR}/waf.db" 2>/dev/null || true
+		[ "$DB_DRIVER" = "sqlite" ] && chown "${SERVICE_USER}:${SERVICE_USER}" "${DB_DSN}" 2>/dev/null || true
 		# (No --tls-cert flags — ACME handles it)
 	fi
 elif [ "$DRY_RUN" = "1" ]; then
@@ -334,9 +428,9 @@ if [ "$IS_UPGRADE" = "0" ] && [ "$USE_ACME" = "0" ] && [ "$DRY_RUN" != "1" ]; th
 	step "Seeding admin credentials"
 	printf '%s\n' "${ADMIN_PASSWORD}" \
 		| "${INSTALL_PATH}" setup \
-			--db "${VAR_DIR}/waf.db" \
+			--db-driver "${DB_DRIVER}" --db "${DB_DSN}" \
 			--admin-email "${ADMIN_EMAIL}"
-	chown "${SERVICE_USER}:${SERVICE_USER}" "${VAR_DIR}/waf.db" 2>/dev/null || true
+	[ "$DB_DRIVER" = "sqlite" ] && chown "${SERVICE_USER}:${SERVICE_USER}" "${DB_DSN}" 2>/dev/null || true
 fi
 
 # ── Systemd units ─────────────────────────────────────────────────────────────
@@ -354,7 +448,7 @@ Type=simple
 User=${SERVICE_USER}
 Group=${SERVICE_USER}
 WorkingDirectory=${VAR_DIR}
-ExecStart=${INSTALL_PATH} ${TLS_FLAGS} --db ${VAR_DIR}/waf.db --certs ${VAR_DIR}/certs --retention 30 --db-key-file ${DB_KEY_FILE}
+ExecStart=${INSTALL_PATH} ${TLS_FLAGS} --db-driver ${DB_DRIVER} --db '${DB_DSN}' --certs ${VAR_DIR}/certs --retention 30 --db-key-file ${DB_KEY_FILE}
 Restart=on-failure
 RestartSec=5s
 
@@ -382,7 +476,7 @@ WorkingDirectory=${VAR_DIR}
 # --vacuum rebuilds the DB file after pruning so freed pages go back to the
 # OS — a plain DELETE never shrinks a SQLite file, it only marks pages
 # reusable inside it.
-ExecStart=${INSTALL_PATH} prune --db ${VAR_DIR}/waf.db --retention 30 --vacuum
+ExecStart=${INSTALL_PATH} prune --db-driver ${DB_DRIVER} --db '${DB_DSN}' --retention 30 --vacuum
 UNIT
 
 write_file "${PRUNE_TIMER_PATH}" <<UNIT
