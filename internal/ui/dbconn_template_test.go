@@ -43,6 +43,7 @@ func TestDBConnCardRenders(t *testing.T) {
 			want: []string{
 				`value="db"`, `value="3306"`, `value="root"`, `value="coraza"`,
 				`id="dbconn_sslmode_mysql"`, `/admin/settings/dbconn/test`,
+				`/admin/settings/dbconn/migrate`, "Migrate configuration here",
 			},
 		},
 		{

@@ -507,18 +507,35 @@
       </div>
     </div>
 
-    <div id="dbconn-test-row" class="flex items-center gap-3 {{if eq .DBConnDriver "sqlite"}}hidden{{end}}">
-      <button type="button"
-              hx-post="{{.AdminPath}}/settings/dbconn/test"
-              hx-include="#dbconn-form"
-              hx-target="#dbconn-test-result"
-              hx-swap="innerHTML"
-              class="inline-flex items-center gap-2 rounded-md border border-line bg-surface text-slate-700 text-[13px] font-medium px-4 py-1.5 hover:bg-canvas transition-colors">
-        <i class="hgi hgi-stroke hgi-wifi text-base"></i>
-        Test connection
-      </button>
+    <div id="dbconn-test-row" class="flex flex-col gap-3 {{if eq .DBConnDriver "sqlite"}}hidden{{end}}">
+      <div class="flex items-center gap-3">
+        <button type="button"
+                hx-post="{{.AdminPath}}/settings/dbconn/test"
+                hx-include="#dbconn-form"
+                hx-target="#dbconn-test-result"
+                hx-swap="innerHTML"
+                class="inline-flex items-center gap-2 rounded-md border border-line bg-surface text-slate-700 text-[13px] font-medium px-4 py-1.5 hover:bg-canvas transition-colors">
+          <i class="hgi hgi-stroke hgi-wifi text-base"></i>
+          Test connection
+        </button>
+      </div>
+      <div id="dbconn-test-result" class="text-[13px]"></div>
+
+      <div class="flex items-center gap-3 pt-2 border-t border-line">
+        <button type="button"
+                hx-post="{{.AdminPath}}/settings/dbconn/migrate"
+                hx-include="#dbconn-form"
+                hx-target="#dbconn-migrate-result"
+                hx-swap="innerHTML"
+                hx-confirm="Migrate all WAF configuration (services, IP/geo rules, certificates, API keys, WAF rule overrides, threat-intel sources, webhook settings, threat scores) into this connection?&#10;&#10;Your current database is left completely untouched — this only writes into the target. Run this once against an empty target; running it again against an already-migrated target will fail on duplicate keys instead of overwriting."
+                class="inline-flex items-center gap-2 rounded-md border border-line bg-surface text-slate-700 text-[13px] font-medium px-4 py-1.5 hover:bg-canvas transition-colors">
+          <i class="hgi hgi-stroke hgi-database-01 text-base"></i>
+          Migrate configuration here
+        </button>
+      </div>
+      <p class="text-[12px] text-slate-400">Copies services, IP/geo rules, certificates, API keys, WAF rule overrides, threat-intel sources, webhook settings, and threat scores — not the request log, which stays behind (it's disposable history, like <code class="font-mono">prune</code> already treats it). Doesn't touch your current database or switch the live connection.</p>
+      <div id="dbconn-migrate-result" class="text-[13px]"></div>
     </div>
-    <div id="dbconn-test-result" class="text-[13px]"></div>
 
     <div class="pt-1">
       <button type="submit" class="btn-primary px-6">Save</button>

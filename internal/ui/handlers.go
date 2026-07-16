@@ -335,6 +335,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/settings/email/test", h.TestEmailReport)
 	g.POST("/settings/dbconn", h.SaveDBConnConfig)
 	g.POST("/settings/dbconn/test", h.TestDBConnection)
+	g.POST("/settings/dbconn/migrate", h.MigrateDBConfig)
 	g.POST("/settings/api-keys", h.CreateAPIKey)
 	g.DELETE("/settings/api-keys/:id", h.DeleteAPIKey)
 	g.GET("/waf-rules", h.WAFRulesPage)
@@ -2722,6 +2723,54 @@ func (h *Handler) TestDBConnection(c echo.Context) error {
 		`<p class="text-[12px] text-slate-500">Not applied yet — restart the server with these flags to switch to it:</p>`+
 		`<pre class="bg-slate-900 text-green-400 text-[11px] font-mono rounded-md px-3 py-2 overflow-x-auto">`+template.HTMLEscapeString(flags)+`</pre>`+
 		`</div>`)
+}
+
+// MigrateDBConfig copies this server's configuration (see
+// storage.MigrateConfigTo's doc comment for the exact table list and what's
+// deliberately excluded, e.g. the request log) into the connection
+// described by the card's current form fields — the same
+// resolveDBConnInput TestDBConnection uses. The source (this server's
+// actual live database) is never modified, so this is safe to run more
+// than once against different targets; it is NOT safe to run twice against
+// the same already-migrated target, which fails on duplicate keys rather
+// than overwriting (the confirm dialog on the button says this). Like
+// Save/Test, this never switches the live connection — that still needs a
+// restart with the flags TestDBConnection shows.
+func (h *Handler) MigrateDBConfig(c echo.Context) error {
+	driver, dsn, err := resolveDBConnInput(c)
+	if err != nil {
+		return c.HTML(http.StatusOK,
+			`<span class="text-red-600 text-[13px]">`+template.HTMLEscapeString(err.Error())+`</span>`)
+	}
+	report, err := h.db.MigrateConfigTo(driver, dsn)
+	if err != nil {
+		return c.HTML(http.StatusOK, ""+
+			`<div class="flex flex-col gap-2">`+
+			`<span class="text-red-600 text-[13px]">Migration failed: `+template.HTMLEscapeString(err.Error())+`</span>`+
+			migrationReportHTML(report)+
+			`</div>`)
+	}
+	return c.HTML(http.StatusOK, ""+
+		`<div class="flex flex-col gap-2">`+
+		`<span class="text-brand text-[13px] font-medium">Migrated `+fmt.Sprintf("%d", report.TotalRows)+` rows. Your current database is untouched.</span>`+
+		migrationReportHTML(report)+
+		`<p class="text-[12px] text-slate-500">Not applied yet — restart the server with the flags above (from "Test connection") to switch to it.</p>`+
+		`</div>`)
+}
+
+// migrationReportHTML renders a per-table row-count list for
+// MigrateDBConfig's result fragment. Table names come from a fixed Go
+// literal list in storage.MigrateConfigTo, never user input, but escaped
+// anyway on general principle for anything written via string
+// concatenation into an HTML response.
+func migrationReportHTML(report storage.MigrationReport) string {
+	var b strings.Builder
+	b.WriteString(`<ul class="text-[12px] text-slate-500 font-mono list-disc list-inside">`)
+	for _, t := range report.Tables {
+		fmt.Fprintf(&b, "<li>%s: %d</li>", template.HTMLEscapeString(t.Table), t.Rows)
+	}
+	b.WriteString(`</ul>`)
+	return b.String()
 }
 
 func (h *Handler) ChangeCredentials(c echo.Context) error {

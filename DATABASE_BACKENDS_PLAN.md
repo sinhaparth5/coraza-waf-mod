@@ -401,6 +401,142 @@ exact `--db-driver`/`--db` flag values to apply by restarting the process.
   password is correctly rejected — not just unit-tested against the same
   driver's own DSN parser.
 
+## CLI persistence across installs/upgrades, and a Settings-page migration button
+
+Added after the Settings-page connection card, in response to two follow-up
+asks: (1) let `deploy/install.sh` choose the DB backend on first install and
+keep using that choice on every subsequent upgrade rather than resetting to
+SQLite, and (2) let an admin already running SQLite migrate to MySQL/Postgres
+from the Settings page without losing their existing configuration, without
+deleting the original SQLite file.
+
+**`build-dsn` CLI subcommand** (`main.go`'s `runBuildDSN`): prints a
+dialect-correct DSN built from `--driver`/`--host`/`--port`/`--username`/
+`--password`/`--dbname`/`--sslmode`/`--extra` flags to stdout, via the same
+`storage.BuildDSN` the Settings-page card uses. Exists so `install.sh` (and
+anyone else scripting a connection string) never has to hand-roll DSN
+escaping in bash — a password containing `:`/`@`/`/` would silently corrupt
+a naive `fmt.Sprintf`-style concatenation, confirmed by
+`TestBuildDSNEscapesSpecialCharacters`.
+
+**`deploy/install.sh`**: on a fresh install, a new "Database backend" prompt
+(mirrors the existing admin-credentials/HTTPS prompts) asks whether to use
+an external database; if yes, gathers driver/host/port/user/password/dbname/
+sslmode and calls `build-dsn` once the binary is installed (DSN-building
+needs a runnable binary, so this happens after "Installing to
+${INSTALL_PATH}", even though the prompts themselves happen earlier
+alongside the other fresh-install-only questions). On an **upgrade**, the
+existing systemd unit's `ExecStart` line is parsed back (`grep`+`sed` for
+`--db-driver X`/`--db '...'`) and reused verbatim instead of re-prompting —
+necessary because the unit file is rewritten unconditionally on every run
+(fresh install and upgrade alike), so without this an upgrade would silently
+reset a MySQL/Postgres deployment back to the hardcoded SQLite default,
+exactly mirroring the pre-existing self-signed-TLS-cert preservation pattern
+already in the script. An old (pre-this-feature) unit file has no
+`--db-driver` at all — the extraction correctly comes back empty in that
+case and falls through to the standard SQLite default path, which was
+already the only value that kind of install could have had. Verified via
+`bash -n` (syntax), `DRY_RUN=1 bash install.sh` (full non-interactive
+code path), and a standalone extraction test against synthetic `ExecStart`
+lines covering old-format/new-format/postgres-with-escaped-password/mysql —
+all four parse correctly. The `--db '...'` value is always single-quoted in
+the generated unit now (previously unquoted, harmless for a bare SQLite
+path but necessary once the value can be an arbitrary DSN with `?`/`&`/`%`
+in it).
+
+**Settings-page "Migrate configuration here" button** (`storage.
+MigrateConfigTo`, `internal/storage/migrate_backend.go`): copies this
+server's *configuration* — services, IP/geo rules, meta (settings +
+secrets + admin credentials), certificates, API keys, WAF rule overrides,
+threat-intel sources + their synced IPs, webhook config, IP threat scores,
+JA4 reputation — into a freshly-`OpenWithDriver`-opened target (which
+creates the target's schema as a side effect, satisfying "tables should be
+created there" with no extra code). Deliberately excludes `requests` (the
+access log — could be millions of rows, disposable history exactly like the
+existing `prune` command already treats it), `sessions` (recreated on next
+login), and `rate_state` (transient token-bucket state) — a user-facing
+choice, not a default assumption (see the scope question below). The
+*source* database is never written to or closed, only read from, so the
+admin's existing SQLite file (or whatever backend is currently live) is
+left completely untouched regardless of outcome, and the button can be
+run again against a different target if the first attempt looks wrong.
+Matches the earlier architectural decision for the connection card: this
+never switches the live connection either — a restart with the flags
+"Test connection" shows is still required to actually cut over.
+
+Implementation had to be defensive in ways a naive generic byte-copy would
+get wrong, all confirmed empirically against live MySQL 8/Postgres 16
+before shipping:
+
+- **Primary keys are preserved verbatim**, not re-generated — `services.
+  cert_id` and `threat_intel_ips.source_id` reference other tables' ids by
+  value, so a re-generated id would silently break those references. Every
+  per-table migrator scans/inserts explicit ids.
+- **Postgres's `GENERATED ALWAYS AS IDENTITY` rejects an explicit id value
+  outright** ("cannot insert a non-DEFAULT value into column id") unless the
+  INSERT includes `OVERRIDING SYSTEM VALUE` — confirmed empirically, not
+  assumed, exactly like every other Postgres-specific quirk this project has
+  hit. MySQL's `AUTO_INCREMENT` and SQLite's `AUTOINCREMENT` both accept an
+  explicit id with no special syntax.
+- **Real bug caught live**: Postgres does **not** auto-advance a `GENERATED
+  ALWAYS AS IDENTITY` sequence for an `OVERRIDING SYSTEM VALUE` insert (only
+  inserts that actually draw from `nextval()` do) — without a fix, the very
+  next *normal* insert on the target (e.g. adding a service through the
+  admin UI after switching backends) could collide with an id that was just
+  migrated and fail with a duplicate-key error. `TestMigrateConfigTo`
+  against a live Postgres target caught this directly (a post-migration
+  `AddGeoRule` failed with "duplicate key value violates unique constraint").
+  Fixed with `fixPostgresIdentitySequence`: `SELECT setval(pg_get_serial_
+  sequence(table, 'id'), (SELECT MAX(id) FROM table))`, run once per table
+  after a migration that both targets Postgres and actually inserted rows
+  into a table with a real identity column (`hasIdentitySeq` — deliberately
+  excludes `webhook_config`'s literal non-identity `id INTEGER PRIMARY KEY
+  CHECK (id = 1)`, which has no sequence to advance at all).
+- **TIMESTAMP/DATETIME columns must be scanned and reinserted as typed
+  `time.Time`, never as a plain string.** Confirmed empirically that scanning
+  a MySQL `TIMESTAMP` column into a `*string` destination hands back an
+  ISO8601 `'T'/'Z'`-format string, and MySQL's own `TIMESTAMP` column then
+  **rejects that exact string** on insert ("Incorrect datetime value") —
+  a same-column string round-trip doesn't work even within MySQL alone, let
+  alone across dialects. A typed `time.Time` round-trips correctly through
+  every driver's own wire encoding on all three backends. This is also why
+  the migrators don't reuse `CertRecord.CreatedAt` (a plain `string` field,
+  untouched by Phase 2/4's live testing since no existing test exercised
+  it) — each migrator scans its own local `time.Time` variable regardless of
+  what Go type the corresponding public API struct happens to use.
+- **Secret-bearing meta keys are decrypted from the source and resealed
+  under the target's own key (or left plaintext if the target has none)**,
+  never copied as a raw stored value — a source encrypted under one
+  `--db-key-file` and a target with a different (or absent) one would
+  otherwise produce an undecryptable ciphertext blob. `migrateMetaTable`
+  branches on `secretMetaKeys` membership, using `source.openSecret`/
+  `target.setSecretMeta` for those and plain `target.setMeta` for everything
+  else.
+- **`webhook_config`'s singleton row always pre-exists on a freshly opened
+  target** (seeded by schema migration's own `upsertIgnore` seed statement),
+  so its migrator reuses the existing `Get`/`SetWebhookConfig` (an UPDATE,
+  not an INSERT) rather than hand-rolled SQL — simpler and automatically
+  correct for the secret column too.
+- **Not wrapped in a single cross-database transaction** — config-sized row
+  counts (dozens to low-thousands, given the requests-log exclusion above)
+  made the extra complexity of a `*sqlx.Tx`-backed rebind path across 12
+  table migrators disproportionate for a one-shot admin action. A failure
+  partway leaves the target with whatever tables completed; the returned
+  `MigrationReport` always reflects exactly how far it got (rendered as a
+  per-table row-count list in the UI even on error), and the recommended
+  recovery is a fresh, empty target rather than resuming in place — the
+  "Migrate" button's `hx-confirm` says this explicitly, and running it twice
+  against an already-migrated target fails on duplicate keys by design
+  (not idempotent).
+
+Tested via `TestMigrateConfigTo` (`internal/storage/migrate_backend_test.go`,
+uses the same `openTestDB`/`TEST_DB_DRIVER` harness as the rest of Phase 4 —
+sqlite-to-sqlite by default, sqlite-to-mysql/postgres in CI) and manually
+against live containers during development (the sequence bug above was
+caught this way, not by the permanent test — the permanent test was written
+*after* the fix, so it now guards the regression going forward via its
+"normal insert after migration still works" assertion).
+
 ## Explicitly out of scope (unless the user says otherwise later)
 
 - Any ORM or query-builder rewrite beyond the minimal `sqlx` adoption needed

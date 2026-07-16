@@ -57,6 +57,29 @@ func openTestDB(t *testing.T) *DB {
 	return db
 }
 
+// testTargetDriverDSN is openTestDB's env-var selection logic, but returns
+// the driver name + DSN unopened rather than an open *DB — for tests (like
+// TestMigrateConfigTo) that pass the pair to a function which opens the
+// connection itself. Same defaulting: sqlite in a fresh temp file unless
+// TEST_DB_DRIVER/TEST_DB_DSN redirect it to a fresh throwaway MySQL/Postgres
+// database.
+func testTargetDriverDSN(t *testing.T) (driver, dsn string) {
+	t.Helper()
+
+	driver = strings.ToLower(strings.TrimSpace(os.Getenv("TEST_DB_DRIVER")))
+	if driver == "" || driver == "sqlite" {
+		return "sqlite", filepath.Join(t.TempDir(), "target.db")
+	}
+
+	adminDSN := os.Getenv("TEST_DB_DSN")
+	if adminDSN == "" {
+		t.Fatalf("TEST_DB_DRIVER=%s set but TEST_DB_DSN is empty", driver)
+	}
+	testDSN, cleanup := createTestDatabase(t, driver, adminDSN)
+	t.Cleanup(cleanup)
+	return driver, testDSN
+}
+
 // createTestDatabase creates a uniquely-named database on the server
 // identified by adminDSN and returns a DSN pointing at it plus a cleanup
 // func that drops it. Isolation is per-database rather than per-table

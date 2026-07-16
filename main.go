@@ -74,6 +74,9 @@ func main() {
 		case "gencert":
 			runGencert(os.Args[2:])
 			return
+		case "build-dsn":
+			runBuildDSN(os.Args[2:])
+			return
 		}
 	}
 
@@ -856,6 +859,35 @@ func runGencert(args []string) {
 	pem.Encode(kf, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}) //nolint:errcheck
 
 	log.Printf("gencert: wrote %s and %s (valid %d days, hosts: %s)", *certFile, *keyFile, *days, *hosts)
+}
+
+// runBuildDSN prints a dialect-correct DSN built from individual fields to
+// stdout, then exits — a thin CLI wrapper around storage.BuildDSN so
+// deploy/install.sh (and anyone else scripting a MySQL/Postgres connection
+// string) doesn't have to hand-roll escaping in shell for a password
+// containing ":"/"@"/"/", which would silently corrupt a naive
+// fmt.Sprintf-style concatenation. Mirrors the admin Settings page's
+// "Database connection" card, which calls the same storage.BuildDSN.
+func runBuildDSN(args []string) {
+	fs := flag.NewFlagSet("build-dsn", flag.ExitOnError)
+	driver := fs.String("driver", "", "database driver: mysql (or mariadb), postgres (or postgresql/cockroachdb/neon)")
+	host := fs.String("host", "", "database host: hostname, IP, or Docker service name")
+	port := fs.String("port", "", "database port (defaults: mysql 3306, postgres 5432)")
+	username := fs.String("username", "", "database username")
+	password := fs.String("password", "", "database password")
+	dbname := fs.String("dbname", "", "database name")
+	sslmode := fs.String("sslmode", "", "mysql: true/false/skip-verify/preferred; postgres: disable/allow/prefer/require/verify-ca/verify-full")
+	extra := fs.String("extra", "", "extra DSN parameters as key=value&key2=value2")
+	fs.Parse(args) //nolint // ExitOnError: never returns an error to check
+
+	dsn, err := storage.BuildDSN(storage.DBConnFields{
+		Driver: *driver, Host: *host, Port: *port, Username: *username,
+		Password: *password, DBName: *dbname, SSLMode: *sslmode, Extra: *extra,
+	})
+	if err != nil {
+		log.Fatalf("build-dsn: %v", err)
+	}
+	fmt.Println(dsn)
 }
 
 func httpsRedirect(w http.ResponseWriter, r *http.Request) {
