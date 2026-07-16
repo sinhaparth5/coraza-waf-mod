@@ -412,8 +412,13 @@ deleting the original SQLite file.
 
 **`build-dsn` CLI subcommand** (`main.go`'s `runBuildDSN`): prints a
 dialect-correct DSN built from `--driver`/`--host`/`--port`/`--username`/
-`--password`/`--dbname`/`--sslmode`/`--extra` flags to stdout, via the same
-`storage.BuildDSN` the Settings-page card uses. Exists so `install.sh` (and
+`--dbname`/`--sslmode`/`--extra` flags to stdout, via the same
+`storage.BuildDSN` the Settings-page card uses. The password is read from
+stdin (prompt on stderr, empty allowed for passwordless accounts), never a
+flag — the same convention `setup` uses for the admin password, since an
+argv value is visible in `/proc/<pid>/cmdline` to every local user while
+the command runs (this also addressed a CodeQL clear-text-credential
+finding on the original `--password` flag). Exists so `install.sh` (and
 anyone else scripting a connection string) never has to hand-roll DSN
 escaping in bash — a password containing `:`/`@`/`/` would silently corrupt
 a naive `fmt.Sprintf`-style concatenation, confirmed by

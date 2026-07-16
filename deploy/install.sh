@@ -332,9 +332,13 @@ if [ "$IS_UPGRADE" = "1" ]; then
 	fi
 elif [ "$DB_DRIVER" != "sqlite" ] && [ "$DRY_RUN" != "1" ]; then
 	step "Building database connection string"
-	DB_DSN="$("${INSTALL_PATH}" build-dsn \
-		--driver "$DB_DRIVER" --host "$DB_HOST" --port "$DB_PORT" \
-		--username "$DB_USER" --password "$DB_PASSWORD" --dbname "$DB_NAME" --sslmode "$DB_SSLMODE")"
+	# Password on stdin (printf is a shell builtin, so it never appears in
+	# ps/argv), same pattern as the `setup` invocations below — build-dsn
+	# deliberately has no --password flag.
+	DB_DSN="$(printf '%s\n' "$DB_PASSWORD" \
+		| "${INSTALL_PATH}" build-dsn \
+			--driver "$DB_DRIVER" --host "$DB_HOST" --port "$DB_PORT" \
+			--username "$DB_USER" --dbname "$DB_NAME" --sslmode "$DB_SSLMODE")"
 	ok "Connection string built for ${DB_DRIVER}"
 elif [ "$DRY_RUN" = "1" ] && [ "$DB_DRIVER" != "sqlite" ]; then
 	DB_DSN="<built-from-prompted-values>"

@@ -868,21 +868,32 @@ func runGencert(args []string) {
 // containing ":"/"@"/"/", which would silently corrupt a naive
 // fmt.Sprintf-style concatenation. Mirrors the admin Settings page's
 // "Database connection" card, which calls the same storage.BuildDSN.
+// The password is read from stdin (one line, empty allowed for passwordless
+// accounts), never a flag — the same rule runSetup follows for the admin
+// password, since an argv value is visible to every local user in
+// /proc/<pid>/cmdline for as long as the command runs, and lands in shell
+// history when typed interactively. The prompt goes to stderr so it never
+// contaminates the captured stdout the DSN itself is printed to.
+// Invoked as: printf '%s\n' "$PASSWORD" | coraza-waf-mod build-dsn --driver ...
 func runBuildDSN(args []string) {
 	fs := flag.NewFlagSet("build-dsn", flag.ExitOnError)
 	driver := fs.String("driver", "", "database driver: mysql (or mariadb), postgres (or postgresql/cockroachdb/neon)")
 	host := fs.String("host", "", "database host: hostname, IP, or Docker service name")
 	port := fs.String("port", "", "database port (defaults: mysql 3306, postgres 5432)")
 	username := fs.String("username", "", "database username")
-	password := fs.String("password", "", "database password")
 	dbname := fs.String("dbname", "", "database name")
 	sslmode := fs.String("sslmode", "", "mysql: true/false/skip-verify/preferred; postgres: disable/allow/prefer/require/verify-ca/verify-full")
 	extra := fs.String("extra", "", "extra DSN parameters as key=value&key2=value2")
 	fs.Parse(args) //nolint // ExitOnError: never returns an error to check
 
+	fmt.Fprint(os.Stderr, "Database password (empty if none): ")
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Scan()
+	password := strings.TrimSpace(scanner.Text())
+
 	dsn, err := storage.BuildDSN(storage.DBConnFields{
 		Driver: *driver, Host: *host, Port: *port, Username: *username,
-		Password: *password, DBName: *dbname, SSLMode: *sslmode, Extra: *extra,
+		Password: password, DBName: *dbname, SSLMode: *sslmode, Extra: *extra,
 	})
 	if err != nil {
 		log.Fatalf("build-dsn: %v", err)
