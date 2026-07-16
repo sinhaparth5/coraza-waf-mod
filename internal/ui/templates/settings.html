@@ -74,6 +74,8 @@
     </form>
   </div>
 
+  {{template "dbconn-card" .}}
+
   <!-- ── WAF hot-reload ────────────────────────────────────────────────────── -->
   <div class="card p-5">
     <h2 class="text-[15px] font-bold text-slate-800 mb-1">WAF rules</h2>
@@ -376,6 +378,153 @@
 {{else}}
 {{template "empty-state" (map "Icon" "hgi-key-01" "Message" "No API keys yet")}}
 {{end}}
+{{end}}
+
+{{define "dbconn-card"}}
+<div class="card p-5" id="dbconn-card">
+  <h2 class="text-[15px] font-bold text-slate-800 mb-1">Database connection</h2>
+  <p class="text-[13px] text-slate-500 mb-1">Point the WAF at an external MySQL/MariaDB or Postgres-compatible database (including managed services like Neon or CockroachDB) instead of the embedded SQLite file.</p>
+  <p class="text-[12px] text-slate-400 mb-5">Currently running: <span class="font-mono">{{.ActiveDBDriver}}</span>{{if eq .ActiveDBDriver "sqlite"}} (<span class="font-mono">{{.ActiveDBPath}}</span>){{end}}. Saving or testing below never touches that live connection — apply a new one by restarting the server with the flags "Test connection" shows you.</p>
+
+  {{if .DBConnSaveOK}}
+  <div class="rounded-md bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Saved. Restart the server with the tested flags below to actually switch to it.</div>
+  {{end}}
+  {{if .DBConnSaveErr}}
+  <div class="rounded-md bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.DBConnSaveErr}}</div>
+  {{end}}
+
+  <form id="dbconn-form" hx-post="{{.AdminPath}}/settings/dbconn" hx-target="#dbconn-card" hx-swap="outerHTML" class="flex flex-col gap-4">
+
+    <div>
+      <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="dbconn_driver">Driver</label>
+      <select id="dbconn_driver" name="dbconn_driver"
+              onchange="
+                var v=this.value;
+                document.getElementById('dbconn-external-fields').classList.toggle('hidden', v==='sqlite');
+                document.getElementById('dbconn-test-row').classList.toggle('hidden', v==='sqlite');
+                document.getElementById('dbconn-host-label').textContent = v==='sqlite' ? 'Database file path' : 'Host';
+                document.getElementById('dbconn_host').placeholder = v==='sqlite' ? 'waf.db' : 'db.example.com, 172.18.0.5, or a Docker service name like db';
+                document.getElementById('dbconn_port').placeholder = v==='mysql' ? '3306' : '5432';
+                document.getElementById('dbconn_sslmode_mysql').classList.toggle('hidden', v!=='mysql');
+                document.getElementById('dbconn_sslmode_mysql').disabled = (v!=='mysql');
+                document.getElementById('dbconn_sslmode_postgres').classList.toggle('hidden', v!=='postgres');
+                document.getElementById('dbconn_sslmode_postgres').disabled = (v!=='postgres');
+              "
+              class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition">
+        <option value="sqlite" {{if eq .DBConnDriver "sqlite"}}selected{{end}}>SQLite (embedded, default)</option>
+        <option value="mysql" {{if eq .DBConnDriver "mysql"}}selected{{end}}>MySQL / MariaDB</option>
+        <option value="postgres" {{if eq .DBConnDriver "postgres"}}selected{{end}}>PostgreSQL (also CockroachDB, Neon)</option>
+      </select>
+    </div>
+
+    <div>
+      <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="dbconn_host" id="dbconn-host-label">{{if eq .DBConnDriver "sqlite"}}Database file path{{else}}Host{{end}}</label>
+      <input id="dbconn_host" name="dbconn_host" type="text" value="{{.DBConnHost}}"
+             placeholder="{{if eq .DBConnDriver "sqlite"}}waf.db{{else}}db.example.com, 172.18.0.5, or a Docker service name like db{{end}}"
+             class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"/>
+      <p class="text-[12px] text-slate-400 mt-1">Running this WAF in Docker too? Use the database container's Compose service name (e.g. <code class="font-mono">db</code>) or internal IP here if they share a network — it's just a hostname, nothing special to configure.</p>
+    </div>
+
+    <div id="dbconn-external-fields" class="flex flex-col gap-4 {{if eq .DBConnDriver "sqlite"}}hidden{{end}}">
+
+      <div class="flex gap-3">
+        <label class="flex-1 flex items-center gap-2 text-[13px] font-medium text-slate-700 cursor-pointer">
+          <input type="radio" name="dbconn_mode" value="fields" class="accent-brand"
+                 {{if ne .DBConnMode "dsn"}}checked{{end}}
+                 onchange="document.getElementById('dbconn-dsn-field').classList.add('hidden'); document.getElementById('dbconn-fields-group').classList.remove('hidden');">
+          Fill in fields separately
+        </label>
+        <label class="flex-1 flex items-center gap-2 text-[13px] font-medium text-slate-700 cursor-pointer">
+          <input type="radio" name="dbconn_mode" value="dsn" class="accent-brand"
+                 {{if eq .DBConnMode "dsn"}}checked{{end}}
+                 onchange="document.getElementById('dbconn-dsn-field').classList.remove('hidden'); document.getElementById('dbconn-fields-group').classList.add('hidden');">
+          Paste a connection string
+        </label>
+      </div>
+
+      <div id="dbconn-dsn-field" class="{{if ne .DBConnMode "dsn"}}hidden{{end}}">
+        <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="dbconn_dsn">Connection string {{if .DBConnDSNSet}}<span class="font-normal text-slate-400">(saved; leave blank to keep)</span>{{end}}</label>
+        <textarea id="dbconn_dsn" name="dbconn_dsn" rows="2"
+                  placeholder="{{if .DBConnDSNSet}}••••••••••••••••••••{{else}}postgres://user:password@host:5432/dbname?sslmode=require{{end}}"
+                  class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"></textarea>
+      </div>
+
+      <div id="dbconn-fields-group" class="flex flex-col gap-4 {{if eq .DBConnMode "dsn"}}hidden{{end}}">
+        <div class="flex gap-3">
+          <div class="flex-1">
+            <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="dbconn_port">Port</label>
+            <input id="dbconn_port" name="dbconn_port" type="text" value="{{.DBConnPort}}" placeholder="{{if eq .DBConnDriver "mysql"}}3306{{else}}5432{{end}}"
+                   class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"/>
+          </div>
+          <div class="flex-1">
+            <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="dbconn_dbname">Database name</label>
+            <input id="dbconn_dbname" name="dbconn_dbname" type="text" value="{{.DBConnDBName}}"
+                   class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"/>
+          </div>
+        </div>
+        <div class="flex gap-3">
+          <div class="flex-1">
+            <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="dbconn_username">Username</label>
+            <input id="dbconn_username" name="dbconn_username" type="text" value="{{.DBConnUsername}}"
+                   class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"/>
+          </div>
+          <div class="flex-1">
+            <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="dbconn_password">Password {{if .DBConnPasswordSet}}<span class="font-normal text-slate-400">(saved; leave blank to keep)</span>{{end}}</label>
+            <input id="dbconn_password" name="dbconn_password" type="password" autocomplete="off"
+                   placeholder="{{if .DBConnPasswordSet}}••••••••••••••••{{end}}"
+                   class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition"/>
+          </div>
+        </div>
+        <div>
+          <label class="block text-[13px] font-semibold text-slate-700 mb-1">SSL mode</label>
+          <select id="dbconn_sslmode_mysql" name="dbconn_sslmode"
+                  class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition {{if ne .DBConnDriver "mysql"}}hidden{{end}}"
+                  {{if ne .DBConnDriver "mysql"}}disabled{{end}}>
+            <option value="">Default</option>
+            <option value="true" {{if eq .DBConnSSLMode "true"}}selected{{end}}>true</option>
+            <option value="false" {{if eq .DBConnSSLMode "false"}}selected{{end}}>false</option>
+            <option value="skip-verify" {{if eq .DBConnSSLMode "skip-verify"}}selected{{end}}>skip-verify</option>
+            <option value="preferred" {{if eq .DBConnSSLMode "preferred"}}selected{{end}}>preferred</option>
+          </select>
+          <select id="dbconn_sslmode_postgres" name="dbconn_sslmode"
+                  class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition {{if ne .DBConnDriver "postgres"}}hidden{{end}}"
+                  {{if ne .DBConnDriver "postgres"}}disabled{{end}}>
+            <option value="">Default</option>
+            <option value="disable" {{if eq .DBConnSSLMode "disable"}}selected{{end}}>disable</option>
+            <option value="allow" {{if eq .DBConnSSLMode "allow"}}selected{{end}}>allow</option>
+            <option value="prefer" {{if eq .DBConnSSLMode "prefer"}}selected{{end}}>prefer</option>
+            <option value="require" {{if eq .DBConnSSLMode "require"}}selected{{end}}>require</option>
+            <option value="verify-ca" {{if eq .DBConnSSLMode "verify-ca"}}selected{{end}}>verify-ca</option>
+            <option value="verify-full" {{if eq .DBConnSSLMode "verify-full"}}selected{{end}}>verify-full</option>
+          </select>
+          <p class="text-[12px] text-slate-400 mt-1">Neon and most managed Postgres require <code class="font-mono">require</code> or stricter.</p>
+        </div>
+        <div>
+          <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="dbconn_extra">Extra parameters <span class="font-normal text-slate-400">(optional)</span></label>
+          <input id="dbconn_extra" name="dbconn_extra" type="text" value="{{.DBConnExtra}}" placeholder="connect_timeout=10&amp;application_name=coraza"
+                 class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"/>
+        </div>
+      </div>
+    </div>
+
+    <div id="dbconn-test-row" class="flex items-center gap-3 {{if eq .DBConnDriver "sqlite"}}hidden{{end}}">
+      <button type="button"
+              hx-post="{{.AdminPath}}/settings/dbconn/test"
+              hx-include="#dbconn-form"
+              hx-target="#dbconn-test-result"
+              hx-swap="innerHTML"
+              class="inline-flex items-center gap-2 rounded-md border border-line bg-surface text-slate-700 text-[13px] font-medium px-4 py-1.5 hover:bg-canvas transition-colors">
+        <i class="hgi hgi-stroke hgi-wifi text-base"></i>
+        Test connection
+      </button>
+    </div>
+    <div id="dbconn-test-result" class="text-[13px]"></div>
+
+    <div class="pt-1">
+      <button type="submit" class="btn-primary px-6">Save</button>
+    </div>
+  </form>
+</div>
 {{end}}
 
 {{define "ratelimit-card"}}

@@ -47,6 +47,8 @@ var secretMetaKeys = []string{
 	"admin_totp_pending_secret",
 	"redis_password",
 	"email_token",
+	"db_conn_password",
+	"db_conn_dsn",
 }
 
 // EnableSecretEncryption switches the DB into secrets-at-rest mode with a

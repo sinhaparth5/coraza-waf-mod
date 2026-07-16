@@ -361,6 +361,46 @@ throughout:
       backend.
 - [ ] CHANGELOG.md entry once shipped.
 
+## Settings-page "Database connection" card (admin UI, not a phase)
+
+Added after Phase 4: a card on `/admin/settings` (`internal/ui/templates/
+settings.html`'s `dbconn-card`, handlers in `internal/ui/handlers.go`) that
+lets an admin build and test a MySQL/Postgres (or Docker-internal, or
+managed-cloud like Neon/CockroachDB) connection from the browser, either by
+pasting a full DSN or filling in host/port/username/password/dbname/sslmode/
+extra-params fields separately. Deliberately **does not** switch the live
+server's DB connection — that's a CLI-flag-only, process-start-time decision
+(see "No config file, by design" in CLAUDE.md), and there is no live
+`db.Reload()`-style hot-swap for the storage layer the way there is for WAF/
+bot-protection/rate-limiting. Saving here only persists a draft (for the
+form's own convenience on a later visit, via new `db_conn_*` meta keys,
+password/DSN sealed through the existing secrets-at-rest mechanism); "Test
+connection" actually dials the target (`storage.TestConnection`, a
+Ping-only reachability check, no migration run) and, on success, shows the
+exact `--db-driver`/`--db` flag values to apply by restarting the process.
+
+- `internal/storage/dbconn.go` (new): `DBConnFields`/`BuildDSN` (builds a
+  correctly-escaped DSN per dialect via `mysql.Config.FormatDSN()` or
+  `net/url`, rather than string concatenation — a hand-rolled `fmt.Sprintf`
+  would corrupt the DSN on a password containing `:`/`@`/`/`, confirmed by
+  `TestBuildDSNEscapesSpecialCharacters`), `TestConnection` (dial + ping +
+  close, `connTestTimeout` 5s, mirrors `services.Probe`'s "any response
+  counts as reachable" shape but for a DB dial), `DBConnConfig` +
+  `GetDBConnConfig`/`SetDBConnConfig` (the persisted draft; blank
+  Password/DSN on save means "keep the stored value", matching
+  `EmailConfig.Token`'s existing convention).
+- `db_conn_password` and `db_conn_dsn` added to `secretMetaKeys`
+  (`internal/storage/secretenc.go`) — both can carry a live credential.
+- No SSRF/IMDS guard on the admin-supplied host:port (unlike
+  `services.Validate`'s cloud-metadata denylist for backend URLs) — mirrors
+  the existing Redis `PingRedis`/`TestRedisConnection` precedent, which has
+  none either, since the actor is already a fully-trusted authenticated
+  admin in both cases.
+- Verified live against local MySQL 8 + Postgres 16 (`docker-compose.test.yml`):
+  `BuildDSN`'s output actually connects (not just parses), and a wrong
+  password is correctly rejected — not just unit-tested against the same
+  driver's own DSN parser.
+
 ## Explicitly out of scope (unless the user says otherwise later)
 
 - Any ORM or query-builder rewrite beyond the minimal `sqlx` adoption needed
