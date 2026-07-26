@@ -309,7 +309,11 @@ func (h *Handler) Handle(c echo.Context) error {
 
 	// 3. Bot protection: challenge clients based on global setting + per-service
 	// override + threat-score-driven adaptive enforcement (issue #16).
-	if ch != nil && !botAnalysis.IsTrustedCrawler {
+	// challenge.Exempt skips the gate for requests that cannot solve it by
+	// construction — currently the credential-less web app manifest fetch,
+	// which would otherwise 307 on every Android page load and autoban the
+	// visitor's own IP (issue #57). Every later stage still applies.
+	if ch != nil && !botAnalysis.IsTrustedCrawler && !challenge.Exempt(r.Method, r.URL.Path) {
 		svcMode := "inherit"
 		if app != nil && app.BotMode != "" {
 			svcMode = app.BotMode
