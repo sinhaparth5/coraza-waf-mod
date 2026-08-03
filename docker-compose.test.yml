@@ -4,7 +4,7 @@
 #   docker compose -f docker-compose.test.yml up -d
 services:
   test-mysql:
-    image: mysql:9
+    image: mysql:26
     environment:
       MYSQL_ROOT_PASSWORD: test
       MYSQL_DATABASE: coraza_test
