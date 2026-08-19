@@ -86,12 +86,12 @@
 </div>
 
 <!-- ── Row 1.5: Live signals (placeholder ticker strip, real metrics TBD) ── -->
-<div class="card p-5 mb-4">
-  <p class="text-[12px] text-slate-500 mb-3 px-1">At a glance</p>
-  <div class="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-3" data-stagger>
+<div class="card p-4 mb-4">
+  <p class="text-[12px] text-slate-500 mb-2 px-1">At a glance</p>
+  <div class="grid grid-cols-2 lg:grid-cols-4 items-stretch gap-3" data-stagger>
 
     {{range .AtAGlance}}
-    <div class="flex h-full flex-col gap-3 min-w-0 rounded-xl {{.CardClass}} p-4 transition duration-150 hover:-translate-y-[2px] hover:shadow-xs">
+    <div class="flex h-full min-w-0 flex-col gap-2 rounded-lg {{.CardClass}} p-3 transition duration-150 hover:-translate-y-[2px] hover:shadow-xs">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-[6px]">
           <i class="hgi hgi-stroke hgi-rounded {{.Icon}} text-sm {{.IconClass}}"></i>
@@ -103,7 +103,7 @@
         <p class="text-[11px] text-slate-500 mb-px">Current value</p>
         <p class="text-[20px] font-extrabold text-slate-900">{{.Value}}</p>
       </div>
-      <svg viewBox="0 0 170 36" class="w-full h-9 mt-auto" preserveAspectRatio="none">
+      <svg viewBox="0 0 170 36" class="mt-auto h-7 w-full" preserveAspectRatio="none">
         <defs><linearGradient id="{{.SparkID}}" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="{{.SparkColor}}" stop-opacity="0.35"/>
           <stop offset="100%" stop-color="{{.SparkColor}}" stop-opacity="0"/>
@@ -115,7 +115,7 @@
     {{end}}
 
   </div>
-  <p class="text-[11px] text-slate-300 mt-3 text-center">live metrics from recent request logs</p>
+  <p class="text-[11px] text-slate-300 mt-2 text-center">live metrics from recent request logs</p>
 </div>
 
 <!-- ── Row 2: Breakdown + Top countries + Recent threats ── -->
