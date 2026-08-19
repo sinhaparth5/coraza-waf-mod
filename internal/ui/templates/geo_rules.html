@@ -1,5 +1,5 @@
 {{define "content"}}
-<div class="grid grid-cols-[300px_1fr] gap-4">
+<div class="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] items-start gap-4">
 
   <!-- ── Left sidebar: form + overview ── -->
   <div class="flex flex-col gap-4">
@@ -50,12 +50,18 @@
     </div>
 
     <!-- Rules overview -->
-    <div class="rounded-lg bg-navy p-6 flex flex-col gap-2">
-      <p class="text-[12px] text-white/50 mb-1">Rules overview</p>
+    <div class="relative overflow-hidden rounded-xl bg-navy p-6 flex flex-col gap-2">
+      <img src="{{.AdminPath}}/static/imgs/global-threat-network.webp" alt="" aria-hidden="true"
+           width="1600" height="699" loading="lazy"
+           class="absolute inset-0 h-full w-full object-cover opacity-20"/>
+      <div class="absolute inset-0 bg-linear-to-b from-navy/35 to-navy/95"></div>
+      <p class="relative text-[12px] text-white/60 mb-1">Rules overview</p>
 
-      {{template "rule-ring-row" (map "Color" "#FF8B8B" "Pct" .BlockPct "Title" "Block rules" "Sub" "deny matching countries" "Count" .BlockCount)}}
+      <div class="relative flex flex-col gap-2">
+        {{template "rule-ring-row" (map "Color" "#FF8B8B" "Pct" .BlockPct "Title" "Block rules" "Sub" "deny matching countries" "Count" .BlockCount)}}
 
-      {{template "rule-ring-row" (map "Color" "#76C893" "Pct" .AllowPct "Title" "Allow rules" "Sub" "whitelist, bypasses other blocks" "Count" .AllowCount)}}
+        {{template "rule-ring-row" (map "Color" "#4ADE80" "Pct" .AllowPct "Title" "Allow rules" "Sub" "whitelist, bypasses other blocks" "Count" .AllowCount)}}
+      </div>
     </div>
 
     <!-- GeoIP notice card -->

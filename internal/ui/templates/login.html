@@ -36,8 +36,9 @@
 
       <!-- Art banner: mobile/tablet only, sits above the form -->
       <div class="relative h-52 sm:h-64 w-full shrink-0 overflow-hidden lg:hidden">
-        <img src="{{.AdminPath}}/static/imgs/LoginArt.webp" alt="" aria-hidden="true"
-             class="absolute inset-0 h-full w-full object-cover"/>
+        <img src="{{.AdminPath}}/static/imgs/login-security-v2.webp" alt="" aria-hidden="true"
+             width="1000" height="1250" fetchpriority="high"
+             class="absolute inset-0 h-full w-full object-cover object-center"/>
         <div class="absolute inset-0 bg-linear-to-t from-black/35 via-transparent to-transparent"></div>
         <span class="absolute left-5 bottom-4 flex items-center gap-2">
           <img src="{{.AdminPath}}/static/imgs/logo.svg" alt="" class="w-6 h-6 drop-shadow-sm"/>
@@ -96,7 +97,7 @@
             </div>
             <button type="submit"
                     class="mt-6 w-full rounded-lg bg-brand-dark text-white text-base font-bold
-                           py-3.5 hover:bg-[#276C4E] active:scale-[0.98] transition-all duration-150">
+                           py-3.5 hover:bg-green-900 active:scale-[0.98] transition-all duration-150">
               Verify
             </button>
           </form>
@@ -165,7 +166,7 @@
             <!-- Submit -->
             <button type="submit"
                     class="mt-6 w-full rounded-lg bg-brand-dark text-white text-base font-bold
-                           py-3.5 hover:bg-[#276C4E] active:scale-[0.98] transition-all duration-150">
+                           py-3.5 hover:bg-green-900 active:scale-[0.98] transition-all duration-150">
               Sign in
             </button>
 
@@ -177,8 +178,9 @@
 
     <!-- ── Art column: desktop only ────────────────────────────────────────── -->
     <div class="relative hidden lg:block lg:w-[42%] xl:w-[45%] rounded-[32px] overflow-hidden">
-      <img src="{{.AdminPath}}/static/imgs/LoginArt.webp" alt="" aria-hidden="true"
-           class="absolute inset-0 h-full w-full object-cover"/>
+      <img src="{{.AdminPath}}/static/imgs/login-security-v2.webp" alt="" aria-hidden="true"
+           width="1000" height="1250" fetchpriority="high"
+           class="absolute inset-0 h-full w-full object-cover object-center"/>
       <div class="absolute inset-0 bg-linear-to-t from-black/25 via-transparent to-transparent"></div>
     </div>
 

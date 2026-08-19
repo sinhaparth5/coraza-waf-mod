@@ -1,9 +1,9 @@
 {{define "content"}}
-<div class="grid grid-cols-2 gap-4">
+<div class="grid grid-cols-1 xl:grid-cols-2 items-stretch gap-4">
 
   <!-- ── Left: upload form ── -->
-  <div class="flex flex-col gap-4">
-    <div class="card p-5">
+  <div class="flex h-full flex-col gap-4">
+    <div class="card h-full p-5">
       {{template "panel-header" (map "Icon" "hgi-certificate-01" "Title" "Add Certificate")}}
 
       <form id="cert-upload-form"
@@ -78,11 +78,11 @@
   </div>
 
   <!-- ── Right: saved certs ── -->
-  <div class="card overflow-hidden">
+  <div class="card h-full overflow-hidden">
     {{template "card-header" (map "Cat" "TLS" "Title" "Saved Certificates" "Badge" (printf "%d certs" (len .Certs)))}}
 
-    <div class="px-6 pb-6">
-      <table class="w-full border-collapse text-[13px]">
+    <div class="table-scroll px-4 sm:px-6 pb-6">
+      <table class="w-full min-w-[640px] border-collapse text-[13px]">
         <thead>
           <tr class="border-b border-canvas bg-surface">
             <th class="text-left pb-3 pr-6 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Name</th>
