@@ -57,17 +57,17 @@ func TestCheckBodyBuffered(t *testing.T) {
 	}
 }
 
-// TestCheckBodyOverLimit sends a body one byte past SecRequestBodyLimit
-// through a counting reader: Coraza must reject it (413, the recommended
-// config's SecRequestBodyLimitAction) while Check reads at most limit+1
-// bytes into memory instead of buffering the whole upload.
+// TestCheckBodyOverLimit sends a multipart body one byte past
+// SecRequestBodyLimit through a counting reader: Coraza must reject it (413,
+// the recommended config's SecRequestBodyLimitAction) while Check reads at
+// most limit+1 bytes into memory instead of buffering the whole upload.
 func TestCheckBodyOverLimit(t *testing.T) {
 	e := newTestEngine(t)
 
 	over := requestBodyLimit + 10
 	cr := &countingReader{r: bytes.NewReader(bytes.Repeat([]byte("a"), over))}
 	r := httptest.NewRequest("POST", "http://app.example.com/upload", cr)
-	r.Header.Set("Content-Type", "application/octet-stream")
+	r.Header.Set("Content-Type", "multipart/form-data; boundary=xyz")
 	r.Header.Set("User-Agent", "Mozilla/5.0")
 	r.Header.Set("Accept", "*/*")
 
@@ -83,6 +83,132 @@ func TestCheckBodyOverLimit(t *testing.T) {
 	}
 	if got := e.cache.order.Len(); got != 0 {
 		t.Errorf("over-limit request must never be cached, got %d cache entries", got)
+	}
+}
+
+// TestInspectionFor pins the content-type gate down as data. The split that
+// matters: multipart carries file parts Coraza routes away from ARGS and is
+// cheap at megabytes, every other inspectable type is parsed into ARGS in full
+// and is not, and a binary type is not inspected at all.
+func TestInspectionFor(t *testing.T) {
+	for _, tc := range []struct {
+		contentType string
+		want        bodyInspection
+	}{
+		{"application/x-www-form-urlencoded", inspectNoFiles},
+		{"application/json", inspectNoFiles},
+		{"application/json; charset=utf-8", inspectNoFiles},
+		{"APPLICATION/JSON", inspectNoFiles},
+		{"  application/json  ", inspectNoFiles},
+		{"application/vnd.api+json", inspectNoFiles},
+		{"application/soap+xml", inspectNoFiles},
+		{"application/xml", inspectNoFiles},
+		{"text/plain", inspectNoFiles},
+		{"text/html; charset=utf-8", inspectNoFiles},
+		{"", inspectNoFiles},
+		{"multipart/form-data; boundary=xyz", inspectFiles},
+		{"multipart/related", inspectFiles},
+		{"application/pdf", inspectSkip},
+		{"application/octet-stream", inspectSkip},
+		{"image/png", inspectSkip},
+		{"video/mp4", inspectSkip},
+		{"application/zip", inspectSkip},
+	} {
+		if got := inspectionFor(tc.contentType); got != tc.want {
+			t.Errorf("inspectionFor(%q) = %v, want %v", tc.contentType, got, tc.want)
+		}
+	}
+}
+
+// TestCheckStreamsUninspectableBody is the fix for the memory blow-up: a
+// binary upload must reach the backend without this process reading it. The
+// counting reader proves Check never pulled a byte off the wire, and the body
+// must still be forwardable in full afterwards.
+func TestCheckStreamsUninspectableBody(t *testing.T) {
+	// CRS scores the request line itself here — 911100 rejects PUT (its
+	// allowed-methods policy is GET/HEAD/POST/OPTIONS) and 920420 rejects a
+	// content type outside its allow-list — and either alone crosses the
+	// inbound anomaly threshold. Both are header-phase policy an operator
+	// tunes per service; excluding them is what leaves this test asserting
+	// the one thing the gate is responsible for, the body.
+	e, err := New(config.WAFConfig{Enabled: true}, []int{911100, 920420})
+	if err != nil {
+		t.Fatalf("engine init: %v", err)
+	}
+
+	payload := bytes.Repeat([]byte("\x00\x01binary&payload=here&"), 4096)
+	cr := &countingReader{r: bytes.NewReader(payload)}
+	r := httptest.NewRequest("PUT", "http://app.example.com/upload?key=notes.pdf", cr)
+	r.Header.Set("Content-Type", "application/pdf")
+	r.Header.Set("User-Agent", "Mozilla/5.0")
+
+	res, err := e.Check(r, "203.0.113.9")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if cr.n != 0 {
+		t.Errorf("check read %d bytes of an uninspectable body, want 0 (it must stream)", cr.n)
+	}
+	if res.Blocked {
+		t.Errorf("binary upload blocked by body inspection that should not have run: %+v", res)
+	}
+	got, err := io.ReadAll(r.Body)
+	if err != nil || !bytes.Equal(got, payload) {
+		t.Errorf("body after check = %d bytes (err %v), want the original %d intact", len(got), err, len(payload))
+	}
+	if got := e.cache.order.Len(); got != 0 {
+		t.Errorf("uninspected body must never be cached, got %d cache entries", got)
+	}
+}
+
+// TestCheckNoFilesBodyOverLimit covers the limit Coraza parses and ignores
+// (corazawaf/coraza#896): a non-multipart body past noFilesBodyLimit is
+// refused here rather than parsed into ARGS, and the wire read stops at the
+// limit instead of buffering the whole thing.
+func TestCheckNoFilesBodyOverLimit(t *testing.T) {
+	e := newTestEngine(t)
+
+	over := noFilesBodyLimit + 10
+	cr := &countingReader{r: bytes.NewReader(bytes.Repeat([]byte("a"), over))}
+	r := httptest.NewRequest("POST", "http://app.example.com/api", cr)
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("User-Agent", "Mozilla/5.0")
+
+	res, err := e.Check(r, "203.0.113.9")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if !res.Blocked || res.Status != 413 {
+		t.Errorf("over-limit no-files body: blocked=%v status=%d, want blocked with 413", res.Blocked, res.Status)
+	}
+	if cr.n > noFilesBodyLimit+1 {
+		t.Errorf("check read %d bytes off the wire, want at most limit+1 (%d)", cr.n, noFilesBodyLimit+1)
+	}
+	if got := e.cache.order.Len(); got != 0 {
+		t.Errorf("over-limit request must never be cached, got %d cache entries", got)
+	}
+}
+
+// TestCheckNoFilesBodyAtLimit is the boundary the test above does not cover:
+// exactly at the limit is inspected normally, not refused.
+func TestCheckNoFilesBodyAtLimit(t *testing.T) {
+	e := newTestEngine(t)
+
+	payload := bytes.Repeat([]byte("a"), noFilesBodyLimit)
+	r := httptest.NewRequest("POST", "http://app.example.com/api", bytes.NewReader(payload))
+	r.Header.Set("Content-Type", "text/plain")
+	r.Header.Set("User-Agent", "Mozilla/5.0")
+
+	res, err := e.Check(r, "203.0.113.9")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if res.Blocked && res.Status == 413 {
+		t.Errorf("body exactly at the limit was refused as over-limit: %+v", res)
+	}
+	got, err := io.ReadAll(r.Body)
+	if err != nil || len(got) != len(payload) {
+		t.Errorf("body after check = %d bytes (err %v), want %d intact", len(got), err, len(payload))
 	}
 }
 

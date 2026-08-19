@@ -1,12 +1,13 @@
 {{define "content"}}
-<div class="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] items-start gap-4">
+{{template "management-hero" (map "AdminPath" .AdminPath "Image" "security-traffic-mesh.webp" "Height" "682" "Icon" "hgi-security-block" "Eyebrow" "Rule tuning" "Title" "Tune CRS enforcement without losing visibility" "Copy" "Suppress false positives globally or per service, review firing rules, and re-enable exceptions whenever your policy changes.")}}
 
-  <!-- ── Left sidebar: disable form ── -->
-  <div class="flex flex-col gap-4">
-    <div class="card p-5">
+<div class="flex flex-col gap-4">
+
+  <!-- ── Compact disable strip ── -->
+    <div class="card p-5 border-t-2 border-t-sky-500">
       {{template "panel-header" (map "Icon" "hgi-security-block" "Title" "Disable Rule")}}
 
-      <form hx-post="/admin/waf-rules/disable" hx-target="#waf-content" hx-swap="innerHTML" class="flex flex-col gap-4">
+      <form hx-post="/admin/waf-rules/disable" hx-target="#waf-content" hx-swap="innerHTML" class="grid grid-cols-1 items-end gap-4 lg:grid-cols-[1fr_1fr_1.35fr_auto]">
 
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">CRS Rule ID</label>
@@ -33,21 +34,20 @@
           />
         </div>
 
-        <button type="submit" class="btn-primary w-full flex items-center justify-center gap-2">
+        <button type="submit" class="btn-primary flex w-full items-center justify-center gap-2 lg:w-auto">
           <i class="hgi hgi-stroke hgi-rounded hgi-security-block text-sm"></i>
           Disable Rule
         </button>
       </form>
 
-      <div class="mt-5 pt-4 border-t border-canvas flex flex-col gap-2 text-[12px] text-slate-500">
+      <div class="mt-5 grid grid-cols-1 gap-2 border-t border-canvas pt-4 text-[12px] text-slate-500 md:grid-cols-3">
         <p>Disabling a rule suppresses it via <code class="font-mono bg-surface px-1 py-[1px] rounded-sm text-[11px]">SecRuleRemoveById</code> and reloads the WAF engine immediately, no restart needed.</p>
         <p class="mt-1">Leave scope on Global to disable everywhere, or pick a service to only suppress the rule for that backend; every other service keeps enforcing it.</p>
         <p class="mt-1">Re-enable any time from the lists below.</p>
       </div>
-    </div>
   </div>
 
-  <!-- ── Right: live content (both cards, swapped together by HTMX) ── -->
+  <!-- ── Live content spans the full page ── -->
   <div id="waf-content">
     {{template "waf-content" .}}
   </div>

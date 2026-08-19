@@ -1,8 +1,10 @@
 {{define "content"}}
-<div class="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] items-start gap-4">
+{{template "management-hero" (map "AdminPath" .AdminPath "Image" "security-traffic-mesh.webp" "Height" "682" "Icon" "hgi-shield-energy" "Eyebrow" "Access control" "Title" "Control access with layered enforcement" "Copy" "Add precise allow and block rules, automate repeat-offender bans, and tune adaptive responses from one focused workspace.")}}
 
-  <!-- ── Left sidebar: form + overview + activity ── -->
-  <div class="flex flex-col gap-4">
+<div class="flex flex-col gap-4">
+
+  <!-- ── Controls first: important tools stay together without creating a tall sidebar ── -->
+  <div class="grid grid-cols-1 items-start gap-4 md:grid-cols-2 2xl:grid-cols-4" data-stagger>
     <div class="card p-5">
       {{template "panel-header" (map "Icon" "hgi-add-circle" "Title" "Add IP Rule")}}
 
@@ -64,17 +66,21 @@
     {{template "adaptive-card" .}}
 
     <!-- Rules overview -->
-    <div class="rounded-lg bg-navy p-6 flex flex-col gap-2">
-      <p class="text-[12px] text-white/50 mb-1">Rules overview</p>
+    <div class="relative overflow-hidden rounded-xl bg-navy p-5 flex flex-col gap-2 shadow-[0_12px_28px_rgba(16,42,67,.16)]">
+      <img src="{{.AdminPath}}/static/imgs/security-traffic-mesh.webp" alt="" aria-hidden="true" width="1600" height="682" loading="lazy" class="absolute inset-0 h-full w-full object-cover object-right opacity-20"/>
+      <div class="absolute inset-0 bg-linear-to-b from-navy/40 to-navy"></div>
+      <p class="relative text-[12px] text-white/60 mb-1">Rules overview</p>
 
-      {{template "rule-ring-row" (map "Color" "#FF8B8B" "Pct" .BlockPct "Title" "Block rules" "Sub" "deny matching traffic" "Count" .BlockCount)}}
+      <div class="relative flex flex-col gap-2">
+        {{template "rule-ring-row" (map "Color" "#FF8B8B" "Pct" .BlockPct "Title" "Block rules" "Sub" "deny matching traffic" "Count" .BlockCount)}}
 
-      {{template "rule-ring-row" (map "Color" "#4ADE80" "Pct" .AllowPct "Title" "Allow rules" "Sub" "whitelist, bypasses other blocks" "Count" .AllowCount)}}
+        {{template "rule-ring-row" (map "Color" "#4ADE80" "Pct" .AllowPct "Title" "Allow rules" "Sub" "whitelist, bypasses other blocks" "Count" .AllowCount)}}
+      </div>
     </div>
 
   </div>
 
-  <!-- ── Active Rules list (right column) ── -->
+  <!-- ── Active rules use the full width, independent of control-card height ── -->
   <div class="card overflow-hidden h-fit">
     {{template "card-header" (map "Cat" "Firewall" "Title" "Active IP Rules" "Badge" (printf "%d rules" .Total))}}
     <div id="ip-rules-body" class="flex flex-col gap-1 px-2 pb-2">

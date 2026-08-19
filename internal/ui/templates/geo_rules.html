@@ -1,8 +1,10 @@
 {{define "content"}}
-<div class="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] items-start gap-4">
+{{template "management-hero" (map "AdminPath" .AdminPath "Image" "security-traffic-mesh.webp" "Height" "682" "Icon" "hgi-earth" "Eyebrow" "Geographic policy" "Title" "Apply country policy with confidence" "Copy" "Create scoped country rules, understand their allow and block balance, and keep bundled GeoIP guidance close at hand.")}}
 
-  <!-- ── Left sidebar: form + overview ── -->
-  <div class="flex flex-col gap-4">
+<div class="flex flex-col gap-4">
+
+  <!-- ── Compact top controls ── -->
+  <div class="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3" data-stagger>
     <div class="card p-5">
       {{template "panel-header" (map "Icon" "hgi-earth" "Title" "Add Geo Rule")}}
 
@@ -50,9 +52,9 @@
     </div>
 
     <!-- Rules overview -->
-    <div class="relative overflow-hidden rounded-xl bg-navy p-6 flex flex-col gap-2">
-      <img src="{{.AdminPath}}/static/imgs/global-threat-network.webp" alt="" aria-hidden="true"
-           width="1600" height="699" loading="lazy"
+    <div class="relative overflow-hidden rounded-xl bg-navy p-5 flex flex-col gap-2 shadow-[0_12px_28px_rgba(16,42,67,.16)]">
+      <img src="{{.AdminPath}}/static/imgs/security-traffic-mesh.webp" alt="" aria-hidden="true"
+           width="1600" height="682" loading="lazy"
            class="absolute inset-0 h-full w-full object-cover opacity-20"/>
       <div class="absolute inset-0 bg-linear-to-b from-navy/35 to-navy/95"></div>
       <p class="relative text-[12px] text-white/60 mb-1">Rules overview</p>
@@ -65,7 +67,7 @@
     </div>
 
     <!-- GeoIP notice card -->
-    <div class="rounded-lg bg-amber-50 border border-amber-200 px-5 py-4">
+    <div class="rounded-xl bg-amber-50 border border-amber-200 px-5 py-4 shadow-[0_8px_22px_rgba(180,83,9,.07)]">
       <div class="flex gap-3 items-start">
         <i class="hgi hgi-stroke hgi-rounded hgi-earth text-base text-amber-600 shrink-0 mt-px"></i>
         <div>
@@ -79,7 +81,7 @@
     </div>
   </div>
 
-  <!-- ── Active Rules list (right column) ── -->
+  <!-- ── Active rules span the page instead of inheriting sidebar height ── -->
   <div class="card overflow-hidden h-fit">
     {{template "card-header" (map "Cat" "Firewall" "Title" "Active Geo Rules" "Badge" (printf "%d rules" (len .Rules)))}}
     <div id="geo-rules-body" class="flex flex-col gap-1 px-2 pb-2">

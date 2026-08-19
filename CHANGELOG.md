@@ -5,11 +5,83 @@ All notable changes to **Coraza WAF Mod** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.8.0] - 2026-08-19
+
+### Changed
+
+- **Management pages now use balanced, top-first layouts.** IP Rules, Geo
+  Rules, WAF Rules, Services, Certificates, and Threat Intel place their
+  important controls above full-width results instead of stretching a tall
+  control stack beside a short list. Settings shares the refreshed visual
+  hierarchy, while responsive grids keep the same forms, HTMX targets, data,
+  and actions on mobile and desktop.
+- **New security artwork and denser visual system.** Two optimized, locally
+  embedded WebP illustrations add restrained navy, cyan, and emerald accents
+  to management surfaces. Card headers and icons use clearer hierarchy and
+  the existing reduced-motion-aware entrance effects. The dashboard's
+  “At a glance” tiles are compact, equal-height, and two-up on phones, while
+  the notification tray now opens inside the visible viewport.
+
+### Fixed
+
+- **A file upload no longer costs a minute of latency and gigabytes of resident
+  memory** (MonoBucket issue #19). A 3.5 MiB `PUT` of a PDF through the proxy
+  measured at **52 seconds and 4.4 GiB of allocations, peaking at 2.4 GiB of
+  heap**, and was then refused as an attack. It now measures at **1 ms and
+  1 MiB**.
+
+  The cause was a collaboration between Coraza and CRS that neither side
+  intends. Coraza infers a request-body processor for exactly two content types
+  — `x-www-form-urlencoded` and `multipart/form-data` — and leaves it unset for
+  everything else. CRS rule 901340 matches "processor is not
+  URLENCODED|MULTIPART|XML|JSON" and fires `ctl:forceRequestBodyVariable=On`,
+  and Coraza answers that flag by defaulting the processor to `URLENCODED`. So
+  every PDF, image, video and S3 payload was parsed as an HTML form: 3.5 MiB of
+  binary carries an `&` roughly every 256 bytes, producing ~14,000 junk `ARGS`
+  entries, and CRS then ran ~200 rules across all of them with every
+  intermediate transformation cached as a full string copy for the length of
+  the phase. Binary data also scores 830 against CRS's XSS/SQLi/RCE detectors,
+  so the request was denied at the end of that minute anyway.
+
+  `Engine.Check` now decides from the declared `Content-Type` whether a body is
+  worth inspecting at all. Form, multipart, JSON, XML and `text/*` bodies are
+  inspected as before; an absent `Content-Type` is inspected too, since
+  otherwise omitting the header would be the bypass. Everything else streams to
+  the backend without this process reading a byte of it — which also means a
+  large upload is no longer buffered here on its way through.
+
+  This is a real trade rather than a free win, and worth stating plainly: a
+  client that declares `application/octet-stream` on a payload the backend then
+  parses as a form has evaded body inspection. CRS 920420 still flags content
+  types outside its allow-list at PL1, so the declaration is not free, and the
+  behaviour being replaced was not "these uploads are inspected" — it was
+  "these uploads take a minute and are then rejected as an attack".
+
+- **`SecRequestBodyNoFilesLimit` is now actually enforced.** The engine set
+  `SecRequestBodyNoFilesLimit 131072`, which reads like a 128 KiB cap on
+  non-file bodies. Coraza parses that directive and ignores it (see the TODO in
+  `internal/corazawaf/waf.go` referencing corazawaf/coraza#896 — which is why
+  `coraza.conf-recommended` ships the line commented out with a note saying
+  so), so the only limit ever in force was the 12.5 MiB `SecRequestBodyLimit`.
+  The dead directive is gone and the limit is applied in `Check` instead: a
+  non-multipart body past 128 KiB is refused with 413, matching the
+  `SecRequestBodyLimitAction Reject` posture the multipart path already gets
+  from Coraza. Multipart keeps the 12.5 MiB limit, because Coraza routes file
+  parts to `FILES` rather than `ARGS` and a 3.5 MiB multipart upload measures
+  at 28 ms — file uploads were never the expensive shape.
+
+  **This can reject requests that previously succeeded**: a JSON or form body
+  between 128 KiB and 12.5 MiB now gets a 413. That is the CRS-recommended
+  posture and the number this file already claimed to enforce, but an API
+  posting large JSON bodies will notice. Cost is the reason for the cap —
+  measured against CRS 4, a non-multipart body costs ~2.8s and 800 MiB at
+  128 KiB, and ~30s and 6.4 GiB at 1 MiB, whatever the bytes contain. Making
+  the limit an admin-configurable setting is the natural follow-up.
 
 ## [1.7.0] - 2026-08-19
 
 ### Changed
+
 - **Responsive admin UI refresh.** The existing security-console workflow now
   uses a mobile drawer while retaining the desktop sidebar, responsive page
   grids, touch-friendly controls, mobile-safe modals, and scrollable data
@@ -25,9 +97,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   global threat-intelligence banner shared by the relevant security views.
   Explicit dimensions and restrained file sizes keep layouts stable and the
   admin UI self-contained.
+
 ## [1.6.1] - 2026-07-26
 
 ### Fixed
+
 - **Web app manifest requests no longer get challenged, and no longer ban the
   visitor (issue #57).** Browsers fetch `<link rel="manifest">` with
   credentials omitted unless the tag carries `crossorigin="use-credentials"`,
@@ -48,6 +122,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.6.0] - 2026-07-16
 
 ### Added
+
 - **Pluggable external database backends (issue #50).** The store now runs on
   MySQL/MariaDB or Postgres (including the wire-compatible CockroachDB and
   Neon) in addition to the SQLite default, selected at startup via the new
@@ -83,12 +158,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deployment back to SQLite.
 
 ### Changed
+
 - **`prune --vacuum` is dialect-aware.** SQLite keeps the full
   `VACUUM`-rebuild + WAL-truncate with a before/after size report; Postgres
   runs its own in-place `VACUUM`; MySQL is a documented no-op (it has no
   database-wide VACUUM).
 
 ### Security
+
 - **Database passwords never appear on a command line.** `build-dsn` takes
   the password on stdin rather than a `--password` flag — an argv value is
   visible to every local user in `/proc/<pid>/cmdline` for as long as the
@@ -101,6 +178,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.3] - 2026-07-15
 
 ### Added
+
 - **Multi-arch Docker image release (issue #47).** Tagged pushes now build
   and publish a `linux/amd64`/`linux/arm64` image to both GHCR
   (`ghcr.io/sinhaparth5/coraza-waf-mod`) and Docker Hub, tagged with the
@@ -135,6 +213,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.2] - 2026-07-14
 
 ### Fixed
+
 - **Padding/margin utilities were overridden after the switch to compiled
   Tailwind.** The compiled stylesheet puts utilities in CSS cascade layers,
   and un-layered CSS beats layered CSS regardless of specificity — so the
@@ -148,6 +227,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.1] - 2026-07-14
 
 ### Changed
+
 - **Tailwind CSS is now compiled at build time instead of loaded from a CDN.**
   The admin UI and login page link a committed, binary-embedded stylesheet
   (`static/css/dist/tailwind.min.css`, ~48 KB) generated by the standalone
@@ -159,6 +239,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.0] - 2026-07-14
 
 ### Added
+
 - **Secrets-at-rest encryption (`--db-key-file`).** The live credentials
   stored in `waf.db` — the bot-challenge HMAC secret, TOTP secrets, the
   Cloudflare email token, the Redis password, and the webhook secret — are
@@ -178,6 +259,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prune log reports bytes reclaimed (main file + WAL sidecars).
 
 ### Changed
+
 - **Admin UI upgraded from Tailwind CSS v3 to v4.** `base.html` and the
   standalone `login.html` now load the `@tailwindcss/browser@4` CDN build and
   define the theme as CSS `@theme` tokens instead of an inline
@@ -202,6 +284,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.12] - 2026-07-13
 
 ### Changed
+
 - **Settings page is now a two-column layout.** The single 640px stack of ten
   cards is split into two equal columns inside a wider (1240px) container:
   account, two-factor authentication, API keys, database backup, and WAF rules
@@ -212,6 +295,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.11] - 2026-07-13
 
 ### Changed
+
 - **Admin UI restyle, round two: branding, components, and more motion.**
   The bundled shield logo (`static/imgs/logo.svg`) is now the favicon and the
   sidebar brand mark on every admin page and the login page (the challenge
@@ -248,6 +332,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   click the sidebar shield five times quickly.
 
 ### Added
+
 - **Admin login: TOTP two-factor authentication.** Sign-in can now require a
   6-digit authenticator code (RFC 6238, pure Go — works with Google
   Authenticator, Aegis, 1Password, etc.; codes are verified locally with no
@@ -270,6 +355,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.10] - 2026-07-13
 
 ### Changed
+
 - **Admin UI**: cleaned up the wording across the dashboard (`internal/ui`)
   — status messages, error messages, form hints, and page titles now read as
   plain sentences (e.g. "Settings saved and applied. No restart needed.",
@@ -280,10 +366,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   empty-cell placeholders are untouched.
 
 ### Fixed
+
 - **Bot protection / IP blocking**: a banned IP (or a geo-blocked country)
   could keep getting redirected to the JS challenge instead of receiving
   the expected 403, if it had no bypass cookie (or an expired/cleared one)
-  — the bot-challenge gate ran *before* the IP and geo blocklist checks in
+  — the bot-challenge gate ran _before_ the IP and geo blocklist checks in
   `Handle`, so the ban was never actually reached; it just kept scoring
   more unsolved `bot_challenge` autoban points instead of ever getting
   blocked with `ip_blocked`/`geo_blocked`. This read to an admin as "the
@@ -291,7 +378,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entry was entirely correct. The IP and geo blocklist checks now run
   before the challenge gate — an explicit admin/autoban decision (or a
   blocked country) has nothing left to prove by solving a challenge first.
-  The WAF check is unaffected and still runs *after* the challenge gate on
+  The WAF check is unaffected and still runs _after_ the challenge gate on
   purpose, so a brand-new attacker with no block rule yet can still
   accumulate unsolved-challenge points toward autoban before it ever
   triggers a WAF rule.
@@ -299,7 +386,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.9] - 2026-07-13
 
 ### Security
-- **Services**: the admin dashboard and REST API were reachable on *any*
+
+- **Services**: the admin dashboard and REST API were reachable on _any_
   domain routed to this server, not just its own management address —
   Echo's router matches routes purely by path with no notion of `Host`, so
   a service configured for e.g. `example-api.com` also served
@@ -314,6 +402,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   like any other traffic to it.
 
 ### Fixed
+
 - **Services**: `Registry.Match` silently fell back to the first
   configured service whenever a request's `Host` matched no service at
   all — e.g. hitting the server's bare IP directly was proxied to, and
@@ -325,6 +414,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.8] - 2026-07-11
 
 ### Added
+
 - **WAF Rules**: rule exceptions can now be scoped to a single service
   instead of always applying globally. The disable form on the WAF Rules
   page gets a Scope selector (Global vs a specific service); scoped
@@ -352,13 +442,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.7] - 2026-07-09
 
 ### Added
+
 - **Threat score**: a unified per-IP composite risk score (0–100), summing
   autoban's current point total, the bot-analysis score, an ASN/hosting
   classification, a geo-risk flag reusing existing geo block rules, and a
   JA4 repeat-offender component backed by a new `ja4_reputation` table.
   Read-only for now — surfaced on the log detail modal and as a "Score N"
   badge per row on the IP Rules page, with a per-component breakdown so an
-  admin can see *why* an IP scored what it did.
+  admin can see _why_ an IP scored what it did.
 - **Adaptive enforcement**: threat-score-driven scaling of the global rate
   limit and forced bot challenges for high-risk clients, opt-in and off by
   default from a new "Adaptive enforcement" card on the IP Rules page.
@@ -375,6 +466,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pre-built engines in memory — tracked separately rather than built here.
 
 ### Changed
+
 - The lint git hook now runs before every **commit** instead of only before
   a push (`.githooks/pre-commit`, was `pre-push`), and installs itself
   automatically the first time anyone runs `make build` or `make test` —
@@ -382,6 +474,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remember to run separately.
 
 ### Security
+
 - **Services**: adding a backend now rejects cloud instance-metadata
   endpoints (`169.254.169.254`, AWS IMDSv2's `fd00:ec2::254`,
   `metadata.google.internal`), checked both against the literal host and
@@ -392,8 +485,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.6] - 2026-07-09
 
 ### Added
+
 - **REST API**: `{admin.path}/api/v1/*`, authenticated with `Authorization:
-  Bearer <key>` instead of the session cookie — a separate, CSRF-exempt Echo
+Bearer <key>` instead of the session cookie — a separate, CSRF-exempt Echo
   group for programmatic management. Covers full CRUD for services and IP
   rules, plus read/manual ban/unban for the ban list (backed by the same
   `ip_rules` table, filtered to global block rows). Keys are `cwaf_`-prefixed
@@ -422,6 +516,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   via an opt-in git hook (`make hooks` once per clone, `.githooks/pre-push`).
 
 ### Changed
+
 - Every implementation package moved under `internal/` and was regrouped by
   concern (`internal/security/` for detection/mitigation packages,
   `internal/notify/` for outbound reporting, etc.) — a folder-structure
@@ -431,6 +526,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.5] - 2026-07-08
 
 ### Added
+
 - **Caching**: Opt-in per-service session-aware Varnish caching. Previously
   any request carrying a Cookie was refused caching outright; a service can
   now name its session cookie and have Varnish partition the cache per
@@ -451,6 +547,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   service.
 
 ### Security
+
 - Removed the `X-Protected-By` response header. `X-WAF-Engine` is kept, but
   advertising a dedicated "protected by" banner on every response made WAF
   fingerprinting by reconnaissance tools unnecessarily easy.
@@ -458,11 +555,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.3] - 2026-07-08
 
 ### Fixed
+
 - **Caching**: Varnish always reported `X-Cache: MISS`, even on repeated requests
   for static assets on a service with caching enabled. Varnish's built-in
   `vcl_backend_response` (appended after the custom one in `deploy/varnish/default.vcl`)
   independently marks a response uncacheable when it sees `Cache-Control:
-  no-store`/`no-cache`/`private` or `Vary: *` — regardless of any ttl already
+no-store`/`no-cache`/`private` or `Vary: *` — regardless of any ttl already
   set — and many backend frameworks attach exactly that to every response,
   including static files. Asset responses now have `Cache-Control` rewritten
   to a cacheable value (and a literal `Vary: *` stripped) so the admin's
@@ -472,6 +570,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.2] - 2026-07-08
 
 ### Added
+
 - First release published from GitHub after migrating the repository from
   GitLab.
 - GitHub Actions now runs tests on pushes and pull requests, then builds and
@@ -489,6 +588,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scorer eventually bans the IP for the repeated unsolved redirects.
 
 ### Changed
+
 - Replaced the GitLab CI/CD pipeline with GitHub Actions.
 - Updated the installer to discover releases through the GitHub API and download
   binaries plus checksums from GitHub Release assets instead of GitLab's package
@@ -497,6 +597,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Actions, release downloads, and compare links.
 
 ### Fixed
+
 - Removed the unused `config.yaml` / `deploy/config.yaml.example` files and
   every doc/UI reference to a config-file-driven setup. The server has taken
   CLI flags only for some time (`main.go` never parsed YAML), but `README.md`,
@@ -519,6 +620,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.3.0] - 2026-07-04
 
 ### Added
+
 - **Varnish cache integration** — per-service "Cache" toggle on `/admin/services`
   routes traffic through a loopback Varnish sandwich (client → WAF → varnishd →
   WAF cache-return listener → backend). VCL is static and never changes when
@@ -527,15 +629,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   binds, hash partitioning by `X-Cache-Service`).
 
 ### Changed
+
 - Redesigned the Services page.
 - Improved IP blocking behaviour.
 
 ### Fixed
+
 - Fixed a record-deletion bug in the admin UI.
 
 ## [1.2.0] - 2026-07-02
 
 ### Added
+
 - **Automatic IP banning (autoban)** — scores blocked events per client IP over
   a sliding window and writes a permanent global block rule once the threshold
   is crossed, with an amber "Auto" badge on the IP Rules page. Configurable from
@@ -546,11 +651,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   binary.
 
 ### Changed
+
 - Reworked the Settings page and tightened the Cloudflare email configuration.
 
 ## [1.1.0] - 2026-07-02
 
 ### Added
+
 - **JA4 TLS fingerprinting** — computed at handshake time, stored in the request
   log and shown in the UI; now the primary fingerprint.
 - **FingerprintJS browser visitor ID** — vendored bundle served from `/_cz/fp.js`,
@@ -561,19 +668,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   database instead of placeholders.
 
 ### Changed
+
 - Hardened admin login security (per-IP brute-force throttling).
 - Updated the bot challenge page and certificate creation flow.
 
 ### Deprecated
+
 - **JA3 fingerprinting** — retained only for continuity with existing log data;
   do not build new detection on it. Use JA4 instead.
 
 ### Removed
+
 - Removed the unused code-review page and stopped tracking a local `waf.db`.
 
 ## [1.0.1] - 2026-06-28
 
 ### Fixed
+
 - Graceful shutdown on `SIGINT`/`SIGTERM` so in-flight requests complete and the
   log queue drains before exit.
 - Trusted-proxy handling for forwarded client IPs (`X-Forwarded-For` / `X-Real-IP`).
@@ -585,6 +696,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Initial release — a single-binary Go WAF + reverse proxy.
 
 ### Added
+
 - **Coraza v3 WAF** with the embedded OWASP Core Rule Set (SQLi, XSS, RCE, path
   traversal, scanner UAs, etc.), plus support for custom `.conf` rules.
 - **Reverse proxy / multi-app routing** by Host header (virtual hosting) or path

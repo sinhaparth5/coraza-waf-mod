@@ -1,8 +1,11 @@
 {{define "content"}}
-<div class="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] items-start gap-4">
+{{template "management-hero" (map "AdminPath" .AdminPath "Image" "service-policy-mesh.webp" "Height" "750" "Icon" "hgi-server-stack-01" "Eyebrow" "Protected routing" "Title" "Build protected routes in a guided flow" "Copy" "Connect request matching to a backend, review the route, then manage health, TLS, caching, bot protection, and limits in one place.")}}
+
+<div class="flex flex-col gap-4">
 
   <!-- ── Add Service Wizard ── -->
-  <div class="card p-5 h-fit" id="service-wizard" data-step="1">
+  <div class="card h-fit border-t-2 border-t-emerald-500 p-5" id="service-wizard" data-step="1">
+    <div class="max-w-2xl">
     <div class="flex items-center gap-[10px] mb-[6px]">
       <div class="w-8 h-8 rounded-md bg-brand-tint flex items-center justify-center">
         <i class="hgi hgi-stroke hgi-rounded hgi-server-stack-01 text-[14px] text-brand-dark"></i>
@@ -95,6 +98,7 @@
         Checking backend reachability…
       </div>
     </form>
+    </div>
   </div>
 
   <!-- ── Services List ── -->

@@ -1,6 +1,8 @@
 {{template "base" .}}
 
 {{define "content"}}
+{{template "management-hero" (map "AdminPath" .AdminPath "Image" "service-policy-mesh.webp" "Height" "750" "Icon" "hgi-settings-01" "Eyebrow" "System control" "Title" "Security, delivery, and integrations in one control plane" "Copy" "Settings remain grouped by responsibility, with a clearer visual hierarchy and the same live apply behavior.")}}
+
 <div class="max-w-[1240px] flex flex-col gap-4">
 
   {{if .CredentialErr}}
