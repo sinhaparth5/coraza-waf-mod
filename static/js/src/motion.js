@@ -3,6 +3,34 @@
 (function () {
   var reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // Mobile navigation is an off-canvas version of the desktop sidebar.
+  // Keep the same links and destinations; only its responsive presentation
+  // changes. Escape and backdrop clicks always return focus to the opener.
+  var nav = document.getElementById('primary-nav');
+  var navOpen = document.getElementById('mobile-nav-open');
+  var navClose = document.getElementById('mobile-nav-close');
+  var navBackdrop = document.getElementById('mobile-nav-backdrop');
+  if (nav && navOpen && navClose && navBackdrop) {
+    function setMobileNav(open) {
+      nav.classList.toggle('-translate-x-full', !open);
+      nav.classList.toggle('translate-x-0', open);
+      navBackdrop.classList.toggle('hidden', !open);
+      navOpen.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (!open) navOpen.focus();
+    }
+    navOpen.addEventListener('click', function () { setMobileNav(true); });
+    navClose.addEventListener('click', function () { setMobileNav(false); });
+    navBackdrop.addEventListener('click', function () { setMobileNav(false); });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && navOpen.getAttribute('aria-expanded') === 'true') setMobileNav(false);
+    });
+    nav.querySelectorAll('a').forEach(function (link) {
+      link.addEventListener('click', function () {
+        if (window.innerWidth < 1024) setMobileNav(false);
+      });
+    });
+  }
+
   function stagger(items, stepMs, cap) {
     for (var i = 0; i < items.length && i < cap; i++) {
       items[i].style.animationDelay = (i * stepMs) + 'ms';

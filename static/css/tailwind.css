@@ -21,15 +21,15 @@
 @source "../js/src";
 
 @theme {
-  --color-brand: #76C893;
-  --color-brand-dark: #2E7D5B;
-  --color-brand-light: #9FE0B7;
-  --color-brand-tint: #EAF7EE;
-  --color-navy: #2B5C74;
-  --color-slateblue: #4A7B96;
-  --color-canvas: #E7E9EC;
-  --color-surface: #F4F6F8;
-  --color-line: #D9DEE3;
+  --color-brand: #4ADE80;
+  --color-brand-dark: #166534;
+  --color-brand-light: #BBF7D0;
+  --color-brand-tint: #ECFDF3;
+  --color-navy: #102A43;
+  --color-slateblue: #486581;
+  --color-canvas: #F3F7FA;
+  --color-surface: #F7FAFC;
+  --color-line: #D9E2EC;
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 }
@@ -39,8 +39,25 @@
      default cursor; restore the v3 behavior this UI was built on. */
   *, ::before, ::after { border-color: var(--color-line); }
   button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+  html { color-scheme: light; }
+  body { min-width: 320px; }
+  a, button, input, select, textarea { touch-action: manipulation; }
+  :focus-visible { outline: 3px solid rgba(22, 101, 52, .28); outline-offset: 2px; }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]), select, textarea { min-height: 44px; }
   /* The login page predates the --color-line token and was built on
      slate-200 default borders; keep its exact look (body carries
      .page-login there). */
   .page-login *, .page-login ::before, .page-login ::after { border-color: var(--color-slate-200); }
+}
+
+@layer components {
+  .card {
+    background: rgba(255, 255, 255, .98);
+    border: 1px solid var(--color-line);
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(16, 42, 67, .04), 0 10px 28px rgba(16, 42, 67, .055);
+  }
+  .table-scroll { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+  .table-scroll > table { min-width: 680px; }
+  .mobile-safe-modal { width: calc(100% - 2rem); max-height: calc(100dvh - 2rem); }
 }

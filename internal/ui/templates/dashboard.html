@@ -8,13 +8,14 @@
 {{define "content"}}
 
 <!-- ── Row 1: Two stat cards, 50/50 ── -->
-<div class="flex gap-4 mb-4">
+<div class="grid grid-cols-1 lg:grid-cols-2 items-stretch gap-4 mb-4">
 
   <!-- Card 1: WAF Active hero (photo + gradient, Allowed/Blocked breakdown) -->
-  <div class="card flex-1 overflow-hidden relative bg-navy text-white">
-    <img src="{{.AdminPath}}/static/imgs/Unsplash7bmdiiqz_j4.png" alt=""
-      class="absolute right-0 top-0 h-full w-[55%] object-cover opacity-80"/>
-    <div class="absolute inset-0 bg-linear-to-r from-navy via-navy/75 to-transparent"></div>
+  <div class="card h-full min-h-[350px] overflow-hidden relative bg-navy text-white">
+    <img src="{{.AdminPath}}/static/imgs/waf-operations-hero.webp" alt="" aria-hidden="true"
+      width="1717" height="916" fetchpriority="high"
+      class="absolute inset-0 h-full w-full object-cover opacity-90"/>
+    <div class="absolute inset-0 bg-linear-to-r from-navy via-navy/90 to-navy/15"></div>
 
     <div class="relative z-10 p-5 flex flex-col h-full">
       <div class="inline-flex items-center gap-[6px] bg-white/10 rounded-md px-3 py-[6px] w-fit mb-6">
@@ -25,7 +26,7 @@
       <p class="text-[13px] text-white/60 mb-1">Protected backends</p>
       <p class="text-[36px] font-extrabold leading-none mb-6">{{len .Apps}}</p>
 
-      <div class="flex gap-3 mt-auto">
+      <div class="flex flex-col sm:flex-row gap-3 mt-auto">
         <div class="flex-1 rounded-lg bg-white/[0.12] backdrop-blur-xs px-4 py-3">
           <p class="text-[12px] text-white/70 mb-2">Allowed today</p>
           <div class="flex items-end justify-between gap-2">
@@ -51,7 +52,7 @@
   </div>
 
   <!-- Card 2: Traffic stats + dot matrix -->
-  <div class="card flex-1 p-5">
+  <div class="card h-full min-h-[350px] p-5 flex flex-col">
     <div class="flex items-start gap-3 mb-1">
       <div class="w-8 h-8 rounded-md bg-brand-tint flex items-center justify-center shrink-0 mt-[2px]">
         <i class="hgi hgi-stroke hgi-rounded hgi-activity-01 text-sm text-brand-dark"></i>
@@ -66,12 +67,12 @@
     </div>
 
     <!-- Real hourly traffic, last 24h -->
-    <div class="mt-4 h-36">
+    <div class="mt-4 min-h-36 flex-1">
       <canvas id="trafficChart"></canvas>
     </div>
 
     <!-- Legend -->
-    <div class="flex items-center gap-4 mt-3">
+    <div class="flex items-center gap-4 mt-auto pt-3">
       <span class="flex items-center gap-[6px] text-[12px] text-slate-500">
         <span class="w-2 h-2 rounded-full bg-brand inline-block"></span>Allowed
       </span>
@@ -87,10 +88,10 @@
 <!-- ── Row 1.5: Live signals (placeholder ticker strip, real metrics TBD) ── -->
 <div class="card p-5 mb-4">
   <p class="text-[12px] text-slate-500 mb-3 px-1">At a glance</p>
-  <div class="flex gap-3 overflow-x-auto" data-stagger>
+  <div class="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-3" data-stagger>
 
     {{range .AtAGlance}}
-    <div class="flex flex-col gap-3 flex-1 min-w-[170px] rounded-lg {{.CardClass}} p-4 transition duration-150 hover:-translate-y-[2px] hover:shadow-xs">
+    <div class="flex h-full flex-col gap-3 min-w-0 rounded-xl {{.CardClass}} p-4 transition duration-150 hover:-translate-y-[2px] hover:shadow-xs">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-[6px]">
           <i class="hgi hgi-stroke hgi-rounded {{.Icon}} text-sm {{.IconClass}}"></i>
@@ -102,7 +103,7 @@
         <p class="text-[11px] text-slate-500 mb-px">Current value</p>
         <p class="text-[20px] font-extrabold text-slate-900">{{.Value}}</p>
       </div>
-      <svg viewBox="0 0 170 36" class="w-full h-9" preserveAspectRatio="none">
+      <svg viewBox="0 0 170 36" class="w-full h-9 mt-auto" preserveAspectRatio="none">
         <defs><linearGradient id="{{.SparkID}}" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="{{.SparkColor}}" stop-opacity="0.35"/>
           <stop offset="100%" stop-color="{{.SparkColor}}" stop-opacity="0"/>
@@ -118,10 +119,10 @@
 </div>
 
 <!-- ── Row 2: Breakdown + Top countries + Recent threats ── -->
-<div class="flex gap-4 mb-4">
+<div class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 items-stretch gap-4 mb-4">
 
   <!-- Request breakdown (donut + legend) -->
-  <div class="card w-[300px] shrink-0 p-5">
+  <div class="card w-full h-full p-5 flex flex-col">
     <div class="flex items-start justify-between mb-2">
       <div>
         <p class="text-[11px] uppercase tracking-[0.08em] font-medium text-slate-500 mb-[2px]">Traffic analysis</p>
@@ -137,9 +138,9 @@
       <div class="relative w-[176px] h-[176px]">
         <svg id="donut-ring" viewBox="0 0 176 176" class="w-[176px] h-[176px] rotate-[150deg]">
           {{if .HasTraffic}}
-          <circle cx="88" cy="88" r="74" fill="none" stroke="#76C893" stroke-width="13"
+          <circle cx="88" cy="88" r="74" fill="none" stroke="#4ADE80" stroke-width="13"
             stroke-dasharray="{{.AllowedArc}} 465" stroke-linecap="round" class="donut-arc"/>
-          <circle cx="88" cy="88" r="74" fill="none" stroke="#2B5C74" stroke-width="13"
+          <circle cx="88" cy="88" r="74" fill="none" stroke="#102A43" stroke-width="13"
             stroke-dasharray="{{.BlockedArc}} 465" stroke-dashoffset="{{.BlockedOffset}}"
             stroke-linecap="round" class="donut-arc"/>
           {{else}}
@@ -155,7 +156,7 @@
     </div>
 
     <!-- Legend -->
-    <div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-3 mt-auto">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-[10px]">
           <span class="w-[11px] h-[11px] rounded-full bg-brand inline-block"></span>
@@ -174,7 +175,7 @@
   </div>
 
   <!-- Top countries -->
-  <div class="card w-[300px] shrink-0 p-5">
+  <div class="card w-full h-full p-5 flex flex-col">
     <div class="flex items-start justify-between mb-5">
       <div>
         <p class="text-[11px] uppercase tracking-[0.08em] font-medium text-slate-500 mb-[2px]">Geo distribution</p>
@@ -186,7 +187,7 @@
     </div>
     <div class="flex flex-col gap-2">
       {{range .TopCountries}}
-      <div class="relative {{.WidthClass}} rounded-lg bg-linear-to-r from-[#CFEADB] to-transparent py-2 pl-3 pr-14">
+      <div class="relative {{.WidthClass}} rounded-lg bg-linear-to-r from-[#DCFCE7] to-transparent py-2 pl-3 pr-14">
         <div class="flex items-center gap-2">
           <span class="{{flagClass .Code}} w-6 h-[18px] bg-cover inline-block rounded-[3px] shrink-0"></span>
           <span class="text-[13px] font-semibold text-slate-800 truncate">{{.Name}}</span>
@@ -200,11 +201,11 @@
       </div>
       {{end}}
     </div>
-    <p class="text-[11px] text-slate-300 mt-5 text-center">requests by country, last 24h</p>
+    <p class="text-[11px] text-slate-300 mt-auto pt-5 text-center">requests by country, last 24h</p>
   </div>
 
   <!-- Recent threats -->
-  <div class="card flex-1 p-5 flex flex-col">
+  <div class="card h-full p-5 flex flex-col md:col-span-2 2xl:col-span-1">
     <div class="flex items-start justify-between mb-2">
       <div>
         <p class="text-[11px] uppercase tracking-[0.08em] font-medium text-slate-500 mb-[2px]">WAF detections</p>
@@ -255,12 +256,12 @@
       <p class="text-[11px] uppercase tracking-[0.08em] font-medium text-slate-500 mb-[2px]">Traffic monitor</p>
       <h3 class="text-[16px] font-bold text-slate-900">Recent requests</h3>
     </div>
-    <a href="/admin/logs" class="flex items-center gap-[6px] text-[13px] font-medium text-brand-dark border border-[#CFEADB] rounded-md px-4 py-2 no-underline hover:bg-brand-tint transition-colors duration-150">
+    <a href="/admin/logs" class="flex min-h-11 items-center gap-[6px] text-[13px] font-semibold text-brand-dark border border-green-200 rounded-lg px-4 py-2 no-underline hover:bg-brand-tint transition-colors duration-150">
       <i class="hgi hgi-stroke hgi-rounded hgi-signal-full-02 text-[13px]"></i>
       Live feed
     </a>
   </div>
-  <table class="w-full border-collapse text-[13px]">
+  <div class="table-scroll"><table class="w-full border-collapse text-[13px]">
     <thead>
       <tr class="border-b border-canvas bg-surface">
         <th class="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Time</th>
@@ -307,7 +308,7 @@
       </tr>
       {{end}}
     </tbody>
-  </table>
+  </table></div>
 </div>
 
 {{end}}
@@ -318,7 +319,7 @@
 
 <!-- ── Right panel ── -->
 {{define "rightpanel"}}
-<aside class="w-[320px] shrink-0 bg-white border-l border-line px-5 py-6 flex flex-col gap-5 overflow-y-auto">
+<aside class="w-full shrink-0 border-t border-line bg-white px-4 py-6 sm:px-6 xl:w-[320px] xl:border-t-0 xl:border-l xl:px-5 flex flex-col gap-5 overflow-y-auto">
 
   <!-- Blocked today / all-time -->
   <div class="w-full rounded-lg p-5 flex flex-col bg-navy transition-[opacity,translate] duration-300 starting:opacity-0 starting:translate-y-[6px]">
@@ -391,7 +392,7 @@
         </defs>
       </svg>
       <svg width="100%" height="36" viewBox="0 0 232 36" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg" class="absolute left-0 top-0">
-        <path d="M0 28.4C12.1 33.2 22.5 34.8 37.2 33.2C60.3 31.2 56.9 14.9 78.5 10C103 4.5 120.2 15.1 146.3 12.6C168.8 10.4 178.3 -3 200.3 0.6C219.7 3.8 219.9 14.1 232 22.6" stroke="#76C893" stroke-width="1.5"/>
+        <path d="M0 28.4C12.1 33.2 22.5 34.8 37.2 33.2C60.3 31.2 56.9 14.9 78.5 10C103 4.5 120.2 15.1 146.3 12.6C168.8 10.4 178.3 -3 200.3 0.6C219.7 3.8 219.9 14.1 232 22.6" stroke="#4ADE80" stroke-width="1.5"/>
       </svg>
     </div>
   </div>

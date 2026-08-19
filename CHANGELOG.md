@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-08-19
+
+### Changed
+- **Responsive admin UI refresh.** The existing security-console workflow now
+  uses a mobile drawer while retaining the desktop sidebar, responsive page
+  grids, touch-friendly controls, mobile-safe modals, and scrollable data
+  tables. The dashboard, logs, rules, services, certificates, threat-intel,
+  settings, notifications, and authentication surfaces share a more polished
+  visual system with stronger hierarchy, focus visibility, contrast, and
+  reduced-motion support. Dashboard comparison cards now use consistent
+  heights and aligned grid rows, while form/list layouts retain natural height
+  without stretching. Routes, form actions, HTMX targets, data bindings, and
+  application behavior are unchanged.
+- **Purpose-built security artwork.** The generic status-card and login imagery
+  is replaced by optimized, locally embedded WebP visuals, with an additional
+  global threat-intelligence banner shared by the relevant security views.
+  Explicit dimensions and restrained file sizes keep layouts stable and the
+  admin UI self-contained.
 ## [1.6.1] - 2026-07-26
 
 ### Fixed

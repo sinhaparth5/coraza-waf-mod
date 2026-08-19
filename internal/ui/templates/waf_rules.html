@@ -1,5 +1,5 @@
 {{define "content"}}
-<div class="grid grid-cols-[300px_1fr] gap-4">
+<div class="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] items-start gap-4">
 
   <!-- ── Left sidebar: disable form ── -->
   <div class="flex flex-col gap-4">
@@ -63,7 +63,7 @@
     {{template "card-header" (map "Cat" "Analytics" "Title" "Top Firing Rules" "Badge" "last 30 days")}}
     <div class="px-2 pb-2">
       {{if .TopRules}}
-      <table class="w-full text-[13px]">
+      <div class="table-scroll"><table class="w-full text-[13px]">
         <thead>
           <tr class="text-slate-400 text-[11px] font-semibold uppercase tracking-wide bg-surface">
             <th class="px-4 py-2 text-left">Rule ID</th>
@@ -101,7 +101,7 @@
           </tr>
           {{end}}
         </tbody>
-      </table>
+      </table></div>
       {{else}}
       {{template "empty-state" (map "Icon" "hgi-shield-01" "Message" "No WAF blocks recorded yet")}}
       {{end}}

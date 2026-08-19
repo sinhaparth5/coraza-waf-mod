@@ -23,36 +23,36 @@
 {{define "content"}}
 
 <!-- Filter bar -->
-<form method="get" action="/admin/logs" id="logs-filter-form" class="flex items-end gap-3 flex-wrap mb-4">
+<form method="get" action="/admin/logs" id="logs-filter-form" class="grid grid-cols-1 sm:grid-cols-2 xl:flex xl:items-end gap-3 mb-4">
 
   <!-- From date picker -->
-  <div>
+  <div class="min-w-0">
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">From</label>
     <input type="hidden" name="from" id="filter-from" value="{{.FilterFrom}}">
     <button type="button" id="filter-from-btn"
-      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[210px] hover:border-slate-300 focus:outline-hidden transition-colors">
+      class="flex min-h-11 w-full items-center gap-2 border-[1.5px] border-line rounded-lg px-3 py-2 text-[13px] bg-white cursor-pointer xl:min-w-[210px] hover:border-slate-300 focus:outline-hidden transition-colors">
       <i class="hgi hgi-stroke hgi-rounded hgi-calendar-02 text-[14px] text-slate-400 shrink-0"></i>
       <span id="filter-from-display" class="flex-1 text-left text-slate-400">Any date</span>
     </button>
   </div>
 
   <!-- To date picker -->
-  <div>
+  <div class="min-w-0">
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">To</label>
     <input type="hidden" name="to" id="filter-to" value="{{.FilterTo}}">
     <button type="button" id="filter-to-btn"
-      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[210px] hover:border-slate-300 focus:outline-hidden transition-colors">
+      class="flex min-h-11 w-full items-center gap-2 border-[1.5px] border-line rounded-lg px-3 py-2 text-[13px] bg-white cursor-pointer xl:min-w-[210px] hover:border-slate-300 focus:outline-hidden transition-colors">
       <i class="hgi hgi-stroke hgi-rounded hgi-calendar-02 text-[14px] text-slate-400 shrink-0"></i>
       <span id="filter-to-display" class="flex-1 text-left text-slate-400">Any date</span>
     </button>
   </div>
 
   <!-- App dropdown -->
-  <div class="relative">
+  <div class="relative min-w-0">
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">App</label>
     <input type="hidden" name="app" id="filter-app" value="{{.FilterApp}}">
     <button type="button" id="filter-app-btn"
-      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[145px] hover:border-slate-300 focus:outline-hidden transition-colors">
+      class="flex min-h-11 w-full items-center gap-2 border-[1.5px] border-line rounded-lg px-3 py-2 text-[13px] bg-white cursor-pointer xl:min-w-[145px] hover:border-slate-300 focus:outline-hidden transition-colors">
       <span id="filter-app-display" class="flex-1 text-left text-slate-700">All apps</span>
       <i class="hgi hgi-stroke hgi-rounded hgi-arrow-down-01 text-[11px] text-slate-400 shrink-0"></i>
     </button>
@@ -67,11 +67,11 @@
   </div>
 
   <!-- Status dropdown -->
-  <div class="relative">
+  <div class="relative min-w-0">
     <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">Status</label>
     <input type="hidden" name="status" id="filter-status" value="{{.FilterStatus}}">
     <button type="button" id="filter-status-btn"
-      class="flex items-center gap-2 border-[1.5px] border-line rounded-md px-3 py-2 text-[13px] bg-white cursor-pointer min-w-[155px] hover:border-slate-300 focus:outline-hidden transition-colors">
+      class="flex min-h-11 w-full items-center gap-2 border-[1.5px] border-line rounded-lg px-3 py-2 text-[13px] bg-white cursor-pointer xl:min-w-[155px] hover:border-slate-300 focus:outline-hidden transition-colors">
       <span id="filter-status-display" class="flex-1 text-left text-slate-700">All statuses</span>
       <i class="hgi hgi-stroke hgi-rounded hgi-arrow-down-01 text-[11px] text-slate-400 shrink-0"></i>
     </button>
@@ -97,7 +97,7 @@
 </form>
 
 <!-- Status bar -->
-<div class="flex items-center gap-4 mb-4">
+<div class="flex flex-wrap items-center gap-3 sm:gap-4 mb-4">
   {{if .History}}
   <div class="flex items-center gap-2 text-[14px] font-medium text-slate-500">
     <i class="hgi hgi-stroke hgi-rounded hgi-database text-[13px] text-navy"></i>
@@ -111,8 +111,8 @@
     </span>
     Live stream active
   </div>
-  <span class="w-px h-4 bg-line block"></span>
-  <span class="text-[12px] text-slate-500">New entries appear at the top</span>
+  <span class="hidden sm:block w-px h-4 bg-line"></span>
+  <span class="hidden sm:inline text-[12px] text-slate-500">New entries appear at the top</span>
   <span class="flex-1"></span>
   <div class="inline-flex items-center rounded-md border border-line p-1 bg-surface" role="tablist" aria-label="Log view">
     <button type="button" id="view-table-btn" role="tab" aria-selected="true"
@@ -130,10 +130,10 @@
 </div>
 
 <!-- Log terminal card -->
-<div class="card overflow-hidden">
+<div class="card overflow-x-auto">
 
   <!-- Column headers (table view only) -->
-  <div id="log-columns" class="flex items-center gap-[22px] px-6 py-3 bg-surface border-b border-line text-[11px] font-semibold text-slate-500 uppercase tracking-[.06em]">
+  <div id="log-columns" class="flex min-w-[920px] items-center gap-[22px] px-6 py-3 bg-surface border-b border-line text-[11px] font-semibold text-slate-500 uppercase tracking-[.06em]">
     <span class="shrink-0 w-[104px]">Time</span>
     <span class="shrink-0 w-[94px]">App</span>
     <span class="shrink-0 w-[150px]">IP</span>
@@ -146,7 +146,7 @@
 
   {{if .History}}
   <!-- Static historical results -->
-  <div id="log-wrapper" data-history="true" class="overflow-y-auto h-[calc(100vh-350px)]">
+  <div id="log-wrapper" data-history="true" class="min-w-[920px] overflow-y-auto h-[calc(100dvh-350px)] min-h-[360px]">
     <div id="log-feed">
       {{range .Recent}}{{template "log-row" .}}{{end}}
     </div>
@@ -161,7 +161,7 @@
   <!-- SSE live feed -->
   <div id="log-wrapper"
        data-history="false"
-       class="overflow-y-auto h-[calc(100vh-280px)]">
+       class="min-w-[920px] overflow-y-auto h-[calc(100dvh-280px)] min-h-[360px]">
     <div id="log-feed"
          data-live-stream="true">
       {{range .Recent}}{{template "log-row" .}}{{end}}
@@ -177,7 +177,7 @@
   <!-- SSE live feed: Terminal (access log) view, hidden until selected.
        Lines don't wrap (whitespace-pre); overflow-auto gives a horizontal
        scrollbar for long lines instead, like a real terminal. -->
-  <div id="access-log-wrapper" class="hidden overflow-auto h-[calc(100vh-280px)] bg-slate-900">
+  <div id="access-log-wrapper" class="hidden min-w-[920px] overflow-auto h-[calc(100dvh-280px)] min-h-[360px] bg-slate-900">
     <div id="access-log-feed" class="text-white text-[12px] font-mono px-4 py-3 whitespace-pre">
       {{range .AccessLogRecent}}<div>{{.}}</div>{{end}}
       {{if not .AccessLogRecent}}<p id="access-log-empty" class="text-slate-400">Waiting for requests…</p>{{end}}
@@ -224,8 +224,8 @@
       <span id="ld-method" class="font-mono text-[11px] font-bold bg-slate-100 text-slate-600 px-2 py-[3px] rounded-sm shrink-0"></span>
       <span id="ld-path"   class="font-mono text-[13px] text-slate-700 flex-1 truncate min-w-0"></span>
       <span id="ld-status" class="font-bold text-[15px] shrink-0 tabular-nums"></span>
-      <button id="log-detail-close"
-              class="w-8 h-8 flex items-center justify-center rounded-md bg-surface border border-line text-slate-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors cursor-pointer shrink-0 ml-1">
+      <button id="log-detail-close" aria-label="Close request details"
+              class="w-11 h-11 sm:w-9 sm:h-9 flex items-center justify-center rounded-lg bg-surface border border-line text-slate-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors cursor-pointer shrink-0 ml-1">
         <i class="hgi hgi-stroke hgi-rounded hgi-cancel-01 text-[13px]"></i>
       </button>
     </div>
@@ -234,7 +234,7 @@
     <div class="overflow-y-auto p-6 flex flex-col gap-6">
 
       <!-- ① Overview -->
-      <div class="grid grid-cols-2 gap-x-8 gap-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
         <div>
           <p class="ld-label">Timestamp (UTC)</p>
           <p id="ld-ts" class="font-mono text-[13px] text-slate-700"></p>
