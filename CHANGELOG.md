@@ -25,6 +25,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   global threat-intelligence banner shared by the relevant security views.
   Explicit dimensions and restrained file sizes keep layouts stable and the
   admin UI self-contained.
+## [1.6.1] - 2026-07-26
+
+### Fixed
+- **Web app manifest requests no longer get challenged, and no longer ban the
+  visitor (issue #57).** Browsers fetch `<link rel="manifest">` with
+  credentials omitted unless the tag carries `crossorigin="use-credentials"`,
+  so the manifest request never carries the `cz_bot_ok` bypass cookie — even
+  from a tab that solved the JS challenge seconds earlier. The bot-challenge
+  gate therefore 307'd it on every page load, which both broke the manifest
+  (the browser got HTML where it expected `application/manifest+json`, so
+  Android showed no install prompt and no theme color) and left an unsolved
+  `bot_challenge` row behind each time. Autoban scores those at 1 point each,
+  so ordinary Android visitors accumulated their way to a permanent IP ban
+  just by reloading the site. Requests whose final path segment is
+  `manifest.json` or ends in `.webmanifest` now skip the challenge gate only;
+  IP blocklist, geo blocking, rate limiting and WAF inspection still apply to
+  them unchanged. The exemption keys off the request path rather than the
+  `Sec-Fetch-Dest`/`Accept` headers the same fetch carries, since those are
+  client-settable and would otherwise let any request skip the gate.
 
 ## [1.6.0] - 2026-07-16
 
@@ -585,7 +604,8 @@ Initial release — a single-binary Go WAF + reverse proxy.
 - **All storage in SQLite** (`modernc.org/sqlite`, pure Go, no CGO) — one
   `waf.db` file for logs, rules, services, and TLS state.
 
-[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.6.0...main
+[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.6.1...main
+[1.6.1]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.5.3...v1.6.0
 [1.5.3]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.5.1...v1.5.2

@@ -620,6 +620,49 @@ func TestChallengeNamespaceNeverChallengedOrProxied(t *testing.T) {
 	}
 }
 
+// TestManifestBypassesChallengeGate covers issue #57: Android fetches the web
+// app manifest with credentials omitted, so it never carries the bypass cookie
+// and would be challenge-redirected on every page load — each 307 logged as an
+// unsolved bot_challenge that autoban eventually turns into an IP ban.
+func TestManifestBypassesChallengeGate(t *testing.T) {
+	var served []string
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		served = append(served, r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	h := newTestHandler(t, backend)
+	// Threshold 0 = every non-trusted client is challenged, so anything not
+	// explicitly exempt 307s here.
+	h.ReloadBotProtection(challenge.New("test-secret", 3600, 0))
+	e := echo.New()
+
+	get := func(path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("X-Real-IP", "198.23.130.204")
+		rec := httptest.NewRecorder()
+		if err := h.Handle(e.NewContext(req, rec)); err != nil {
+			t.Fatalf("Handle(%s) returned error: %v", path, err)
+		}
+		return rec
+	}
+
+	for _, path := range []string{"/site.webmanifest", "/manifest.json"} {
+		if rec := get(path); rec.Code != http.StatusOK {
+			t.Errorf("%s: expected 200 (proxied), got %d (Location: %q)", path, rec.Code, rec.Header().Get("Location"))
+		}
+	}
+	if len(served) != 2 {
+		t.Errorf("backend saw %d manifest requests (%v), want 2", len(served), served)
+	}
+
+	// Sanity check the challenger is actually live: a normal path still 307s.
+	if rec := get("/index.html"); rec.Code != http.StatusTemporaryRedirect {
+		t.Errorf("normal path with active challenger: expected 307, got %d", rec.Code)
+	}
+}
+
 // TestAdaptiveEnforcementTightensRateLimitForHighRiskIP exercises issue #16
 // end to end: a client whose cached threat score is at/above the configured
 // high-risk threshold gets a scaled-down effective rate limit, while an
