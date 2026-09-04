@@ -386,7 +386,11 @@ func (h *Handler) Handle(c echo.Context) error {
 	// (if this service has its own rule exceptions) takes precedence over
 	// the shared default.
 	engine := h.wafEngineFor(appName)
-	result, err := engine.Check(r, clientIP)
+	checkOpts := waf.CheckOptions{}
+	if app != nil {
+		checkOpts.AllowLargeJavaScriptUploads = app.AllowLargeJSUploads
+	}
+	result, err := engine.CheckWithOptions(r, clientIP, checkOpts)
 	if err != nil {
 		log.Printf("waf error: %v", err)
 		metrics.RecordRequest(appName, strconv.Itoa(http.StatusInternalServerError), time.Since(start).Seconds())

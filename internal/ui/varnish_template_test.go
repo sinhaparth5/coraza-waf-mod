@@ -46,7 +46,7 @@ func TestServicesRowsAreLabelsPlusEdit(t *testing.T) {
 	}
 
 	views := []ServiceView{
-		{Service: storage.Service{ID: 1, Name: "cdn", Host: "cdn.example.com", Backend: "http://127.0.0.1:3000", TLSMode: "none", BotMode: "always", RateLimitRPS: 10, RateLimitBurst: 20, CacheEnabled: true}},
+		{Service: storage.Service{ID: 1, Name: "cdn", Host: "cdn.example.com", Backend: "http://127.0.0.1:3000", TLSMode: "none", BotMode: "always", RateLimitRPS: 10, RateLimitBurst: 20, CacheEnabled: true, AllowLargeJSUploads: true}},
 		{Service: storage.Service{ID: 2, Name: "app", Prefix: "/api", Backend: "http://127.0.0.1:4000", TLSMode: "none", BotMode: "inherit"}},
 	}
 	var buf bytes.Buffer
@@ -55,8 +55,9 @@ func TestServicesRowsAreLabelsPlusEdit(t *testing.T) {
 	}
 	out := buf.String()
 
-	for _, want := range []string{"Cached", "10/s", "Bot: always", "svc-edit-btn",
+	for _, want := range []string{"Cached", "10/s", "Bot: always", "Large JS uploads", "svc-edit-btn",
 		`data-id="1"`, `data-has-host="1"`, `data-rps="10"`, `data-burst="20"`, `data-mode="always"`, `data-cache="1"`,
+		`data-large-js-uploads="1"`,
 		`data-id="2"`, `data-has-host="0"`, `data-cache="0"`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("services-rows output missing %q", want)
@@ -94,8 +95,8 @@ func TestServicesPageRendersEditModal(t *testing.T) {
 
 	for _, want := range []string{
 		"svc-modal-overlay", "svc-tabs",
-		`data-tab="ratelimit"`, `data-tab="bot"`, `data-tab="cache"`, `data-tab="tls"`,
-		"rl-form", "bot-form", "svc-cache-form", "tls-pool-form", "tls-upload-form", "tls-auto-form", "tls-clear-form",
+		`data-tab="ratelimit"`, `data-tab="bot"`, `data-tab="uploads"`, `data-tab="cache"`, `data-tab="tls"`,
+		"rl-form", "bot-form", "svc-uploads-form", "svc-cache-form", "tls-pool-form", "tls-upload-form", "tls-auto-form", "tls-clear-form",
 		"svc-delete-btn",
 	} {
 		if !strings.Contains(out, want) {

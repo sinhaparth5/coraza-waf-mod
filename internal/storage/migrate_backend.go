@@ -248,11 +248,12 @@ func migrateServicesTable(source, target *DB, overriding bool) (int, error) {
 			return n, err
 		}
 		q := fmt.Sprintf(`INSERT INTO services (%s)%s VALUES (%s)`,
-			serviceColumns, overridingClause(overriding), placeholders(21))
+			serviceColumns, overridingClause(overriding), placeholders(22))
 		if _, err := target.exec(q,
 			s.ID, s.Name, s.Host, s.Prefix, s.Backend, s.CreatedAt, s.TLSMode, s.TLSCertPath, s.TLSKeyPath, s.TLSExpiresAt,
 			s.RateLimitRPS, s.RateLimitBurst, s.BotMode, s.CertID, boolToInt(s.CacheEnabled), boolToInt(s.CacheBySession),
 			s.SessionCookieName, s.CacheTTLFloor, s.CacheTTLCeiling, s.CacheGrace, s.CacheKeep,
+			boolToInt(s.AllowLargeJSUploads),
 		); err != nil {
 			return n, err
 		}

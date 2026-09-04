@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Services: opt-in large JavaScript uploads.** S3-compatible `PutObject`
+  requests for `.js` assets were treated as inspectable non-file bodies and
+  rejected with 413 above 128 KiB. A new per-service Uploads setting streams
+  JavaScript media types to the backend and permits the CRS method/content-type
+  rules required by S3 `PUT`, while retaining other header-phase WAF, IP, bot,
+  and rate-limit checks.
+
 - **Management pages now use balanced, top-first layouts.** IP Rules, Geo
   Rules, WAF Rules, Services, Certificates, and Threat Intel place their
   important controls above full-width results instead of stretching a tall

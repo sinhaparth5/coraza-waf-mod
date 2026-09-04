@@ -27,6 +27,18 @@ type Result struct {
 	Action  string
 }
 
+// CheckOptions contains request-scoped inspection policy selected after the
+// proxy has matched a service. The default zero value preserves the normal
+// WAF policy.
+type CheckOptions struct {
+	// AllowLargeJavaScriptUploads treats JavaScript media types as file
+	// payloads: their bodies stream to the backend without deep inspection.
+	// Header-phase WAF checks still run. This is deliberately opt-in because
+	// an application that executes or parses the uploaded source may prefer
+	// the normal 128 KiB inspected-body limit.
+	AllowLargeJavaScriptUploads bool
+}
+
 // requestBodyLimit is the SecRequestBodyLimit value passed to Coraza and the
 // most Check ever buffers of a *multipart* request body in memory (13107200 =
 // the coraza.conf-recommended default, ~12.5 MiB). Multipart is the one shape
@@ -153,12 +165,26 @@ const (
 //
 // An absent Content-Type is inspected, deliberately: otherwise omitting the
 // header would be the bypass.
-func inspectionFor(contentType string) bodyInspection {
+func normalizedMediaType(contentType string) string {
 	mediaType := contentType
 	if i := strings.IndexByte(mediaType, ';'); i >= 0 {
 		mediaType = mediaType[:i]
 	}
-	mediaType = strings.ToLower(strings.TrimSpace(mediaType))
+	return strings.ToLower(strings.TrimSpace(mediaType))
+}
+
+func isJavaScriptMediaType(mediaType string) bool {
+	switch normalizedMediaType(mediaType) {
+	case "application/javascript", "application/ecmascript", "application/x-javascript",
+		"text/javascript", "text/ecmascript":
+		return true
+	default:
+		return false
+	}
+}
+
+func inspectionFor(contentType string) bodyInspection {
+	mediaType := normalizedMediaType(contentType)
 
 	switch {
 	case strings.HasPrefix(mediaType, "multipart/"):
@@ -189,6 +215,12 @@ func inspectionFor(contentType string) bodyInspection {
 // can skip the Coraza transaction entirely and reuse a recent verdict; see
 // verdictcache.go.
 func (e *Engine) Check(r *http.Request, clientIP string) (*Result, error) {
+	return e.CheckWithOptions(r, clientIP, CheckOptions{})
+}
+
+// CheckWithOptions is Check with request-scoped policy from the matched
+// service. Its zero-value options are identical to Check.
+func (e *Engine) CheckWithOptions(r *http.Request, clientIP string, opts CheckOptions) (*Result, error) {
 	if !e.enabled {
 		return &Result{}, nil
 	}
@@ -208,6 +240,9 @@ func (e *Engine) Check(r *http.Request, clientIP string) (*Result, error) {
 	mode := inspectSkip
 	if hadBody {
 		mode = inspectionFor(r.Header.Get("Content-Type"))
+		if opts.AllowLargeJavaScriptUploads && isJavaScriptMediaType(r.Header.Get("Content-Type")) {
+			mode = inspectSkip
+		}
 	}
 
 	// buffered means `body` holds the request in full — trivially true when

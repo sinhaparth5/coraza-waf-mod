@@ -116,13 +116,14 @@
   <div class="card mobile-safe-modal max-w-[480px] overflow-y-auto p-4 sm:p-6">
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-[16px] font-bold text-slate-900">Edit <span id="svc-modal-service-name" class="text-brand"></span></h2>
-      <button type="button" id="svc-modal-close" class="bg-none border-none cursor-pointer text-slate-500 text-lg leading-none">&times;</button>
+      <button type="button" id="svc-modal-close" aria-label="Close service settings" class="bg-none border-none cursor-pointer text-slate-500 text-lg leading-none">&times;</button>
     </div>
 
     <!-- Tabs -->
-    <div id="svc-tabs" class="grid grid-cols-2 sm:grid-cols-4 gap-1 mb-5 bg-surface rounded-lg p-1">
+    <div id="svc-tabs" class="grid grid-cols-2 sm:grid-cols-5 gap-1 mb-5 bg-surface rounded-lg p-1">
       <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-white shadow-sm text-slate-900" data-tab="ratelimit">Rate Limit</button>
       <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="bot">Bot</button>
+      <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="uploads">Uploads</button>
       <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="cache">Cache</button>
       <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="tls">TLS</button>
     </div>
@@ -183,6 +184,20 @@
         <button type="submit" class="btn-primary w-full">Save</button>
       </form>
       <div id="bot-error" class="text-[12px] text-red-500 mt-[10px]"></div>
+    </div>
+
+    <!-- ── Uploads tab ── -->
+    <div class="svc-tab hidden" data-tab="uploads">
+      <form id="svc-uploads-form" hx-post="{{.AdminPath}}/services/uploads/0" hx-target="#services-body" hx-swap="innerHTML" data-admin-path="{{.AdminPath}}">
+        <p class="text-[12px] text-slate-500 mb-4 leading-[1.5]">Use this for S3-compatible services that accept JavaScript files with <code class="font-mono">PutObject</code>. JavaScript bodies will stream to the backend instead of hitting the WAF's 128 KiB inspected-body limit.</p>
+        <label class="flex items-center justify-between cursor-pointer py-2 mb-3">
+          <span class="text-[13px] font-semibold text-slate-700">Allow large JavaScript uploads</span>
+          {{template "toggle-switch" (map "Name" "enabled" "ID" "svc-large-js-uploads")}}
+        </label>
+        <p id="svc-uploads-help" class="text-[12px] text-amber-700 bg-amber-50 border border-amber-100 rounded-md p-3 mb-4 leading-[1.5]">JavaScript request bodies will not be deeply inspected, and the default CRS method/content-type rules are relaxed so S3 <code class="font-mono">PUT</code> works. Other header checks, IP rules, rate limits, and bot protection remain active. Only enable this for a trusted upload endpoint.</p>
+        <button type="submit" class="btn-primary w-full">Save</button>
+      </form>
+      <div id="svc-uploads-error" role="alert" aria-live="polite" class="text-[12px] text-red-500 mt-[10px]"></div>
     </div>
 
     <!-- ── Cache tab ── -->
@@ -399,11 +414,15 @@
     {{if .CacheBySession}}
     <span class="text-[11px] font-semibold bg-sky-100 text-sky-600 px-2 py-[2px] rounded-sm">Cached (session)</span>
     {{end}}
+    {{if .AllowLargeJSUploads}}
+    <span class="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-[2px] rounded-sm">Large JS uploads</span>
+    {{end}}
     <span class="text-[12px] text-slate-400 whitespace-nowrap ml-1">{{fmtTime .CreatedAt}}</span>
     <button type="button" class="svc-edit-btn inline-flex items-center gap-[5px] text-[12px] font-medium text-slate-600 bg-white border border-line rounded-md px-4 py-[6px] cursor-pointer font-sans hover:border-slate-400 transition-colors duration-150 ml-1"
       data-id="{{.ID}}" data-name="{{.Name}}" data-has-host="{{if .Host}}1{{else}}0{{end}}"
       data-rps="{{.RateLimitRPS}}" data-burst="{{.RateLimitBurst}}" data-mode="{{.BotMode}}" data-cache="{{if .CacheEnabled}}1{{else}}0{{end}}"
       data-session-cache="{{if .CacheBySession}}1{{else}}0{{end}}" data-session-cookie="{{.SessionCookieName}}"
+      data-large-js-uploads="{{if .AllowLargeJSUploads}}1{{else}}0{{end}}"
       data-ttl-floor="{{.CacheTTLFloor}}" data-ttl-ceiling="{{.CacheTTLCeiling}}" data-grace="{{.CacheGrace}}" data-keep="{{.CacheKeep}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-settings-01 text-xs"></i>
       Edit

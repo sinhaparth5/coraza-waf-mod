@@ -132,11 +132,12 @@ func main() {
 	}
 
 	// buildWAFAll constructs a fresh default engine plus one extra engine per
-	// service that has its own rule exceptions, reading the current DB state
-	// each time, so SIGHUP and the WAF Rules UI page both pick up the latest
-	// toggles without a restart. Only services with at least one row in
-	// waf_service_rule_exceptions get an extra engine — a deployment that
-	// never uses per-service exceptions pays zero extra memory for this
+	// service that has its own rule exceptions or large-JavaScript upload
+	// policy, reading the current DB state each time, so SIGHUP and the WAF
+	// Rules/Services UI pages both pick up the
+	// latest toggles without a restart. Only services with an exception or the
+	// upload opt-in get an extra engine — a deployment that uses neither pays
+	// zero extra memory for this
 	// (each engine holds the full compiled OWASP CRS ruleset, so this is
 	// deliberately lazy rather than always building one per service).
 	buildWAFAll := func() (*waf.Engine, map[string]*waf.Engine, error) {
@@ -153,13 +154,33 @@ func main() {
 		if err != nil {
 			return nil, nil, err
 		}
-		byService := make(map[string]*waf.Engine, len(svcNames))
+		serviceSet := make(map[string]bool, len(svcNames))
 		for _, name := range svcNames {
+			serviceSet[name] = false
+		}
+		services, err := db.ListServices()
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, svc := range services {
+			if svc.AllowLargeJSUploads {
+				serviceSet[svc.Name] = true
+			}
+		}
+		byService := make(map[string]*waf.Engine, len(serviceSet))
+		for name, allowLargeJS := range serviceSet {
 			svcIDs, err := db.GetWAFRuleIDsForService(name)
 			if err != nil {
 				return nil, nil, err
 			}
 			merged := append(append([]int{}, globalIDs...), svcIDs...)
+			// CRS 920420 rejects JavaScript media types and 911100 rejects
+			// PUT before body inspection. The service upload toggle
+			// deliberately permits both parts of S3 PutObject; all other
+			// header rules remain enabled.
+			if allowLargeJS {
+				merged = append(merged, 911100, 920420)
+			}
 			eng, err := waf.New(cfg.WAF, merged)
 			if err != nil {
 				return nil, nil, err

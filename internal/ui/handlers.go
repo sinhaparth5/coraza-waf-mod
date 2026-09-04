@@ -320,6 +320,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.DELETE("/certificates/:id", h.DeleteCertificate)
 	g.POST("/services/ratelimit", h.SetServiceRateLimit)
 	g.POST("/services/bot/:id", h.SetServiceBotMode)
+	g.POST("/services/uploads/:id", h.SetServiceLargeJSUploads)
 	g.POST("/services/cache/:id", h.SetServiceCache)
 	g.POST("/services/cache-session/:id", h.SetServiceCacheSession)
 	g.POST("/services/cache-tuning/:id", h.SetServiceCacheTuning)
@@ -2173,6 +2174,29 @@ func (h *Handler) SetServiceBotMode(c echo.Context) error {
 	}
 	if err := h.registry.Reload(h.db); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	w := c.Response().Writer
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return h.tmpls["services"].ExecuteTemplate(w, "services-rows", h.serviceViews())
+}
+
+// SetServiceLargeJSUploads opts one service into streaming JavaScript request
+// bodies. This avoids the small, deliberately conservative limit applied to
+// non-file bodies while leaving all header-phase WAF checks active.
+func (h *Handler) SetServiceLargeJSUploads(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
+	}
+	enabled := c.FormValue("enabled") == "1"
+	if err := h.db.SetServiceLargeJSUploads(id, enabled); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	if err := h.registry.Reload(h.db); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	if h.reloadWAF != nil {
+		h.reloadWAF()
 	}
 	w := c.Response().Writer
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

@@ -184,7 +184,6 @@ func (h *Handler) APICreateService(c echo.Context) error {
 	if err := h.registry.Reload(h.db); err != nil {
 		return apiError(c, http.StatusInternalServerError, err.Error())
 	}
-
 	for _, svc := range h.registry.List() {
 		if svc.Name == req.Name {
 			return c.JSON(http.StatusCreated, svc)
@@ -198,13 +197,14 @@ func (h *Handler) APICreateService(c echo.Context) error {
 // fields distinguish "omitted" from "explicitly cleared" so a partial
 // payload never silently zeroes settings the caller didn't mention.
 type apiUpdateServiceRequest struct {
-	Name    *string  `json:"name"`
-	Host    *string  `json:"host"`
-	Prefix  *string  `json:"prefix"`
-	Backend *string  `json:"backend"`
-	RPS     *float64 `json:"rate_limit_rps"`
-	Burst   *int     `json:"rate_limit_burst"`
-	BotMode *string  `json:"bot_mode"` // "inherit" | "always" | "off"
+	Name                *string  `json:"name"`
+	Host                *string  `json:"host"`
+	Prefix              *string  `json:"prefix"`
+	Backend             *string  `json:"backend"`
+	RPS                 *float64 `json:"rate_limit_rps"`
+	Burst               *int     `json:"rate_limit_burst"`
+	BotMode             *string  `json:"bot_mode"` // "inherit" | "always" | "off"
+	AllowLargeJSUploads *bool    `json:"allow_large_js_uploads"`
 }
 
 func (h *Handler) APIUpdateService(c echo.Context) error {
@@ -266,9 +266,17 @@ func (h *Handler) APIUpdateService(c echo.Context) error {
 			return apiError(c, http.StatusInternalServerError, err.Error())
 		}
 	}
+	if req.AllowLargeJSUploads != nil {
+		if err := h.db.SetServiceLargeJSUploads(id, *req.AllowLargeJSUploads); err != nil {
+			return apiError(c, http.StatusInternalServerError, err.Error())
+		}
+	}
 
 	if err := h.registry.Reload(h.db); err != nil {
 		return apiError(c, http.StatusInternalServerError, err.Error())
+	}
+	if req.AllowLargeJSUploads != nil && h.reloadWAF != nil {
+		h.reloadWAF()
 	}
 	svc, err := h.db.GetService(id)
 	if err != nil {

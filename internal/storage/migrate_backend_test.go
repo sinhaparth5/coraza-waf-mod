@@ -32,6 +32,9 @@ func TestMigrateConfigTo(t *testing.T) {
 	if err := source.SetServiceCache(1, true); err != nil {
 		t.Fatal(err)
 	}
+	if err := source.SetServiceLargeJSUploads(1, true); err != nil {
+		t.Fatal(err)
+	}
 	if err := source.AddIPRuleWithNote("", "203.0.113.5", "block", "test note"); err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +89,7 @@ func TestMigrateConfigTo(t *testing.T) {
 	defer target.Close()
 
 	svcs, err := target.ListServices()
-	if err != nil || len(svcs) != 1 || svcs[0].Name != "svc1" || !svcs[0].CacheEnabled {
+	if err != nil || len(svcs) != 1 || svcs[0].Name != "svc1" || !svcs[0].CacheEnabled || !svcs[0].AllowLargeJSUploads {
 		t.Errorf("target services = %+v, %v", svcs, err)
 	}
 	rules, err := target.ListIPRules()

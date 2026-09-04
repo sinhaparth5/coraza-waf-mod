@@ -551,14 +551,21 @@ geo, WAF engine, rate limiter). The steps below are the implementation.
 **Edit / manage a service:** use the **Manage** controls on a row to set per-service TLS (below),
 per-service **bot mode** (`POST /admin/services/bot/:id` with `bot_mode` = `inherit`/`always`/`off`),
 per-service **rate limit** (`POST /admin/services/ratelimit` with `service_id`, `rps`, `burst`), and
-the **Cache** toggle, which routes this service through Varnish when the global Varnish switch is on
+the **Uploads → Allow large JavaScript uploads** toggle
+(`POST /admin/services/uploads/:id` with `enabled=1`). The upload option is intended for
+S3-compatible `PutObject` endpoints: JavaScript MIME bodies stream to the backend rather than being
+deeply inspected and hitting the 128 KiB non-file-body limit. Other header policy, IP rules, bot
+protection, and rate limits still apply; only the CRS method/content-type rules needed for S3 `PUT`
+are relaxed for the opted-in service. The **Cache** toggle routes this service through Varnish
+when the global Varnish switch is on
 (see [Varnish Cache Integration](/docs/configuration/varnish)).
 
 **Delete a service:** the trash control issues `DELETE /admin/services/:id` and rebuilds the
 registry.
 
 **Routes:** `GET /services`, `POST /services` (add), `DELETE /services/:id`,
-`POST /services/ratelimit`, `POST /services/bot/:id`, plus the TLS routes below.
+`POST /services/ratelimit`, `POST /services/bot/:id`, `POST /services/uploads/:id`, plus the TLS
+routes below.
 
 ## Blocks — IP rules & geo/country rules
 
@@ -897,7 +904,7 @@ validation and hot-reload behavior are identical to using the UI.
 | `GET` | `/services` | List all services. |
 | `POST` | `/services` | Create. Body: `name`, `match_type` (`host`\|`prefix`), `match_value`, `backend`, optional `rate_limit_rps`, `rate_limit_burst`. Runs the same reachability probe as the dashboard's add wizard — an unreachable backend is rejected. |
 | `GET` | `/services/:id` | Fetch one. |
-| `PUT` | `/services/:id` | Partial update. Body fields are all optional pointers — an omitted field is left unchanged, unlike an empty string, which clears it. Accepts `name`, `host`, `prefix`, `backend`, `rate_limit_rps`, `rate_limit_burst`, `bot_mode` (`inherit`\|`always`\|`off`). |
+| `PUT` | `/services/:id` | Partial update. Body fields are all optional pointers — an omitted field is left unchanged, unlike an empty string, which clears it. Accepts `name`, `host`, `prefix`, `backend`, `rate_limit_rps`, `rate_limit_burst`, `bot_mode` (`inherit`\|`always`\|`off`), and `allow_large_js_uploads` (boolean). |
 | `DELETE` | `/services/:id` | Remove. |
 
 ### IP rules
@@ -977,12 +984,13 @@ curl -X POST https://your-host/admin/api/v1/services \
   -H "Content-Type: application/json" \
   -d '{"name":"api","match_type":"prefix","match_value":"/api","backend":"http://127.0.0.1:9000"}'
 
-# Partial update — only bot_mode changes; name/host/prefix/backend/rate limit
+# Partial update — only bot_mode and the JavaScript upload policy change;
+# name/host/prefix/backend/rate limit
 # are left exactly as they were, since PUT fields are optional pointers.
 curl -X PUT https://your-host/admin/api/v1/services/3 \
   -H "Authorization: Bearer cwaf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
   -H "Content-Type: application/json" \
-  -d '{"bot_mode":"always"}'
+  -d '{"bot_mode":"always","allow_large_js_uploads":true}'
 
 # Ban an IP
 curl -X POST https://your-host/admin/api/v1/bans \
@@ -1999,5 +2007,3 @@ and TLS files under `--certs` (installer: `/var/lib/coraza-waf-mod/certs`).
 **How do I reset the admin password?** Re-running `coraza-waf-mod setup` is idempotent and won't
 overwrite an existing password; change it from **Settings** in the dashboard instead. (If locked out,
 credentials live in the `waf.db` meta table.)
-
-

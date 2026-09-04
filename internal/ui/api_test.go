@@ -179,6 +179,13 @@ func TestAPIServiceCRUD(t *testing.T) {
 		t.Fatalf("list len = %d, want 1", len(list))
 	}
 
+	rec = apiRequest(e, http.MethodPut, fmt.Sprintf("/admin/api/v1/services/%d", created.ID), key, map[string]any{
+		"allow_large_js_uploads": true,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("enable large JS uploads: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
 	rec = apiRequest(e, http.MethodGet, fmt.Sprintf("/admin/api/v1/services/%d", created.ID), key, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get: status=%d body=%s", rec.Code, rec.Body.String())
@@ -196,7 +203,7 @@ func TestAPIServiceCRUD(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
 		t.Fatal(err)
 	}
-	if updated.Name != "svc1-renamed" || updated.Backend != backend.URL || updated.Prefix != "/svc1" {
+	if updated.Name != "svc1-renamed" || updated.Backend != backend.URL || updated.Prefix != "/svc1" || !updated.AllowLargeJSUploads {
 		t.Fatalf("updated service = %+v, want renamed with backend/prefix preserved", updated)
 	}
 

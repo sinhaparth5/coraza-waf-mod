@@ -113,10 +113,57 @@ func TestInspectionFor(t *testing.T) {
 		{"image/png", inspectSkip},
 		{"video/mp4", inspectSkip},
 		{"application/zip", inspectSkip},
+		{"application/javascript", inspectNoFiles},
+		{"text/javascript; charset=utf-8", inspectNoFiles},
 	} {
 		if got := inspectionFor(tc.contentType); got != tc.want {
 			t.Errorf("inspectionFor(%q) = %v, want %v", tc.contentType, got, tc.want)
 		}
+	}
+}
+
+// TestCheckAllowsLargeJavaScriptUpload verifies the per-service upload policy
+// leaves a JavaScript body completely unread so it can stream to an S3-style
+// backend, while the default policy still applies to other services.
+func TestCheckAllowsLargeJavaScriptUpload(t *testing.T) {
+	// The service engine builder also removes 911100 and 920420 when this
+	// option is on: S3 PutObject needs PUT and JavaScript is outside CRS's
+	// default content-type allow-list.
+	e, err := New(config.WAFConfig{Enabled: true}, []int{911100, 920420})
+	if err != nil {
+		t.Fatalf("engine init: %v", err)
+	}
+
+	payload := bytes.Repeat([]byte("const uploaded = true;\n"), 10000)
+	defaultReq := httptest.NewRequest("POST", "http://app.example.com/assets/app.js", bytes.NewReader(payload))
+	defaultReq.Header.Set("Content-Type", "application/javascript")
+	defaultReq.Header.Set("User-Agent", "aws-cli/2")
+	defaultRes, err := e.Check(defaultReq, "203.0.113.9")
+	if err != nil {
+		t.Fatalf("default check: %v", err)
+	}
+	if !defaultRes.Blocked || defaultRes.Status != http.StatusRequestEntityTooLarge {
+		t.Fatalf("default JavaScript policy = %+v, want 413", defaultRes)
+	}
+
+	cr := &countingReader{r: bytes.NewReader(payload)}
+	r := httptest.NewRequest("PUT", "http://app.example.com/assets/app.js", cr)
+	r.Header.Set("Content-Type", "application/javascript; charset=utf-8")
+	r.Header.Set("User-Agent", "aws-cli/2")
+
+	res, err := e.CheckWithOptions(r, "203.0.113.9", CheckOptions{AllowLargeJavaScriptUploads: true})
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if res.Blocked {
+		t.Fatalf("large JavaScript upload blocked: %+v", res)
+	}
+	if cr.n != 0 {
+		t.Errorf("check read %d JavaScript bytes, want 0 (body must stream)", cr.n)
+	}
+	got, err := io.ReadAll(r.Body)
+	if err != nil || !bytes.Equal(got, payload) {
+		t.Errorf("body after check = %d bytes (err %v), want %d intact", len(got), err, len(payload))
 	}
 }
 
