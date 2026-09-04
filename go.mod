@@ -16,7 +16,7 @@ require (
 	github.com/tdewolff/minify/v2 v2.24.17
 	golang.org/x/crypto v0.55.0
 	golang.org/x/text v0.41.0
-	modernc.org/sqlite v1.56.0
+	modernc.org/sqlite v1.57.0
 )
 
 require (
