@@ -5,9 +5,9 @@ All notable changes to **Coraza WAF Mod** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.8.0] - 2026-08-19
+## [1.8.1] - 2026-09-04
 
-### Changed
+### Fixed
 
 - **Services: opt-in large JavaScript uploads.** S3-compatible `PutObject`
   requests for `.js` assets were treated as inspectable non-file bodies and
@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   JavaScript media types to the backend and permits the CRS method/content-type
   rules required by S3 `PUT`, while retaining other header-phase WAF, IP, bot,
   and rate-limit checks.
+
+## [1.8.0] - 2026-08-19
+
+### Changed
 
 - **Management pages now use balanced, top-first layouts.** IP Rules, Geo
   Rules, WAF Rules, Services, Certificates, and Threat Intel place their
