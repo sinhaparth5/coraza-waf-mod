@@ -220,17 +220,41 @@ const sessionCookie = "cz_session"
 // Unauthenticated requests are redirected to the login page.
 func (h *Handler) sessionAuth(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		login := h.cfg.Admin.Path + "/login"
 		cookie, err := c.Cookie(sessionCookie)
 		if err != nil || cookie.Value == "" {
-			return c.Redirect(http.StatusFound, h.cfg.Admin.Path+"/login")
+			return c.Redirect(http.StatusFound, login)
 		}
-		valid, err := h.db.ValidateSession(cookie.Value)
-		if err != nil || !valid {
-			return c.Redirect(http.StatusFound, h.cfg.Admin.Path+"/login")
+		sess, err := h.db.GetSession(cookie.Value)
+		if err != nil || sess == nil {
+			return c.Redirect(http.StatusFound, login)
+		}
+		if !sess.Live() {
+			// Say which of the two happened. A revoked session means
+			// someone logged in elsewhere (or revoked this device from the
+			// Settings page); an expired one is just the 24h TTL.
+			if sess.Revoked() {
+				return c.Redirect(http.StatusFound, login+"?reason=revoked")
+			}
+			return c.Redirect(http.StatusFound, login)
+		}
+		// Record last-seen off the hot path, throttled like TouchAPIKey so
+		// a busy dashboard doesn't write on every request.
+		if time.Since(sess.LastActiveAt) > sessionTouchThrottle {
+			token := sess.Token
+			go func() {
+				if err := h.db.TouchSession(token); err != nil {
+					log.Printf("session touch: %v", err)
+				}
+			}()
 		}
 		return next(c)
 	}
 }
+
+// sessionTouchThrottle bounds how often a session's last-active timestamp is
+// rewritten, mirroring apiKeyTouchThrottle.
+const sessionTouchThrottle = time.Minute
 
 // hostGuard keeps the admin dashboard and REST API from being reachable on
 // a service's own domain. Echo routes purely by path and knows nothing
@@ -339,6 +363,8 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/settings/dbconn/migrate", h.MigrateDBConfig)
 	g.POST("/settings/api-keys", h.CreateAPIKey)
 	g.DELETE("/settings/api-keys/:id", h.DeleteAPIKey)
+	g.DELETE("/settings/devices/:token", h.RevokeDevice)
+	g.POST("/settings/devices/revoke-others", h.RevokeOtherDevices)
 	g.GET("/waf-rules", h.WAFRulesPage)
 	g.POST("/waf-rules/disable", h.DisableWAFRule)
 	g.DELETE("/waf-rules/:id", h.EnableWAFRule)
@@ -366,6 +392,9 @@ func (h *Handler) LoginPage(c echo.Context) error {
 		if valid, _ := h.db.ValidateSession(cookie.Value); valid {
 			return c.Redirect(http.StatusFound, h.cfg.Admin.Path)
 		}
+	}
+	if c.QueryParam("reason") == "revoked" {
+		return h.renderLogin(c, "Your account is currently being used on another device.")
 	}
 	return h.renderLogin(c, "")
 }
@@ -409,7 +438,7 @@ func (h *Handler) LoginPost(c echo.Context) error {
 // issueSession creates the session row, sets the cookie, and lands on the
 // dashboard — the final step of both the password-only and the 2FA flow.
 func (h *Handler) issueSession(c echo.Context) error {
-	token, err := h.db.CreateSession()
+	token, err := h.db.CreateSession(h.clientIP(c.Request()), c.Request().UserAgent())
 	if err != nil {
 		return h.renderLogin(c, "Internal error. Please try again.")
 	}
@@ -2070,6 +2099,7 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 		"VarnishEnabled":         vc.Enabled,
 		"VarnishAddr":            vc.Addr,
 		"APIKeys":                apiKeys,
+		"Devices":                h.deviceRows(sessionCookieValue(c)),
 	}))
 }
 
@@ -2127,6 +2157,62 @@ func (h *Handler) DeleteAPIKey(c echo.Context) error {
 		"AdminPath": h.cfg.Admin.Path,
 		"Keys":      apiKeys,
 	})
+}
+
+// sessionCookieValue returns the caller's own session token, or "".
+func sessionCookieValue(c echo.Context) string {
+	cookie, err := c.Cookie(sessionCookie)
+	if err != nil {
+		return ""
+	}
+	return cookie.Value
+}
+
+// devicesData is the render payload shared by the card and its row list.
+func (h *Handler) devicesData(c echo.Context) map[string]any {
+	current := sessionCookieValue(c)
+	return map[string]any{
+		"AdminPath": h.cfg.Admin.Path,
+		"Devices":   h.deviceRows(current),
+	}
+}
+
+// RevokeDevice is the one button on each row of the "Registered devices"
+// card, and does whichever of the two things that row needs: a still-live
+// device is signed out (revoked, so it keeps its place in the history and
+// learns why on its next request), while an already-signed-out one is
+// dropped from the history entirely. One route rather than two, because the
+// row's own state already says which is meant.
+//
+// The current device is refused either way: the Log out button in the
+// sidebar already signs you out, and doing it from a device list is a
+// confusing way to get there.
+func (h *Handler) RevokeDevice(c echo.Context) error {
+	if token := c.Param("token"); token != sessionCookieValue(c) {
+		sess, err := h.db.GetSession(token)
+		switch {
+		case err != nil:
+			log.Printf("revoke device: %v", err)
+		case sess == nil: // already gone; nothing to do
+		case sess.Live():
+			if err := h.db.RevokeSession(token); err != nil {
+				log.Printf("revoke device: %v", err)
+			}
+		default:
+			if err := h.db.DeleteSession(token); err != nil {
+				log.Printf("forget device: %v", err)
+			}
+		}
+	}
+	return h.renderPartial(c, "settings", "devices-rows", h.devicesData(c))
+}
+
+// RevokeOtherDevices signs out every session except the caller's own.
+func (h *Handler) RevokeOtherDevices(c echo.Context) error {
+	if _, err := h.db.RevokeOtherSessions(sessionCookieValue(c)); err != nil {
+		log.Printf("revoke other devices: %v", err)
+	}
+	return h.renderPartial(c, "settings", "devices-card", h.devicesData(c))
 }
 
 // SaveBotSettings persists global bot-protection settings and hot-reloads the

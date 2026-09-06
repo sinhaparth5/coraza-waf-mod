@@ -292,6 +292,10 @@ var schemaMigrations = []struct{ table, columnDef string }{
 	{"services", "allow_large_js_uploads INTEGER NOT NULL DEFAULT 0"},
 	{"ip_rules", "note TEXT NOT NULL DEFAULT ''"},
 	{"webhook_config", "destination_type TEXT NOT NULL DEFAULT 'generic'"},
+	{"sessions", "ip TEXT NOT NULL DEFAULT ''"},
+	{"sessions", "user_agent TEXT NOT NULL DEFAULT ''"},
+	{"sessions", "last_active_at TEXT NOT NULL DEFAULT ''"},
+	{"sessions", "revoked_at TEXT NOT NULL DEFAULT ''"},
 }
 
 func (db *DB) migrate() error {
@@ -1876,13 +1880,20 @@ func (db *DB) SetTOTPLastCounter(counter uint64) error {
 	return db.setMeta("admin_totp_last_counter", strconv.FormatUint(counter, 10))
 }
 
-// PruneExpiredSessions deletes session rows past sessionTTL and returns how
-// many were removed. Expiry is otherwise only enforced at read time in
-// ValidateSession, so abandoned sessions (browser closed without logging
-// out) would accumulate forever. created_at is RFC3339 UTC, which compares
-// chronologically as a plain string — no SQLite date functions needed.
+// sessionHistoryTTL is how long a session row survives after it was
+// created. It is deliberately much longer than sessionTTL: a row stops
+// authenticating anything after sessionTTL, but is kept as the device
+// history the Settings page's "Registered devices" card lists, so an admin
+// can still see where the account was logged in last month.
+const sessionHistoryTTL = 30 * 24 * time.Hour
+
+// PruneExpiredSessions deletes session rows past sessionHistoryTTL and
+// returns how many were removed — without it, rows would accumulate
+// forever. created_at is RFC3339 UTC, which compares chronologically as a
+// plain string, so no SQLite date functions are needed (see the date/time
+// gotcha in CLAUDE.md).
 func (db *DB) PruneExpiredSessions() (int64, error) {
-	cutoff := time.Now().UTC().Add(-sessionTTL).Format(time.RFC3339)
+	cutoff := time.Now().UTC().Add(-sessionHistoryTTL).Format(time.RFC3339)
 	res, err := db.exec(`DELETE FROM sessions WHERE created_at < ?`, cutoff)
 	if err != nil {
 		return 0, err
@@ -1890,10 +1901,53 @@ func (db *DB) PruneExpiredSessions() (int64, error) {
 	return res.RowsAffected()
 }
 
+// Session is one row of the sessions table: a single admin login on a
+// single device. There is no user_id — this deployment has exactly one
+// admin account (credentials live in meta), so every row belongs to it.
+type Session struct {
+	Token        string
+	CreatedAt    time.Time
+	IP           string
+	UserAgent    string
+	LastActiveAt time.Time
+	RevokedAt    time.Time // zero value = never revoked
+}
+
+// Revoked reports whether the session was explicitly ended — by logging
+// out, by being revoked from the Settings page, or by being superseded by a
+// newer login. Distinct from Expired so the login page can tell the admin
+// which of the two happened.
+func (s *Session) Revoked() bool { return !s.RevokedAt.IsZero() }
+
+// Expired reports whether the session aged out of sessionTTL.
+func (s *Session) Expired() bool { return time.Since(s.CreatedAt) >= sessionTTL }
+
+// Live reports whether the session still authenticates requests.
+func (s *Session) Live() bool { return !s.Revoked() && !s.Expired() }
+
+// parseSessionTime maps the empty string (a column default, i.e. "never")
+// onto the zero time rather than an error.
+func parseSessionTime(v string) time.Time {
+	t, err := time.Parse(time.RFC3339, v)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
+}
+
 // CreateSession generates a random token, stores it, and returns it for use
 // as a session cookie value.
-func (db *DB) CreateSession() (string, error) {
-	// Opportunistically sweep expired rows — logins are the only way the
+//
+// An account may only have one live session at a time, so this first
+// revokes every session that is currently live: logging in on a new device
+// immediately signs the old one out, and the old device is told why on its
+// next request (see Session.Revoked). The legitimate owner can therefore
+// always take back an account someone else is sitting on, which is the
+// point — the alternative (refusing the new login while an old session
+// lives) locks the owner out until the intruder's session happens to
+// expire.
+func (db *DB) CreateSession(ip, userAgent string) (string, error) {
+	// Opportunistically sweep aged-out rows — logins are the only way the
 	// table grows, so pruning here keeps it bounded without a background
 	// goroutine (the prune CLI covers deployments that never log in again).
 	if _, err := db.PruneExpiredSessions(); err != nil {
@@ -1902,32 +1956,117 @@ func (db *DB) CreateSession() (string, error) {
 	b := make([]byte, 32)
 	rand.Read(b) //nolint — never errors on modern platforms
 	token := hex.EncodeToString(b)
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := db.exec(`UPDATE sessions SET revoked_at = ? WHERE revoked_at = ''`, now); err != nil {
+		return "", err
+	}
 	_, err := db.exec(
-		`INSERT INTO sessions (token, created_at) VALUES (?, ?)`,
-		token, time.Now().UTC().Format(time.RFC3339),
+		`INSERT INTO sessions (token, created_at, ip, user_agent, last_active_at, revoked_at)
+		 VALUES (?, ?, ?, ?, ?, '')`,
+		token, now, ip, userAgent, now,
 	)
 	return token, err
 }
 
-// ValidateSession returns true if the token exists in the DB and was created
-// within the last 24 hours.
-func (db *DB) ValidateSession(token string) (bool, error) {
-	var createdAt string
-	err := db.queryRow(`SELECT created_at FROM sessions WHERE token = ?`, token).Scan(&createdAt)
+// GetSession returns the row for token, or nil if there is none. Whether
+// the session still authenticates anything is the caller's decision — see
+// Session.Live/Revoked/Expired, which the login page uses to explain to a
+// signed-out admin which of the two happened.
+func (db *DB) GetSession(token string) (*Session, error) {
+	var s Session
+	var created, lastActive, revoked string
+	err := db.queryRow(
+		`SELECT token, created_at, ip, user_agent, last_active_at, revoked_at
+		 FROM sessions WHERE token = ?`, token,
+	).Scan(&s.Token, &created, &s.IP, &s.UserAgent, &lastActive, &revoked)
 	if err == sql.ErrNoRows {
-		return false, nil
+		return nil, nil
 	}
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	t, parseErr := time.Parse(time.RFC3339, createdAt)
-	if parseErr != nil {
-		return false, nil
-	}
-	return time.Since(t) < sessionTTL, nil
+	s.CreatedAt = parseSessionTime(created)
+	s.LastActiveAt = parseSessionTime(lastActive)
+	s.RevokedAt = parseSessionTime(revoked)
+	return &s, nil
 }
 
-// DeleteSession removes the token on logout.
+// ValidateSession reports whether the token authenticates a request.
+func (db *DB) ValidateSession(token string) (bool, error) {
+	s, err := db.GetSession(token)
+	if err != nil || s == nil {
+		return false, err
+	}
+	return s.Live(), nil
+}
+
+// TouchSession records that the session was just used. Called off the hot
+// path and throttled by the caller, like TouchAPIKey.
+func (db *DB) TouchSession(token string) error {
+	_, err := db.exec(
+		`UPDATE sessions SET last_active_at = ? WHERE token = ?`,
+		time.Now().UTC().Format(time.RFC3339), token,
+	)
+	return err
+}
+
+// ListSessions returns every session row for the Settings page's
+// "Registered devices" card: the live session first (which, given one live
+// session is enforced at login, is the caller's own device), then signed-out
+// devices newest first. Ordering on the boolean is portable across all three
+// dialects — SQLite and MySQL yield 1/0, Postgres a real boolean, and DESC
+// puts true first in every case. Without it, two logins landing in the same
+// RFC3339 second could list the current device below a dead one.
+func (db *DB) ListSessions() ([]Session, error) {
+	rows, err := db.query(
+		`SELECT token, created_at, ip, user_agent, last_active_at, revoked_at
+		 FROM sessions ORDER BY (revoked_at = '') DESC, created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Session
+	for rows.Next() {
+		var s Session
+		var created, lastActive, revoked string
+		if err := rows.Scan(&s.Token, &created, &s.IP, &s.UserAgent, &lastActive, &revoked); err != nil {
+			return nil, err
+		}
+		s.CreatedAt = parseSessionTime(created)
+		s.LastActiveAt = parseSessionTime(lastActive)
+		s.RevokedAt = parseSessionTime(revoked)
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// RevokeSession ends one session without deleting its history row.
+func (db *DB) RevokeSession(token string) error {
+	_, err := db.exec(
+		`UPDATE sessions SET revoked_at = ? WHERE token = ? AND revoked_at = ''`,
+		time.Now().UTC().Format(time.RFC3339), token,
+	)
+	return err
+}
+
+// RevokeOtherSessions ends every live session except keep. With one live
+// session enforced at login this is normally a no-op, and exists for the
+// "Log out of all other devices" button to be honest anyway — a row could
+// still be live if it was created before this rule shipped.
+func (db *DB) RevokeOtherSessions(keep string) (int64, error) {
+	res, err := db.exec(
+		`UPDATE sessions SET revoked_at = ? WHERE revoked_at = '' AND token <> ?`,
+		time.Now().UTC().Format(time.RFC3339), keep,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// DeleteSession removes the token on logout. Logging out deliberately drops
+// the row rather than revoking it: an admin who signs out on purpose does
+// not need that device listed back at them as history.
 func (db *DB) DeleteSession(token string) error {
 	_, err := db.exec(`DELETE FROM sessions WHERE token = ?`, token)
 	return err
