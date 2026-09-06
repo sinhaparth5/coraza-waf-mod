@@ -85,12 +85,28 @@ dist: generate
 checksums:
 	cd $(DIST) && sha256sum $(BINARY)-linux-amd64 $(BINARY)-linux-arm64 $(BINARY)-windows-amd64.exe > checksums.txt
 
-# Create and push a version tag to trigger the CI release pipeline.
-# Usage: make tag VERSION=v1.0.0
+# Cut a release: promote CHANGELOG.md's [Unreleased] section into a version
+# section, commit that, tag it, and push — which triggers the CI release
+# pipeline. Usage: make tag VERSION=v1.0.0
+#
+# The changelog roll happens *before* the tag on purpose: the release
+# workflow reads its notes out of CHANGELOG.md at the tagged commit, so that
+# commit has to be the one where [Unreleased] has become [X.Y.Z]. It also
+# keeps the file to two sections (see scripts/roll-changelog.sh) instead of
+# letting it grow a section per release forever.
 tag:
 	@test -n "$(VERSION)" || (echo "Usage: make tag VERSION=v1.0.0" && exit 1)
+	@git diff --quiet && git diff --cached --quiet || { \
+		echo "Working tree is dirty — commit or stash first, so the release"; \
+		echo "commit contains only the changelog roll."; \
+		exit 1; \
+	}
+	sh scripts/roll-changelog.sh $(VERSION)
+	git add CHANGELOG.md
+	git commit -m "release: prepare $(VERSION)"
 	@echo "==> Tagging $(VERSION)"
 	git tag -a $(VERSION) -m "Release $(VERSION)"
+	git push origin HEAD
 	git push origin $(VERSION)
 	@echo "==> GitHub Actions release workflow started — watch it at:"
 	@echo "    https://github.com/sinhaparth5/coraza-waf-mod/actions"

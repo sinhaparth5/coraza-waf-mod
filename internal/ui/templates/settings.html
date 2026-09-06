@@ -60,6 +60,7 @@
   </div>
 
   {{template "twofa-card" .}}
+  {{template "devices-card" .}}
   {{template "api-keys-card" .}}
 
   <!-- ── Database backup ───────────────────────────────────────────────────── -->
@@ -328,6 +329,59 @@
 </div>
 {{end}}
 
+{{define "devices-card"}}
+<div class="card p-5" id="devices-card">
+  <div class="flex items-start justify-between gap-4 mb-1">
+    <h2 class="text-[15px] font-bold text-slate-800">Registered devices</h2>
+    <button hx-post="{{.AdminPath}}/settings/devices/revoke-others"
+            hx-target="#devices-card" hx-swap="outerHTML"
+            hx-confirm="Sign out every other device? They will be sent back to the login screen on their next action."
+            class="shrink-0 inline-flex items-center gap-[5px] text-[12px] font-medium text-red-500 bg-transparent border border-red-200 rounded-md px-3 py-[5px] cursor-pointer font-sans transition-colors duration-150 hover:bg-red-50">
+      <i class="hgi hgi-stroke hgi-rounded hgi-logout-02 text-xs"></i>
+      Log out all other devices
+    </button>
+  </div>
+  <p class="text-[13px] text-slate-500 mb-5">This account allows one active session at a time — signing in on a new device immediately signs the previous one out. Devices below are kept for 30 days so you can see where the account has been used.</p>
+
+  <div id="devices-body" class="flex flex-col gap-1">
+    {{template "devices-rows" (map "AdminPath" .AdminPath "Devices" .Devices)}}
+  </div>
+</div>
+{{end}}
+
+{{define "devices-rows"}}
+{{range .Devices}}
+<div class="flex items-center gap-3 p-3 rounded-lg hover:bg-surface transition-colors duration-150 border border-line{{if not .Live}} opacity-60{{end}}">
+  <div class="w-10 h-10 rounded-md {{if .Current}}bg-brand-tint{{else}}bg-surface{{end}} flex items-center justify-center shrink-0">
+    <i class="hgi hgi-stroke hgi-rounded hgi-computer text-base {{if .Current}}text-brand-dark{{else}}text-slate-400{{end}}"></i>
+  </div>
+  <div class="flex-1 min-w-0">
+    <div class="flex items-center gap-2">
+      <span class="text-[14px] font-semibold text-slate-900 truncate">{{.Device}}</span>
+      {{if .Current}}
+      <span class="shrink-0 text-[11px] font-semibold text-brand-dark bg-brand-tint rounded-sm px-[6px] py-[1px]">This device · active now</span>
+      {{else if not .Live}}
+      <span class="shrink-0 text-[11px] font-semibold text-slate-500 bg-surface rounded-sm px-[6px] py-[1px]">Signed out</span>
+      {{end}}
+    </div>
+    <div class="text-[12px] text-slate-500 truncate flex items-center gap-[6px]">
+      {{if .Flag}}<span class="{{flagClass .Flag}} w-4 h-3 bg-cover inline-block rounded-[1px] shrink-0"></span>{{end}}
+      <span>{{.Location}} · <span class="font-mono">{{.IP}}</span> · last active {{fmtTime .LastSeen}}</span>
+    </div>
+  </div>
+  {{if not .Current}}
+    {{if .Live}}
+    {{template "remove-btn" (map "URL" (printf "%s/settings/devices/%s" $.AdminPath .Token) "Target" "#devices-body" "Label" "Log out" "Icon" "hgi-logout-02" "Confirm" (printf "Log out %s? It will be sent back to the login screen on its next action." .Device))}}
+    {{else}}
+    {{template "remove-btn" (map "URL" (printf "%s/settings/devices/%s" $.AdminPath .Token) "Target" "#devices-body" "Confirm" (printf "Remove %s from the device history? It is already signed out; this only forgets that it was ever used." .Device))}}
+    {{end}}
+  {{end}}
+</div>
+{{else}}
+{{template "empty-state" (map "Icon" "hgi-computer" "Message" "No devices recorded yet")}}
+{{end}}
+{{end}}
+
 {{define "api-keys-card"}}
 <div class="card p-5" id="api-keys-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">API Keys</h2>
@@ -517,7 +571,7 @@
                 hx-target="#dbconn-test-result"
                 hx-swap="innerHTML"
                 class="inline-flex items-center gap-2 rounded-md border border-line bg-surface text-slate-700 text-[13px] font-medium px-4 py-1.5 hover:bg-canvas transition-colors">
-          <i class="hgi hgi-stroke hgi-wifi text-base"></i>
+          <i class="hgi hgi-stroke hgi-wifi-01 text-base"></i>
           Test connection
         </button>
       </div>
@@ -624,7 +678,7 @@
                 hx-target="#redis-test-result"
                 hx-swap="innerHTML"
                 class="inline-flex items-center gap-2 rounded-md border border-line bg-surface text-slate-700 text-[13px] font-medium px-4 py-1.5 hover:bg-canvas transition-colors">
-          <i class="hgi hgi-stroke hgi-wifi text-base"></i>
+          <i class="hgi hgi-stroke hgi-wifi-01 text-base"></i>
           Test connection
         </button>
         <span id="redis-test-result" class="text-[13px]"></span>

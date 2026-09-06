@@ -152,9 +152,16 @@ func (db *DB) schemaStatements() []string {
 
 		// token is 32 random bytes hex-encoded (64 chars, see
 		// DB.CreateSession) — VARCHAR(64) fits exactly.
+		// One row per admin login. Only one row is ever live at a time
+		// (see CreateSession); superseded and revoked rows are kept, with
+		// revoked_at set, as the device history the Settings page lists.
 		`CREATE TABLE IF NOT EXISTS sessions (
-			token      VARCHAR(64) PRIMARY KEY,
-			created_at TEXT NOT NULL
+			token          VARCHAR(64) PRIMARY KEY,
+			created_at     TEXT NOT NULL,
+			ip             TEXT NOT NULL DEFAULT '',
+			user_agent     TEXT NOT NULL DEFAULT '',
+			last_active_at TEXT NOT NULL DEFAULT '',
+			revoked_at     TEXT NOT NULL DEFAULT ''
 		)`,
 
 		// key_hash is a SHA-256 hex digest (64 chars, see ui.CreateAPIKey).
