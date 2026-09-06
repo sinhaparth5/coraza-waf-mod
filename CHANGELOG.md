@@ -14,6 +14,8 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-09-06
+
 ### Added
 
 - **One active admin session at a time, plus a "Registered devices" card.**
@@ -74,22 +76,5 @@ rather than growing this file forever.
   A wrong icon name fails silently — nothing validates it — so each was
   checked against the font itself and replaced with a real equivalent.
 
-## [1.8.1] - 2026-09-04
-
-### Changed
-
-- **Services: opt-in large JavaScript uploads.** S3-compatible `PutObject`
-  requests for `.js` assets were treated as inspectable non-file bodies and
-  rejected with 413 above 128 KiB. A new per-service Uploads setting streams
-  JavaScript media types to the backend and permits the CRS method and
-  content-type rules an S3 `PUT` needs, while retaining every other
-  header-phase WAF, IP, bot, and rate-limit check.
-
-### Removed
-
-- **Unused `config.yaml` / `deploy/config.yaml.example`.** Nothing in the
-  running server has parsed them since the move to CLI flags plus DB-backed
-  settings; they only misled readers about where configuration lives.
-
-[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.8.1...main
-[1.8.1]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.8.0...v1.8.1
+[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.9.0...main
+[1.9.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.8.1...v1.9.0
