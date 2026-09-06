@@ -4,7 +4,7 @@
 <div class="flex flex-col gap-4">
 
   <!-- ── Compact disable strip ── -->
-    <div class="card p-5 border-t-2 border-t-sky-500">
+    <div class="card border-t-2 border-t-brand p-5">
       {{template "panel-header" (map "Icon" "hgi-security-block" "Title" "Disable Rule")}}
 
       <form hx-post="/admin/waf-rules/disable" hx-target="#waf-content" hx-swap="innerHTML" class="grid grid-cols-1 items-end gap-4 lg:grid-cols-[1fr_1fr_1.35fr_auto]">

@@ -3,36 +3,33 @@
 
 <div class="flex flex-col gap-4">
 
-  <!-- ── Compact top controls ── -->
-  <div class="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3" data-stagger>
-    <div class="card p-5">
-      {{template "panel-header" (map "Icon" "hgi-earth" "Title" "Add Geo Rule")}}
+  <!-- ── Primary action: the same full-width row-form every management page uses ── -->
+  <div class="card border-t-2 border-t-brand p-5">
+    {{template "panel-header" (map "Icon" "hgi-earth" "Title" "Add Geo Rule")}}
 
-      <form hx-post="/admin/geo-rules" hx-target="#geo-rules-body" hx-swap="innerHTML" class="flex flex-col gap-4">
+    <form hx-post="/admin/geo-rules" hx-target="#geo-rules-body" hx-swap="innerHTML"
+          class="grid grid-cols-1 items-end gap-4 md:grid-cols-2 lg:grid-cols-[1fr_1.4fr_auto_auto]">
 
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">
-            Country Code <span class="text-slate-300">(ISO 3166-1 α-2)</span>
+            Country Code <span class="text-slate-300">(ISO 3166-1 &alpha;-2)</span>
           </label>
           <input name="country_code" type="text" placeholder="CN" maxlength="2" required
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-base font-mono font-bold uppercase tracking-[.2em] outline-hidden transition-[border] duration-150 text-slate-800 bg-white"
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] font-mono font-bold uppercase tracking-[.2em] outline-hidden transition-[border] duration-150 text-slate-800 bg-white"
             />
-          <p class="text-[11px] text-slate-500 mt-[6px]">Examples: US · CN · RU · IR · KP · DE</p>
         </div>
 
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Scope</label>
-          <select name="app_name"
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white transition-[border] duration-150"
-            >
+          <select name="app_name" class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden transition-[border] duration-150 text-slate-800 bg-white">
             <option value="">Global (all apps)</option>
             {{range .Apps}}<option value="{{.Name}}">{{.Name}} only</option>{{end}}
           </select>
         </div>
 
         <div>
-          <label class="block text-[12px] text-slate-500 mb-[10px] font-medium">Action</label>
-          <div class="flex gap-4">
+          <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Action</label>
+          <div class="flex items-center gap-4 rounded-md border-[1.5px] border-transparent py-[10px]">
             <label class="flex items-center gap-2 cursor-pointer">
               <input type="radio" name="rule_type" value="block" checked class="accent-red-500"/>
               <span class="text-[14px] font-medium text-red-500">Block</span>
@@ -44,13 +41,20 @@
           </div>
         </div>
 
-        <button type="submit" class="btn-primary w-full flex items-center justify-center gap-2">
+        <button type="submit" class="btn-primary flex w-full items-center justify-center gap-2 lg:w-auto">
           <i class="hgi hgi-stroke hgi-rounded hgi-add-circle text-sm"></i>
           Add Rule
         </button>
       </form>
-    </div>
 
+    <div class="mt-5 grid grid-cols-1 gap-2 border-t border-canvas pt-4 text-[12px] text-slate-500 md:grid-cols-2">
+      <p>Examples: US · CN · RU · IR · KP · DE</p>
+      <p>Per-app rules take priority over global. Allow rules bypass every other block.</p>
+    </div>
+  </div>
+
+  <!-- ── Supporting panels sit under the primary form, never beside it ── -->
+  <div class="grid grid-cols-1 items-start gap-4 md:grid-cols-2" data-stagger>
     <!-- Rules overview -->
     <div class="relative overflow-hidden rounded-xl bg-navy p-5 flex flex-col gap-2 shadow-[0_12px_28px_rgba(16,42,67,.16)]">
       <img src="{{.AdminPath}}/static/imgs/security-traffic-mesh.webp" alt="" aria-hidden="true"

@@ -4,14 +4,8 @@
 <div class="flex flex-col gap-4">
 
   <!-- ── Add Service Wizard ── -->
-  <div class="card h-fit border-t-2 border-t-emerald-500 p-5" id="service-wizard" data-step="1">
-    <div class="max-w-2xl">
-    <div class="flex items-center gap-[10px] mb-[6px]">
-      <div class="w-8 h-8 rounded-md bg-brand-tint flex items-center justify-center">
-        <i class="hgi hgi-stroke hgi-rounded hgi-cloud-server text-[14px] text-brand-dark"></i>
-      </div>
-      <h2 class="text-[16px] font-bold text-slate-900">Add Service</h2>
-    </div>
+  <div class="card h-fit border-t-2 border-t-brand p-5" id="service-wizard" data-step="1">
+    {{template "panel-header" (map "Icon" "hgi-cloud-server" "Title" "Add Service" "Mb" "mb-0")}}
 
     <!-- Step indicator -->
     <div class="flex items-center gap-[6px] my-4 mb-6">
@@ -84,10 +78,10 @@
       </div>
 
       <!-- Nav buttons -->
-      <div class="flex gap-2 mt-5">
-        <button type="button" id="wizard-back" class="hidden flex-1 py-[10px] rounded-md border border-line bg-white text-slate-500 text-[14px] font-medium cursor-pointer font-sans">Back</button>
-        <button type="button" id="wizard-next" class="btn-primary flex-1">Next</button>
-        <button type="submit" id="wizard-submit" class="btn-primary hidden flex-1">
+      <div class="flex flex-col gap-2 mt-5 sm:flex-row">
+        <button type="button" id="wizard-back" class="hidden w-full py-[10px] rounded-md border border-line bg-white text-slate-500 text-[14px] font-medium cursor-pointer font-sans sm:w-auto sm:min-w-[140px]">Back</button>
+        <button type="button" id="wizard-next" class="btn-primary w-full sm:w-auto sm:min-w-[160px]">Next</button>
+        <button type="submit" id="wizard-submit" class="btn-primary hidden w-full sm:w-auto sm:min-w-[160px]">
           <i class="hgi hgi-stroke hgi-rounded hgi-add-circle text-sm"></i>
           Create Service
         </button>
@@ -98,7 +92,6 @@
         Checking backend reachability…
       </div>
     </form>
-    </div>
   </div>
 
   <!-- ── Services List ── -->

@@ -3,12 +3,12 @@
 
 <div class="flex flex-col gap-4">
 
-  <!-- ── Controls first: important tools stay together without creating a tall sidebar ── -->
-  <div class="grid grid-cols-1 items-start gap-4 md:grid-cols-2 2xl:grid-cols-4" data-stagger>
-    <div class="card p-5">
-      {{template "panel-header" (map "Icon" "hgi-add-circle" "Title" "Add IP Rule")}}
+  <!-- ── Primary action: the same full-width row-form every management page uses ── -->
+  <div class="card border-t-2 border-t-brand p-5">
+    {{template "panel-header" (map "Icon" "hgi-add-circle" "Title" "Add IP Rule")}}
 
-      <form hx-post="/admin/ip-rules" hx-target="#ip-rules-body" hx-swap="innerHTML" class="flex flex-col gap-4">
+    <form hx-post="/admin/ip-rules" hx-target="#ip-rules-body" hx-swap="innerHTML"
+          class="grid grid-cols-1 items-end gap-4 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_auto_auto]">
 
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">IP Address</label>
@@ -19,17 +19,15 @@
 
         <div>
           <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Scope</label>
-          <select name="app_name"
-            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white transition-[border] duration-150"
-            >
+          <select name="app_name" class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden transition-[border] duration-150 text-slate-800 bg-white">
             <option value="">Global (all apps)</option>
             {{range .Apps}}<option value="{{.Name}}">{{.Name}} only</option>{{end}}
           </select>
         </div>
 
         <div>
-          <label class="block text-[12px] text-slate-500 mb-[10px] font-medium">Action</label>
-          <div class="flex gap-4">
+          <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Action</label>
+          <div class="flex items-center gap-4 rounded-md border-[1.5px] border-transparent py-[10px]">
             <label class="flex items-center gap-2 cursor-pointer">
               <input type="radio" name="rule_type" value="block" checked class="accent-red-500"/>
               <span class="text-[14px] font-medium text-red-500">Block</span>
@@ -41,27 +39,27 @@
           </div>
         </div>
 
-        <button type="submit" class="btn-primary w-full flex items-center justify-center gap-2">
+        <button type="submit" class="btn-primary flex w-full items-center justify-center gap-2 lg:w-auto">
           <i class="hgi hgi-stroke hgi-rounded hgi-add-circle text-sm"></i>
           Add Rule
         </button>
       </form>
 
-      <div class="mt-5 pt-4 border-t border-canvas">
-        <div class="flex flex-col gap-2">
-          <div class="flex items-center gap-2 text-[12px] text-slate-500">
-            <span class="bg-red-100 text-red-600 px-2 py-[2px] rounded-sm font-semibold text-[11px]">Block</span>
-            deny all requests from this IP
-          </div>
-          <div class="flex items-center gap-2 text-[12px] text-slate-500">
-            <span class="bg-green-100 text-green-600 px-2 py-[2px] rounded-sm font-semibold text-[11px]">Allow</span>
-            whitelist, bypasses other blocks
-          </div>
-          <p class="text-[12px] text-slate-500 mt-[2px]">Per-app rules take priority over global. CIDR ranges (e.g. 10.0.0.0/8) are supported.</p>
-        </div>
+    <div class="mt-5 grid grid-cols-1 gap-2 border-t border-canvas pt-4 text-[12px] text-slate-500 md:grid-cols-3">
+      <div class="flex items-center gap-2">
+        <span class="bg-red-100 text-red-600 px-2 py-[2px] rounded-sm font-semibold text-[11px]">Block</span>
+        deny all requests from this IP
       </div>
+      <div class="flex items-center gap-2">
+        <span class="bg-green-100 text-green-600 px-2 py-[2px] rounded-sm font-semibold text-[11px]">Allow</span>
+        whitelist, bypasses other blocks
+      </div>
+      <p>Per-app rules take priority over global. CIDR ranges (e.g. 10.0.0.0/8) are supported.</p>
     </div>
+  </div>
 
+  <!-- ── Supporting controls sit under the primary form, never beside it ── -->
+  <div class="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3" data-stagger>
     {{template "autoban-card" .}}
     {{template "adaptive-card" .}}
 

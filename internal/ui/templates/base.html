@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <!-- Compiled Tailwind (make css), embedded in the binary — theme tokens and
        v3-preflight compat live in static/css/tailwind.css, not here. -->
-  <link rel="stylesheet" href="{{.AdminPath}}/static/css/tailwind.min.css"/>
+  <link rel="stylesheet" href="{{.AdminPath}}/static/css/tailwind.min.css?v={{.Asset}}"/>
   <link rel="stylesheet" href="https://cdn.hugeicons.com/font/hgi-stroke-rounded.css"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7/css/flag-icons.min.css"/>
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
@@ -183,10 +183,10 @@
 
 </div>
 
-<script src="{{.AdminPath}}/static/js/toast.min.js" defer></script>
-<script src="{{.AdminPath}}/static/js/notify.min.js" defer></script>
-<script src="{{.AdminPath}}/static/js/clipboard.min.js" defer></script>
-<script src="{{.AdminPath}}/static/js/motion.min.js" defer></script>
+<script src="{{.AdminPath}}/static/js/toast.min.js?v={{.Asset}}" defer></script>
+<script src="{{.AdminPath}}/static/js/notify.min.js?v={{.Asset}}" defer></script>
+<script src="{{.AdminPath}}/static/js/clipboard.min.js?v={{.Asset}}" defer></script>
+<script src="{{.AdminPath}}/static/js/motion.min.js?v={{.Asset}}" defer></script>
 {{block "scripts" .}}{{end}}
 <div id="toast-container" class="fixed top-4 left-4 right-4 sm:top-6 sm:left-auto sm:right-6 z-[400] flex flex-col gap-3 sm:w-[340px] pointer-events-none"></div>
 {{template "confirm-modal" .}}
