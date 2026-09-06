@@ -154,11 +154,29 @@ jobs:
           notes_file="release-notes.md"
           changelog_file="release-changelog.md"
 
-          awk -v version="$version" '
-            $0 ~ "^## \\[" version "\\]" { capture = 1; next }
-            capture && $0 ~ "^## \\[" { capture = 0 }
-            capture { print }
-          ' CHANGELOG.md > "$changelog_file"
+          # CHANGELOG.md holds only [Unreleased] plus the most recent release
+          # (see scripts/roll-changelog.sh). `make tag` promotes Unreleased
+          # into the version section before tagging, so that heading is what
+          # is normally read here; a tag pushed by hand skips that roll, so
+          # fall back to [Unreleased], which still holds the same notes.
+          #
+          # Stopping at the trailing "[x]: https://..." link block matters
+          # now that the release section is the last one in the file — before
+          # trimming, the next "## [" heading always ended the scan first.
+          extract_section() {
+            awk -v pat="$1" '
+              $0 ~ pat                    { capture = 1; next }
+              capture && /^## \[/         { exit }
+              capture && /^\[[^]]+\]: /   { exit }
+              capture                     { print }
+            ' CHANGELOG.md
+          }
+
+          version_re="$(printf '%s' "$version" | sed 's/\./\\./g')"
+          extract_section "^## \\[${version_re}\\]" > "$changelog_file"
+          if ! grep -q '[^[:space:]]' "$changelog_file"; then
+            extract_section '^## \[Unreleased\]' > "$changelog_file"
+          fi
 
           {
             if [ -s "$changelog_file" ]; then
@@ -166,7 +184,9 @@ jobs:
             else
               echo "Release notes were not found in CHANGELOG.md for ${GITHUB_REF_NAME}."
               echo
-              echo "Add a section named ## [${version}] before tagging to publish detailed notes automatically."
+              echo "Write the changes under ## [Unreleased] and cut the release with"
+              echo "\`make tag VERSION=${GITHUB_REF_NAME}\`, which promotes that section to"
+              echo "## [${version}] and tags the result, so these notes are filled in automatically."
             fi
 
             cat <<EOF | sed 's/^          //'
