@@ -163,19 +163,26 @@ jobs:
           # Stopping at the trailing "[x]: https://..." link block matters
           # now that the release section is the last one in the file — before
           # trimming, the next "## [" heading always ended the scan first.
+          #
+          # Matched with index() on literal strings rather than regexes: the
+          # heading contains "[", "]" and ".", and a regex for it has to be
+          # escaped twice — once for the shell and once more because awk -v
+          # processes escape sequences in the assignment itself. Getting that
+          # wrong is silent and total: "\[1\.9\.0\]" arrives at awk as
+          # "[1.9.0]", which is a character class, so the heading never
+          # matches and the release ships with placeholder notes.
           extract_section() {
-            awk -v pat="$1" '
-              $0 ~ pat                    { capture = 1; next }
-              capture && /^## \[/         { exit }
-              capture && /^\[[^]]+\]: /   { exit }
-              capture                     { print }
+            awk -v prefix="$1" '
+              index($0, prefix) == 1            { capture = 1; next }
+              capture && index($0, "## [") == 1 { exit }
+              capture && index($0, "[") == 1    { exit }
+              capture                           { print }
             ' CHANGELOG.md
           }
 
-          version_re="$(printf '%s' "$version" | sed 's/\./\\./g')"
-          extract_section "^## \\[${version_re}\\]" > "$changelog_file"
+          extract_section "## [${version}]" > "$changelog_file"
           if ! grep -q '[^[:space:]]' "$changelog_file"; then
-            extract_section '^## \[Unreleased\]' > "$changelog_file"
+            extract_section "## [Unreleased]" > "$changelog_file"
           fi
 
           {
