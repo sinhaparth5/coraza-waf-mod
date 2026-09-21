@@ -274,9 +274,18 @@ func (db *DB) schemaStatements() []string {
 		// it's opaque application data the library round-trips, never
 		// queried or filtered on in SQL, so decomposing it would only add
 		// risk of drifting from whatever fields a future library version adds.
+		//
+		// credential_id is VARCHAR(768), not TEXT, for the same reason as
+		// threat_intel_sources.url above: MySQL refuses UNIQUE/indexed TEXT
+		// columns outright ("BLOB/TEXT column ... used in key specification
+		// without a key length" — confirmed against a live mysql:8, not
+		// assumed), and 768 chars * 4 bytes (utf8mb4) = 3072 bytes is the
+		// largest a UNIQUE VARCHAR can be there at all. A base64url-encoded
+		// WebAuthn credential ID is comfortably under that in every
+		// authenticator seen in practice.
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS webauthn_credentials (
 			id            %s,
-			credential_id TEXT NOT NULL UNIQUE,
+			credential_id VARCHAR(768) NOT NULL UNIQUE,
 			data          TEXT NOT NULL,
 			name          TEXT NOT NULL DEFAULT '',
 			created_at    %s NOT NULL DEFAULT CURRENT_TIMESTAMP,
