@@ -2094,7 +2094,7 @@ type APIKey struct {
 func (db *DB) CreateAPIKey(name, prefix, hash string, readOnly bool) (int, error) {
 	id, err := db.insertReturningID(
 		`INSERT INTO api_keys (name, key_prefix, key_hash, read_only) VALUES (?, ?, ?, ?)`,
-		name, prefix, hash, readOnly,
+		name, prefix, hash, boolToInt(readOnly),
 	)
 	return int(id), err
 }
