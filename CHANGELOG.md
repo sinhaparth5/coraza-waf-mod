@@ -14,6 +14,8 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-09-21
+
 ### Fixed
 
 - **`webauthn_credentials.credential_id` broke on MySQL.** The new passkey
@@ -24,19 +26,5 @@ rather than growing this file forever.
   existing `threat_intel_sources.url` precedent, and verified against a
   live `mysql:8` instance.
 
-## [2.0.0] - 2026-09-21
-
-### Added
-
-- **Passkey (WebAuthn) admin login** (issue #78). A phishing-resistant
-  alternative to a TOTP code, accepted as a second factor alongside — not
-  instead of — the existing authenticator/backup/email codes; an admin can
-  register more than one (phone, laptop, security key) from the new
-  "Passkeys" card on the Settings page. Only offered when the admin panel
-  is actually reachable over HTTPS with a real hostname (or `localhost`) —
-  WebAuthn can't work correctly on the plain-HTTP or bare-IP deployments
-  this project also supports, so the option is hidden rather than shown
-  broken. Uses `github.com/go-webauthn/webauthn` (pure Go, no CGO).
-
-[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.0.0...main
-[2.0.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.9.6...v2.0.0
+[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.0.1...main
+[2.0.1]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.0.0...v2.0.1
