@@ -14,6 +14,16 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`webauthn_credentials.credential_id` broke on MySQL.** The new passkey
+  table (v2.0.0) declared it as a plain `UNIQUE TEXT` column — MySQL
+  refuses a `TEXT`/`BLOB` column in a key specification without an
+  explicit length, so no MySQL-backed deployment could even open its
+  database, let alone use passkeys. Sized to `VARCHAR(768)`, matching the
+  existing `threat_intel_sources.url` precedent, and verified against a
+  live `mysql:8` instance.
+
 ## [2.0.0] - 2026-09-21
 
 ### Added
