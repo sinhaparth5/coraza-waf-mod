@@ -14,6 +14,17 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Fixed
+
+- **API key creation was broken on Postgres.** `CreateAPIKey` bound the raw
+  Go `bool` for the new read-only flag (issue #73) straight into an
+  `INTEGER` column instead of converting it first, the convention every
+  other boolean column in the store follows. SQLite and MySQL coerce that
+  silently; Postgres's driver enforces its wire types strictly and rejected
+  the insert outright, so no deployment on `--db-driver postgres` could
+  create an API key at all. Fixed and verified against a live Postgres
+  instance (#74).
+
 ## [1.9.5] - 2026-09-21
 
 ### Added
