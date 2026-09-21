@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,12 +13,18 @@ import (
 
 	"github.com/corazawaf/coraza-coreruleset"
 	"github.com/corazawaf/coraza/v3"
+	"github.com/kaptinlin/jsonschema"
 )
 
 type Engine struct {
 	waf     coraza.WAF
 	enabled bool
 	cache   *verdictCache // nil when enabled == false
+
+	// schema and schemaEnforce back per-service JSON request-body validation
+	// (issue #75) — see SetRequestSchema.
+	schema        *jsonschema.Schema
+	schemaEnforce bool
 }
 
 type Result struct {
@@ -126,6 +133,41 @@ SecDebugLogLevel 0
 	return &Engine{waf: w, enabled: true, cache: newVerdictCache(verdictCacheTTL, verdictCacheCapacity)}, nil
 }
 
+// ValidateSchema compiles schemaJSON without attaching it to any engine.
+// Save handlers (Settings/API) call this before persisting a service's
+// schema so a malformed document is rejected at save time with a clear
+// error, rather than discovered later when a WAF reload silently drops it.
+func ValidateSchema(schemaJSON string) error {
+	_, err := jsonschema.NewCompiler().Compile([]byte(schemaJSON))
+	return err
+}
+
+// SetRequestSchema compiles schemaJSON and attaches it to the engine so
+// CheckWithOptions validates JSON request bodies against it (issue #75).
+// mode "enforce" rejects a mismatching body with 400; any other value
+// (including "log") never blocks — a violation is only recorded via the
+// logged Action, mirroring CRS's own SecRuleEngine DetectionOnly-by-default
+// posture for a check this new and heuristic. An empty schemaJSON or mode
+// "off" clears any previously attached schema.
+//
+// Called once per engine build (main.go's buildWAFAll, on every SIGHUP and
+// WAF Rules/Services save), never per request — compiling isn't free, and a
+// per-service engine is already rebuilt on every relevant save.
+func (e *Engine) SetRequestSchema(schemaJSON, mode string) error {
+	if schemaJSON == "" || mode == "off" {
+		e.schema = nil
+		e.schemaEnforce = false
+		return nil
+	}
+	compiled, err := jsonschema.NewCompiler().Compile([]byte(schemaJSON))
+	if err != nil {
+		return fmt.Errorf("compile request schema: %w", err)
+	}
+	e.schema = compiled
+	e.schemaEnforce = mode == "enforce"
+	return nil
+}
+
 // bodyInspection says what Check should do with a request body of a given
 // content type.
 type bodyInspection int
@@ -171,6 +213,13 @@ func normalizedMediaType(contentType string) string {
 		mediaType = mediaType[:i]
 	}
 	return strings.ToLower(strings.TrimSpace(mediaType))
+}
+
+// isJSONMediaType matches inspectionFor's own "+json" grouping — a schema is
+// meaningless against a body that was never even a JSON document.
+func isJSONMediaType(mediaType string) bool {
+	mt := normalizedMediaType(mediaType)
+	return mt == "application/json" || strings.HasSuffix(mt, "+json")
 }
 
 func isJavaScriptMediaType(mediaType string) bool {
@@ -280,6 +329,24 @@ func (e *Engine) CheckWithOptions(r *http.Request, clientIP string, opts CheckOp
 		}
 	}
 
+	// Request-schema validation (issue #75): a per-service JSON Schema check
+	// that complements CRS rather than replacing it — CRS catches known
+	// attack patterns, this catches "not a valid request for this endpoint
+	// at all" regardless of whether it looks malicious. Runs against bytes
+	// already buffered above, so it's cheap and adds no I/O. Only ever
+	// applies to a full, JSON-declared body — hadBody guards against a
+	// bodyless request that happens to carry a stray JSON Content-Type.
+	schemaViolation := false
+	if hadBody && buffered && e.schema != nil && isJSONMediaType(r.Header.Get("Content-Type")) {
+		if res := e.schema.ValidateJSON(body); !res.IsValid() {
+			if e.schemaEnforce {
+				return &Result{Blocked: true, Status: http.StatusBadRequest, Action: "schema_violation"}, nil
+			}
+			schemaViolation = true
+			log.Printf("waf: request schema violation (log-only) for %s %s", r.Method, r.URL.Path)
+		}
+	}
+
 	// Only fingerprint a body held in full. A truncated one takes the rare
 	// ProcessPartial/Reject path above, where the outcome depends on exactly
 	// how much was on the wire rather than on its buffered head; an
@@ -289,13 +356,20 @@ func (e *Engine) CheckWithOptions(r *http.Request, clientIP string, opts CheckOp
 	if buffered && fingerprintEligible(r) {
 		cacheKey = fingerprint(r, body)
 		if cached, ok := e.cache.get(cacheKey); ok {
-			return &cached, nil
+			result := cached
+			if schemaViolation && !result.Blocked {
+				result.Action = "schema_violation:log"
+			}
+			return &result, nil
 		}
 	}
 
 	result, err := e.evaluate(r, clientIP, body, hadBody && mode != inspectSkip)
 	if err != nil {
 		return nil, err
+	}
+	if schemaViolation && !result.Blocked {
+		result.Action = "schema_violation:log"
 	}
 	if cacheKey != "" {
 		e.cache.put(cacheKey, *result)

@@ -126,6 +126,8 @@
   var botIdInput = document.getElementById('bot-service-id');
   var uploadsForm = document.getElementById('svc-uploads-form');
   var largeJSUploadsToggle = document.getElementById('svc-large-js-uploads');
+  var schemaForm = document.getElementById('svc-schema-form');
+  var schemaText = document.getElementById('svc-schema-text');
   var cacheForm = document.getElementById('svc-cache-form');
   var cacheToggle = document.getElementById('svc-cache-enabled');
   var cacheSessionForm = document.getElementById('svc-cache-session-form');
@@ -176,6 +178,12 @@
     htmx.process(uploadsForm);
     largeJSUploadsToggle.checked = d.largeJsUploads === '1';
 
+    schemaForm.setAttribute('hx-post', adminPath + '/services/schema/' + d.id);
+    htmx.process(schemaForm);
+    schemaText.value = d.schema || '';
+    var schemaRadio = overlay.querySelector('input[name="mode"][value="' + (d.schemaMode || 'off') + '"]');
+    if (schemaRadio) schemaRadio.checked = true;
+
     cacheForm.setAttribute('hx-post', adminPath + '/services/cache/' + d.id);
     htmx.process(cacheForm);
     cacheToggle.checked = d.cache === '1';
@@ -207,7 +215,7 @@
     deleteBtn.setAttribute('hx-confirm', 'Remove service ' + d.name + '?');
     htmx.process(deleteBtn);
 
-    ['tls-error', 'rl-error', 'bot-error', 'svc-uploads-error', 'svc-cache-error', 'svc-cache-session-error', 'svc-cache-tuning-error'].forEach(function (id) {
+    ['tls-error', 'rl-error', 'bot-error', 'svc-uploads-error', 'svc-schema-error', 'svc-cache-error', 'svc-cache-session-error', 'svc-cache-tuning-error'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.textContent = '';
     });
@@ -257,7 +265,7 @@
   document.body.addEventListener('rl-saved', closeModal);
   document.body.addEventListener('htmx:afterRequest', function (e) {
     var elt = e.detail.elt;
-    if ((elt === botForm || elt === uploadsForm || elt === cacheForm || elt === cacheSessionForm || elt === cacheTuningForm || elt === deleteBtn) && e.detail.successful) closeModal();
+    if ((elt === botForm || elt === uploadsForm || elt === schemaForm || elt === cacheForm || elt === cacheSessionForm || elt === cacheTuningForm || elt === deleteBtn) && e.detail.successful) closeModal();
     // Purge intentionally does not close the modal — its status fragment
     // (success or error) renders inline so the admin sees the outcome.
   });

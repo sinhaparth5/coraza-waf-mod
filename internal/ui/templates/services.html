@@ -113,10 +113,11 @@
     </div>
 
     <!-- Tabs -->
-    <div id="svc-tabs" class="grid grid-cols-2 sm:grid-cols-5 gap-1 mb-5 bg-surface rounded-lg p-1">
+    <div id="svc-tabs" class="grid grid-cols-2 sm:grid-cols-6 gap-1 mb-5 bg-surface rounded-lg p-1">
       <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-white shadow-sm text-slate-900" data-tab="ratelimit">Rate Limit</button>
       <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="bot">Bot</button>
       <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="uploads">Uploads</button>
+      <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="schema">Schema</button>
       <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="cache">Cache</button>
       <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="tls">TLS</button>
     </div>
@@ -191,6 +192,41 @@
         <button type="submit" class="btn-primary w-full">Save</button>
       </form>
       <div id="svc-uploads-error" role="alert" aria-live="polite" class="text-[12px] text-red-500 mt-[10px]"></div>
+    </div>
+
+    <!-- ── Schema tab ── -->
+    <div class="svc-tab hidden" data-tab="schema">
+      <form id="svc-schema-form" hx-post="{{.AdminPath}}/services/schema/0" hx-target="#services-body" hx-swap="innerHTML" data-admin-path="{{.AdminPath}}">
+        <p class="text-[12px] text-slate-500 mb-4 leading-[1.5]">Validate this service's JSON request bodies against a JSON Schema before they reach the backend — catches malformed or unexpected fields that generic WAF rules have no way to know are wrong for this specific endpoint. Complements the WAF, it doesn't replace it.</p>
+        <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">JSON Schema</label>
+        <textarea id="svc-schema-text" name="schema" rows="8" placeholder='{"type": "object", "required": ["email"], "properties": {"email": {"type": "string", "format": "email"}}}'
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[13px] font-mono outline-hidden text-slate-800 bg-white mb-4"></textarea>
+        <div class="flex flex-col gap-2 mb-4">
+          <label class="flex items-start gap-3 cursor-pointer p-3 rounded-md border border-line hover:border-brand transition-colors has-[:checked]:border-brand has-[:checked]:bg-green-50">
+            <input type="radio" name="mode" value="off" class="mt-[3px] shrink-0 accent-brand"/>
+            <div>
+              <p class="text-[13px] font-semibold text-slate-800">Off</p>
+              <p class="text-[12px] text-slate-500 mt-[2px]">No schema validation. This is the default.</p>
+            </div>
+          </label>
+          <label class="flex items-start gap-3 cursor-pointer p-3 rounded-md border border-line hover:border-brand transition-colors has-[:checked]:border-brand has-[:checked]:bg-green-50">
+            <input type="radio" name="mode" value="log" class="mt-[3px] shrink-0 accent-brand"/>
+            <div>
+              <p class="text-[13px] font-semibold text-slate-800">Log only</p>
+              <p class="text-[12px] text-slate-500 mt-[2px]">Mismatches are recorded on the request log but never block traffic. Good for checking a new schema against real requests before enforcing it.</p>
+            </div>
+          </label>
+          <label class="flex items-start gap-3 cursor-pointer p-3 rounded-md border border-line hover:border-brand transition-colors has-[:checked]:border-brand has-[:checked]:bg-green-50">
+            <input type="radio" name="mode" value="enforce" class="mt-[3px] shrink-0 accent-brand"/>
+            <div>
+              <p class="text-[13px] font-semibold text-slate-800">Enforce</p>
+              <p class="text-[12px] text-slate-500 mt-[2px]">A JSON body that doesn't match the schema is rejected with 400 before it reaches the backend.</p>
+            </div>
+          </label>
+        </div>
+        <button type="submit" class="btn-primary w-full">Save</button>
+      </form>
+      <div id="svc-schema-error" role="alert" aria-live="polite" class="text-[12px] text-red-500 mt-[10px]"></div>
     </div>
 
     <!-- ── Cache tab ── -->
@@ -410,12 +446,16 @@
     {{if .AllowLargeJSUploads}}
     <span class="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-[2px] rounded-sm">Large JS uploads</span>
     {{end}}
+    {{if ne .SchemaMode "off"}}
+    <span class="text-[11px] font-semibold {{if eq .SchemaMode "enforce"}}bg-purple-100 text-purple-600{{else}}bg-slate-100 text-slate-500{{end}} px-2 py-[2px] rounded-sm">Schema: {{.SchemaMode}}</span>
+    {{end}}
     <span class="text-[12px] text-slate-400 whitespace-nowrap ml-1">{{fmtTime .CreatedAt}}</span>
     <button type="button" class="svc-edit-btn inline-flex items-center gap-[5px] text-[12px] font-medium text-slate-600 bg-white border border-line rounded-md px-4 py-[6px] cursor-pointer font-sans hover:border-slate-400 transition-colors duration-150 ml-1"
       data-id="{{.ID}}" data-name="{{.Name}}" data-has-host="{{if .Host}}1{{else}}0{{end}}"
       data-rps="{{.RateLimitRPS}}" data-burst="{{.RateLimitBurst}}" data-mode="{{.BotMode}}" data-cache="{{if .CacheEnabled}}1{{else}}0{{end}}"
       data-session-cache="{{if .CacheBySession}}1{{else}}0{{end}}" data-session-cookie="{{.SessionCookieName}}"
       data-large-js-uploads="{{if .AllowLargeJSUploads}}1{{else}}0{{end}}"
+      data-schema="{{.RequestSchema}}" data-schema-mode="{{.SchemaMode}}"
       data-ttl-floor="{{.CacheTTLFloor}}" data-ttl-ceiling="{{.CacheTTLCeiling}}" data-grace="{{.CacheGrace}}" data-keep="{{.CacheKeep}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-settings-01 text-xs"></i>
       Edit

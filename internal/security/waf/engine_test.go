@@ -321,3 +321,105 @@ func TestCheckNeverCachesCookieOrAuthRequests(t *testing.T) {
 		t.Fatalf("cache entries after Authorization-bearing request = %d, want 0", got)
 	}
 }
+
+const testRequestSchema = `{"type":"object","required":["email"],"properties":{"email":{"type":"string","format":"email"}}}`
+
+func jsonRequest(body string) *http.Request {
+	r := httptest.NewRequest("POST", "http://app.example.com/signup", strings.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("User-Agent", "Mozilla/5.0")
+	return r
+}
+
+// TestValidateSchemaRejectsMalformedSchema confirms save handlers can catch a
+// broken schema before it ever reaches the DB — see internal/ui's use of
+// this alongside SetServiceSchema.
+func TestValidateSchemaRejectsMalformedSchema(t *testing.T) {
+	if err := ValidateSchema(`{"type": "object",`); err == nil {
+		t.Fatal("ValidateSchema accepted syntactically invalid JSON, want an error")
+	}
+	if err := ValidateSchema(testRequestSchema); err != nil {
+		t.Fatalf("ValidateSchema rejected a valid schema: %v", err)
+	}
+}
+
+// TestCheckEnforceModeBlocksSchemaMismatch covers the "enforce" mode: a JSON
+// body missing a required field is rejected with 400 before Coraza's own
+// CRS transaction ever runs, and a matching body passes through untouched.
+func TestCheckEnforceModeBlocksSchemaMismatch(t *testing.T) {
+	e := newTestEngine(t)
+	if err := e.SetRequestSchema(testRequestSchema, "enforce"); err != nil {
+		t.Fatalf("SetRequestSchema: %v", err)
+	}
+
+	bad := jsonRequest(`{"name":"no email field"}`)
+	res, err := e.Check(bad, "203.0.113.9")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if !res.Blocked || res.Status != http.StatusBadRequest || res.Action != "schema_violation" {
+		t.Fatalf("enforce-mode mismatch result = %+v, want Blocked=true Status=400 Action=schema_violation", res)
+	}
+
+	good := jsonRequest(`{"email":"a@example.com"}`)
+	res, err = e.Check(good, "203.0.113.9")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if res.Blocked {
+		t.Fatalf("schema-matching body blocked: %+v", res)
+	}
+}
+
+// TestCheckLogModeNeverBlocks covers the "log" mode: a schema mismatch is
+// annotated onto the Action for logging/webhook visibility but the request
+// still proceeds to the backend exactly as if no schema were configured.
+func TestCheckLogModeNeverBlocks(t *testing.T) {
+	e := newTestEngine(t)
+	if err := e.SetRequestSchema(testRequestSchema, "log"); err != nil {
+		t.Fatalf("SetRequestSchema: %v", err)
+	}
+
+	bad := jsonRequest(`{"name":"no email field"}`)
+	res, err := e.Check(bad, "203.0.113.9")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if res.Blocked {
+		t.Fatalf("log-mode mismatch blocked the request: %+v", res)
+	}
+	if res.Action != "schema_violation:log" {
+		t.Fatalf("log-mode mismatch Action = %q, want %q", res.Action, "schema_violation:log")
+	}
+
+	good := jsonRequest(`{"email":"a@example.com"}`)
+	res, err = e.Check(good, "203.0.113.9")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if res.Blocked || res.Action != "" {
+		t.Fatalf("schema-matching body under log mode = %+v, want unblocked with no Action", res)
+	}
+}
+
+// TestSetRequestSchemaOffClearsSchema confirms mode "off" (the same value
+// Service.SchemaMode defaults to) detaches any previously compiled schema,
+// so toggling back to off actually stops validating instead of leaving the
+// last-compiled schema active.
+func TestSetRequestSchemaOffClearsSchema(t *testing.T) {
+	e := newTestEngine(t)
+	if err := e.SetRequestSchema(testRequestSchema, "enforce"); err != nil {
+		t.Fatalf("SetRequestSchema: %v", err)
+	}
+	if err := e.SetRequestSchema("", "off"); err != nil {
+		t.Fatalf("SetRequestSchema (off): %v", err)
+	}
+
+	res, err := e.Check(jsonRequest(`{"name":"no email field"}`), "203.0.113.9")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if res.Blocked {
+		t.Fatalf("schema still enforced after SetRequestSchema(off): %+v", res)
+	}
+}
