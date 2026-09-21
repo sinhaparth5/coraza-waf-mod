@@ -396,10 +396,22 @@
         <p class="ld-section-title">Security Decision</p>
         <div class="bg-red-50 border border-red-100 rounded-lg p-4 flex items-start gap-3">
           <i class="hgi hgi-stroke hgi-rounded hgi-security-block text-red-500 text-[22px] shrink-0 mt-[1px]"></i>
-          <div>
+          <div class="flex-1 min-w-0">
             <p class="text-[13px] font-semibold text-red-700">Request Blocked</p>
             <p id="ld-block-reason" class="text-[12px] text-red-500 mt-[3px]"></p>
           </div>
+        </div>
+        <div id="ld-feedback-row" class="hidden mt-2 flex items-center gap-2">
+          <span class="text-[11px] text-slate-500">Was this rule correct?</span>
+          <button id="ld-feedback-fp" type="button" data-fp="1"
+            class="text-[12px] font-medium text-slate-600 hover:text-amber-700 border border-line hover:border-amber-300 rounded-lg px-3 py-1 transition-colors cursor-pointer bg-white">
+            False positive
+          </button>
+          <button id="ld-feedback-tp" type="button" data-fp="0"
+            class="text-[12px] font-medium text-slate-600 hover:text-green-700 border border-line hover:border-green-300 rounded-lg px-3 py-1 transition-colors cursor-pointer bg-white">
+            Correct block
+          </button>
+          <span id="ld-feedback-status" class="text-[11px] text-slate-400"></span>
         </div>
       </div>
 

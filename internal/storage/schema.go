@@ -252,6 +252,18 @@ func (db *DB) schemaStatements() []string {
 			blocked_hits INTEGER NOT NULL DEFAULT 0,
 			last_seen    %s NOT NULL
 		)`, ts),
+
+		// One row per false/true-positive mark an admin makes on a blocked
+		// request from the Logs page (issue #76). Append-only signal log, not
+		// upserted — GetWAFRuleSuggestions aggregates it per (service_name,
+		// rule_id) over a rolling window.
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS waf_rule_feedback (
+			id             %s,
+			service_name   VARCHAR(255) NOT NULL,
+			rule_id        INTEGER NOT NULL,
+			false_positive INTEGER NOT NULL,
+			created_at     %s NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`, pk, ts),
 	}
 
 	if d.name == "mysql" {
