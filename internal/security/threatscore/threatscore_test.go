@@ -1,6 +1,7 @@
 package threatscore
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -45,6 +46,8 @@ func testScorer(db *fakeStore, autobanScore func(string) int) *Scorer {
 		riskCountries: make(map[string]bool),
 		scores:        make(map[string]int),
 		lastSeen:      make(map[string]time.Time),
+		asnCache:      make(map[uint]bool),
+		asnInFlight:   make(map[uint]bool),
 		now:           func() time.Time { return time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC) },
 	}
 }
@@ -306,5 +309,72 @@ func TestJanitorEvictsIdleScores(t *testing.T) {
 	}
 	if got := s.CurrentScore("203.0.113.40"); got != 0 {
 		t.Errorf("evicted IP CurrentScore = %d, want 0", got)
+	}
+}
+
+// fakeClassifier is a hostingClassifier that never makes a network call.
+type fakeClassifier struct {
+	hosting bool
+	calls   int32
+}
+
+func (f *fakeClassifier) judgeHosting(string) (bool, error) {
+	atomic.AddInt32(&f.calls, 1)
+	return f.hosting, nil
+}
+
+// TestClassifyASNUsesHeuristicUntilTypeSafeJudgmentArrives checks the core
+// contract classifyASN exists for: a cache miss must never block on network
+// I/O (Record runs on the log-worker goroutine), so it answers from the
+// heuristic immediately while judging the ASN in the background; only a
+// later call sees the cached TypeSafe verdict, and only one network call is
+// ever made per ASN.
+func TestClassifyASNUsesHeuristicUntilTypeSafeJudgmentArrives(t *testing.T) {
+	db := newFakeStore()
+	s := testScorer(db, nil)
+	fc := &fakeClassifier{hosting: true}
+	s.classifier = fc
+
+	const asn = 64512
+	const org = "Some Residential ISP" // heuristic says false (not a hosting keyword/ASN)
+
+	if got := s.classifyASN(asn, org); got {
+		t.Fatal("first call (cache miss) must return the heuristic result, not block on TypeSafe")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		s.mu.RLock()
+		cached, ok := s.asnCache[asn]
+		s.mu.RUnlock()
+		if ok {
+			if !cached {
+				t.Fatal("cached judgment should be true (fake classifier said hosting)")
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for the background TypeSafe judgment to be cached")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	if got := s.classifyASN(asn, org); !got {
+		t.Fatal("second call (cache hit) should return the cached TypeSafe verdict (true), not the heuristic")
+	}
+	if got := atomic.LoadInt32(&fc.calls); got != 1 {
+		t.Fatalf("judgeHosting called %d times, want exactly 1 (cached after the first call)", got)
+	}
+}
+
+// TestClassifyASNNilClassifierUsesHeuristicOnly checks the disabled-by-default
+// path (s.classifier == nil, e.g. every Scorer built by New before
+// ReloadTypeSafeConfig is ever called) never touches asnCache/asnInFlight —
+// those maps stay nil-safe-read-only, so a Scorer that never enables
+// TypeSafe never allocates them.
+func TestClassifyASNNilClassifierUsesHeuristicOnly(t *testing.T) {
+	s := &Scorer{now: time.Now} // classifier, asnCache, asnInFlight all zero-value
+	if s.classifyASN(16509, "Amazon.com, Inc.") != classify(16509, "Amazon.com, Inc.") {
+		t.Fatal("with no classifier configured, classifyASN must equal the plain heuristic")
 	}
 }

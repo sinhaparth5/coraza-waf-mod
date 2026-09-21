@@ -2239,6 +2239,42 @@ func (db *DB) SetRedisConfig(addr, password string) error {
 	return db.setSecretMeta("redis_password", password)
 }
 
+// TypeSafeConfig holds the opt-in settings for TypeSafe-backed ASN/hosting
+// classification (internal/security/threatscore/typesafeclassify.go), which
+// refines the hardcoded heuristic in asnclass.go for ASN organization names
+// it doesn't recognize. Disabled by default: the heuristic works with no
+// config at all, and enabling this adds an external API dependency and a
+// credential to manage.
+type TypeSafeConfig struct {
+	Enabled bool
+	APIKey  string
+}
+
+func (db *DB) GetTypeSafeConfig() (TypeSafeConfig, error) {
+	var cfg TypeSafeConfig
+	enabled, err := db.getMeta("typesafe_enabled")
+	if err != nil {
+		return TypeSafeConfig{}, err
+	}
+	cfg.Enabled = enabled == "1"
+	if cfg.APIKey, err = db.getSecretMeta("typesafe_api_key"); err != nil {
+		return TypeSafeConfig{}, err
+	}
+	return cfg, nil
+}
+
+// SetTypeSafeConfig persists the TypeSafe enable flag and API key.
+func (db *DB) SetTypeSafeConfig(cfg TypeSafeConfig) error {
+	enabled := "0"
+	if cfg.Enabled {
+		enabled = "1"
+	}
+	if err := db.setMeta("typesafe_enabled", enabled); err != nil {
+		return err
+	}
+	return db.setSecretMeta("typesafe_api_key", cfg.APIKey)
+}
+
 // GetRateLimitSettings reads the global per-client-IP rate limit from the
 // meta table. Returns defaults (disabled, 10 rps, burst 20) if never saved
 // from the Settings page — global limiting is opt-in like bot protection,

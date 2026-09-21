@@ -376,6 +376,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/settings/webhook/test", h.TestWebhook)
 	g.POST("/settings/email", h.SaveEmailSettings)
 	g.POST("/settings/email/test", h.TestEmailReport)
+	g.POST("/settings/typesafe", h.SaveTypeSafeSettings)
 	g.POST("/settings/dbconn", h.SaveDBConnConfig)
 	g.POST("/settings/dbconn/test", h.TestDBConnection)
 	g.POST("/settings/dbconn/migrate", h.MigrateDBConfig)
@@ -2079,6 +2080,7 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 	rlEnabled, rlRPS, rlBurst, _ := h.db.GetRateLimitSettings()
 	wh, _ := h.db.GetWebhookConfig()
 	ec, _ := h.db.GetEmailConfig()
+	tc, _ := h.db.GetTypeSafeConfig()
 	vc, _ := h.db.GetVarnishConfig()
 	apiKeys, _ := h.db.ListAPIKeys()
 	totpEnabled, _ := h.db.TOTPEnabled()
@@ -2115,6 +2117,8 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 		"EmailSender":            mailer.Sender,
 		"EmailTo":                ec.To,
 		"EmailTokenSet":          ec.Token != "",
+		"TypeSafeEnabled":        tc.Enabled,
+		"TypeSafeAPIKeySet":      tc.APIKey != "",
 		"VarnishEnabled":         vc.Enabled,
 		"VarnishAddr":            vc.Addr,
 		"APIKeys":                apiKeys,
@@ -2635,6 +2639,43 @@ func (h *Handler) SaveEmailSettings(c echo.Context) error {
 		"EmailTokenSet": cfg.Token != "",
 		"EmailSaveOK":   saveErr == "",
 		"EmailSaveErr":  saveErr,
+	})
+}
+
+// SaveTypeSafeSettings persists the TypeSafe ASN-classification opt-in (see
+// internal/security/threatscore/typesafeclassify.go) and hot-reloads the
+// scorer's classifier via h.scorer, the same "Reload after save" pattern
+// used for geo rules. A blank key field keeps the stored one, mirroring
+// SaveEmailSettings, and the key is never echoed back into the page.
+func (h *Handler) SaveTypeSafeSettings(c echo.Context) error {
+	stored, _ := h.db.GetTypeSafeConfig()
+
+	cfg := storage.TypeSafeConfig{
+		Enabled: c.FormValue("typesafe_enabled") == "1",
+		APIKey:  strings.TrimSpace(c.FormValue("typesafe_api_key")),
+	}
+	if cfg.APIKey == "" {
+		cfg.APIKey = stored.APIKey
+	}
+
+	saveErr := ""
+	if cfg.Enabled && cfg.APIKey == "" {
+		saveErr = "An API key is required to enable AI-assisted ASN classification."
+		cfg.Enabled = false
+	}
+	if saveErr == "" {
+		if err := h.db.SetTypeSafeConfig(cfg); err != nil {
+			saveErr = err.Error()
+		}
+	}
+	h.scorer.ReloadTypeSafeConfig(cfg.Enabled, cfg.APIKey)
+
+	return h.renderPartial(c, "settings", "typesafe-card", map[string]any{
+		"AdminPath":         h.cfg.Admin.Path,
+		"TypeSafeEnabled":   cfg.Enabled,
+		"TypeSafeAPIKeySet": cfg.APIKey != "",
+		"TypeSafeSaveOK":    saveErr == "",
+		"TypeSafeSaveErr":   saveErr,
 	})
 }
 

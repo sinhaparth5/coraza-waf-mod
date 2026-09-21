@@ -31,6 +31,11 @@
 //	ASN/org looks like hosting/VPN (asnclass.go) flat 15
 //	country has an admin-configured geo block rule flat 10
 //	JA4 fingerprint's lifetime blocked-hit count up to 15
+//
+// The ASN/org component's heuristic can optionally be refined by TypeSafe
+// (typesafeclassify.go, Settings page's "AI classification" card): a
+// never-before-seen ASN is judged once, off the log-worker goroutine, and
+// cached forever after. Disabled by default — see classifyASN.
 package threatscore
 
 import (
@@ -78,6 +83,15 @@ type Scorer struct {
 	scores        map[string]int       // in-memory cache backing CurrentScore
 	lastSeen      map[string]time.Time // bounds the scores map, mirrors ratelimit.Limiter's bucket janitor
 
+	// classifier is nil when TypeSafe-backed ASN classification is off
+	// (the default) — classifyASN then falls back to asnclass.go's
+	// heuristic alone. asnCache/asnInFlight cache judgments per ASN, since
+	// an ASN's organization doesn't change request-to-request: see
+	// classifyASN.
+	classifier  hostingClassifier
+	asnCache    map[uint]bool
+	asnInFlight map[uint]bool
+
 	stop chan struct{}
 	once sync.Once
 
@@ -95,6 +109,8 @@ func New(db *storage.DB, autobanScore func(ip string) int) *Scorer {
 		riskCountries: make(map[string]bool),
 		scores:        make(map[string]int),
 		lastSeen:      make(map[string]time.Time),
+		asnCache:      make(map[uint]bool),
+		asnInFlight:   make(map[uint]bool),
 		stop:          make(chan struct{}),
 		now:           time.Now,
 	}
@@ -159,6 +175,23 @@ func (s *Scorer) ReloadGeoRules(rules []storage.GeoRule) {
 	s.mu.Unlock()
 }
 
+// ReloadTypeSafeConfig enables or disables TypeSafe-backed ASN classification
+// and clears the ASN cache, so a key change or a disable takes effect on the
+// next request rather than serving stale judgments made under the old
+// config. Call after every Settings save, the same way ReloadGeoRules is
+// called after every geo-rule change.
+func (s *Scorer) ReloadTypeSafeConfig(enabled bool, apiKey string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if enabled && apiKey != "" {
+		s.classifier = newTypeSafeClient(apiKey)
+	} else {
+		s.classifier = nil
+	}
+	s.asnCache = make(map[uint]bool)
+	s.asnInFlight = make(map[uint]bool)
+}
+
 // Record computes and persists e's client IP's composite threat score. It
 // runs on the storage log-worker goroutine (see the package doc comment).
 func (s *Scorer) Record(e storage.RequestLog) {
@@ -170,7 +203,7 @@ func (s *Scorer) Record(e storage.RequestLog) {
 	botPart := clamp(e.BotScore, 0, maxBotScore)
 
 	asnPart := 0
-	if classify(e.ASN, e.Org) {
+	if s.classifyASN(e.ASN, e.Org) {
 		asnPart = asnScore
 	}
 
@@ -212,6 +245,51 @@ func (s *Scorer) Record(e storage.RequestLog) {
 	if err != nil {
 		log.Printf("threatscore: store score for %s: %v", e.RealIP, err)
 	}
+}
+
+// classifyASN reports whether asn/org looks like hosting/VPN infrastructure.
+// With TypeSafe enabled, a never-before-seen ASN is judged once via a
+// background goroutine and cached forever after — an ASN's organization
+// doesn't change request-to-request. Every call, including the one that
+// triggers that judgment, returns the fast hardcoded heuristic immediately:
+// Record runs on the log-worker goroutine and must never block on network
+// I/O (see the package doc comment).
+func (s *Scorer) classifyASN(asn uint, org string) bool {
+	s.mu.RLock()
+	classifier := s.classifier
+	cached, ok := s.asnCache[asn]
+	inFlight := s.asnInFlight[asn]
+	s.mu.RUnlock()
+
+	if classifier == nil {
+		return classify(asn, org)
+	}
+	if ok {
+		return cached
+	}
+	if !inFlight && org != "" {
+		s.mu.Lock()
+		s.asnInFlight[asn] = true
+		s.mu.Unlock()
+		go s.judgeASN(classifier, asn, org)
+	}
+	return classify(asn, org)
+}
+
+func (s *Scorer) judgeASN(c hostingClassifier, asn uint, org string) {
+	defer func() {
+		s.mu.Lock()
+		delete(s.asnInFlight, asn)
+		s.mu.Unlock()
+	}()
+	hosting, err := c.judgeHosting(org)
+	if err != nil {
+		log.Printf("threatscore: typesafe classify ASN %d (%q): %v", asn, org, err)
+		return // uncached; the heuristic keeps being used, and this retries next time
+	}
+	s.mu.Lock()
+	s.asnCache[asn] = hosting
+	s.mu.Unlock()
 }
 
 func clamp(v, lo, hi int) int {

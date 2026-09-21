@@ -49,6 +49,7 @@ var secretMetaKeys = []string{
 	"email_token",
 	"db_conn_password",
 	"db_conn_dsn",
+	"typesafe_api_key",
 }
 
 // EnableSecretEncryption switches the DB into secrets-at-rest mode with a
