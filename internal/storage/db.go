@@ -4,6 +4,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -1911,6 +1912,104 @@ func (db *DB) GetTOTPLastCounter() (uint64, error) {
 // code can't be replayed within its validity window.
 func (db *DB) SetTOTPLastCounter(counter uint64) error {
 	return db.setMeta("admin_totp_last_counter", strconv.FormatUint(counter, 10))
+}
+
+// ── Admin passkeys (WebAuthn, issue #78) ─────────────────────────────────────
+//
+// A second, browser/authenticator-backed factor alongside TOTP — see
+// internal/security/passkey. Unlike the single TOTP secret, an admin
+// normally registers more than one passkey (phone, laptop, security key),
+// so these live in their own table rather than a meta key.
+
+// WebAuthnCredential is one registered passkey.
+type WebAuthnCredential struct {
+	ID           int64
+	CredentialID string // base64url(credential.ID), for fast lookup
+	Data         []byte // JSON-encoded webauthn.Credential
+	Name         string
+	CreatedAt    time.Time
+	LastUsedAt   string
+}
+
+// GetOrCreateWebAuthnHandle returns the stable, opaque WebAuthn user handle
+// for the single admin account, generating and persisting one (32 random
+// bytes) on first use. It is not a secret — knowing it alone proves
+// nothing — just a stable non-PII identifier the spec requires, so it's
+// stored as plain meta rather than via getSecretMeta/setSecretMeta.
+func (db *DB) GetOrCreateWebAuthnHandle() ([]byte, error) {
+	s, err := db.getMeta("admin_webauthn_handle")
+	if err != nil {
+		return nil, err
+	}
+	if s != "" {
+		return base64.StdEncoding.DecodeString(s)
+	}
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return nil, err
+	}
+	if err := db.setMeta("admin_webauthn_handle", base64.StdEncoding.EncodeToString(b)); err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+// WebAuthnEnabled reports whether the admin has at least one registered
+// passkey — the login page only offers the passkey option, and LoginPost
+// only demands a second factor for passkey-only admins, when this is true.
+func (db *DB) WebAuthnEnabled() (bool, error) {
+	var n int
+	err := db.queryRow(`SELECT COUNT(*) FROM webauthn_credentials`).Scan(&n)
+	return n > 0, err
+}
+
+// ListWebAuthnCredentials returns every registered passkey, newest first.
+func (db *DB) ListWebAuthnCredentials() ([]WebAuthnCredential, error) {
+	rows, err := db.query(
+		`SELECT id, credential_id, data, name, created_at, last_used_at FROM webauthn_credentials ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []WebAuthnCredential
+	for rows.Next() {
+		var c WebAuthnCredential
+		var data string
+		if err := rows.Scan(&c.ID, &c.CredentialID, &data, &c.Name, &c.CreatedAt, &c.LastUsedAt); err != nil {
+			return nil, err
+		}
+		c.Data = []byte(data)
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// AddWebAuthnCredential stores a newly registered passkey.
+func (db *DB) AddWebAuthnCredential(credentialID, name string, data []byte) error {
+	_, err := db.exec(
+		`INSERT INTO webauthn_credentials (credential_id, data, name, created_at) VALUES (?, ?, ?, ?)`,
+		credentialID, string(data), name, time.Now(),
+	)
+	return err
+}
+
+// TouchWebAuthnCredential updates a credential's stored data (its sign
+// counter changes on every successful login, guarding against a cloned
+// authenticator) and last-used timestamp after a successful login.
+func (db *DB) TouchWebAuthnCredential(credentialID string, data []byte) error {
+	_, err := db.exec(
+		`UPDATE webauthn_credentials SET data = ?, last_used_at = ? WHERE credential_id = ?`,
+		string(data), time.Now().UTC().Format(time.RFC3339), credentialID,
+	)
+	return err
+}
+
+// DeleteWebAuthnCredential removes one registered passkey by its row id.
+func (db *DB) DeleteWebAuthnCredential(id int64) error {
+	_, err := db.exec(`DELETE FROM webauthn_credentials WHERE id = ?`, id)
+	return err
 }
 
 // sessionHistoryTTL is how long a session row survives after it was

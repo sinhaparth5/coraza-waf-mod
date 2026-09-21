@@ -14,6 +14,18 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Added
+
+- **Passkey (WebAuthn) admin login** (issue #78). A phishing-resistant
+  alternative to a TOTP code, accepted as a second factor alongside — not
+  instead of — the existing authenticator/backup/email codes; an admin can
+  register more than one (phone, laptop, security key) from the new
+  "Passkeys" card on the Settings page. Only offered when the admin panel
+  is actually reachable over HTTPS with a real hostname (or `localhost`) —
+  WebAuthn can't work correctly on the plain-HTTP or bare-IP deployments
+  this project also supports, so the option is hidden rather than shown
+  broken. Uses `github.com/go-webauthn/webauthn` (pure Go, no CGO).
+
 ## [1.9.6] - 2026-09-21
 
 ### Fixed

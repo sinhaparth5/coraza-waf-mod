@@ -264,6 +264,24 @@ func (db *DB) schemaStatements() []string {
 			false_positive INTEGER NOT NULL,
 			created_at     %s NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`, pk, ts),
+
+		// One row per registered passkey (issue #78). There's one admin
+		// account but, unlike the single TOTP secret, an admin normally
+		// registers more than one authenticator (phone, laptop, a security
+		// key), so this is a list, not another meta key. `data` is the
+		// go-webauthn Credential JSON-encoded whole (public key, sign
+		// counter, flags, attestation) rather than split into columns —
+		// it's opaque application data the library round-trips, never
+		// queried or filtered on in SQL, so decomposing it would only add
+		// risk of drifting from whatever fields a future library version adds.
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS webauthn_credentials (
+			id            %s,
+			credential_id TEXT NOT NULL UNIQUE,
+			data          TEXT NOT NULL,
+			name          TEXT NOT NULL DEFAULT '',
+			created_at    %s NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			last_used_at  TEXT NOT NULL DEFAULT ''
+		)`, pk, ts),
 	}
 
 	if d.name == "mysql" {

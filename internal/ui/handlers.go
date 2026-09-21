@@ -27,6 +27,7 @@ import (
 	"coraza-waf-mod/internal/security/blocklist"
 	"coraza-waf-mod/internal/security/challenge"
 	"coraza-waf-mod/internal/security/geo"
+	"coraza-waf-mod/internal/security/passkey"
 	"coraza-waf-mod/internal/security/ratelimit"
 	"coraza-waf-mod/internal/security/threatscore"
 	"coraza-waf-mod/internal/security/waf"
@@ -125,6 +126,8 @@ type Handler struct {
 	loginLimiter    *loginLimiter
 	apiKeyLimiter   *loginLimiter
 	twoFA           *twoFAStore
+	passkeys        *passkey.Manager
+	pkEnroll        *pkEnrollStore
 	trustedNets     []*net.IPNet
 	proxyHandle     echo.HandlerFunc
 }
@@ -188,7 +191,7 @@ func NewHandler(cfg *config.Config, db *storage.DB, ipbl *blocklist.IPBlocklist,
 		sum := sha256.Sum256(b)
 		assetVer = hex.EncodeToString(sum[:])[:12]
 	}
-	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticCSS: cssSub, staticImgs: imgsSub, assetVer: assetVer, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, sendTestWebhook: sendTestWebhook, sendLoginCode: sendLoginCode, reloadAutoban: reloadAutoban, scorer: scorer, reloadAdaptive: reloadAdaptive, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), twoFA: newTwoFAStore(), trustedNets: parseTrustedNets(cfg.TrustedProxies), proxyHandle: proxyHandle}
+	h := &Handler{cfg: cfg, db: db, ipbl: ipbl, geoBl: geoBl, registry: registry, broadcaster: bc, staticJS: sub, staticCSS: cssSub, staticImgs: imgsSub, assetVer: assetVer, reloadBot: reloadBot, buildChallenger: buildChallenger, reloadRateLimit: reloadRateLimit, reloadWAF: reloadWAF, syncThreatIntel: syncThreatIntel, sendReportNow: sendReportNow, sendTestWebhook: sendTestWebhook, sendLoginCode: sendLoginCode, reloadAutoban: reloadAutoban, scorer: scorer, reloadAdaptive: reloadAdaptive, loginLimiter: newLoginLimiter(), apiKeyLimiter: newLoginLimiter(), twoFA: newTwoFAStore(), passkeys: passkey.New(db), pkEnroll: newPkEnrollStore(), trustedNets: parseTrustedNets(cfg.TrustedProxies), proxyHandle: proxyHandle}
 	if err := h.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -318,6 +321,9 @@ func (h *Handler) Register(e *echo.Echo) {
 	// Second login step when 2FA is on: code entry + emailed recovery code.
 	admin.POST("/login/totp", h.LoginTOTPPost, bodyLimit)
 	admin.POST("/login/totp/email", h.LoginTOTPEmail, bodyLimit)
+	// Passkey alternative to the code form above, same pending-login stage.
+	admin.POST("/login/webauthn/begin", h.BeginPasskeyLogin, bodyLimit)
+	admin.POST("/login/webauthn/finish", h.FinishPasskeyLogin, bodyLimit)
 	// Static assets are public so the login page can load spirals/JS before auth.
 	admin.StaticFS("/static/js", h.staticJS)
 	admin.StaticFS("/static/css", h.staticCSS)
@@ -402,6 +408,9 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/settings/2fa/start", h.StartTOTPEnrollment)
 	g.POST("/settings/2fa/confirm", h.ConfirmTOTPEnrollment)
 	g.POST("/settings/2fa/disable", h.DisableTOTP)
+	g.POST("/settings/passkeys/begin", h.BeginPasskeyEnrollment)
+	g.POST("/settings/passkeys/finish", h.FinishPasskeyEnrollment)
+	g.DELETE("/settings/passkeys/:id", h.DeletePasskey)
 	// POST, not GET: this streams the full DB (admin hash, challenge secret),
 	// so it must never be reachable via cross-site top-level navigation.
 	g.POST("/settings/backup", h.BackupDB)
@@ -447,9 +456,12 @@ func (h *Handler) LoginPost(c echo.Context) error {
 		log.Printf("admin login: failed attempt from %s", ip)
 		return h.renderLogin(c, "Invalid email or password.")
 	}
-	// Password OK. With 2FA enabled, park the login and ask for a code —
-	// without resetting the limiter yet (see beginTOTPStage).
-	if enabled, _ := h.db.TOTPEnabled(); enabled {
+	// Password OK. With TOTP or a passkey enrolled, park the login and ask
+	// for a second factor — without resetting the limiter yet (see
+	// beginTOTPStage).
+	totpEnabled, _ := h.db.TOTPEnabled()
+	passkeysEnabled, _ := h.passkeys.Enabled()
+	if totpEnabled || passkeysEnabled {
 		return h.beginTOTPStage(c)
 	}
 
@@ -2157,9 +2169,12 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 			dbConnCfg.Host = h.cfg.DB.Path
 		}
 	}
+	passkeyRows, _ := h.db.ListWebAuthnCredentials()
 	return h.render(c, "settings", h.dbConnCardData(dbConnCfg, false, "", map[string]any{
 		"AdminEmail":             email,
 		"TOTPEnabled":            totpEnabled,
+		"Passkeys":               passkeyRows,
+		"SecureContext":          passkey.IsSecureContext(c.Request()),
 		"BotEnabled":             botEnabled,
 		"BotThreshold":           botThreshold,
 		"BotTTL":                 botTTL,
