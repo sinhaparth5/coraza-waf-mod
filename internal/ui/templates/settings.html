@@ -60,6 +60,7 @@
   </div>
 
   {{template "twofa-card" .}}
+  {{template "passkeys-card" .}}
   {{template "devices-card" .}}
   {{template "api-keys-card" .}}
 
@@ -793,3 +794,46 @@
   {{end}}
 </div>
 {{end}}
+
+{{define "passkeys-card"}}
+<div class="card p-5" id="passkeys-card" data-csrf="{{.CSRF}}">
+  <h2 class="text-[15px] font-bold text-slate-800 mb-1">Passkeys</h2>
+  <p class="text-[13px] text-slate-500 mb-4">A phishing-resistant alternative to a TOTP code — a fingerprint, face, PIN, or security key tied to this exact site. Accepted as a second factor at sign-in alongside (not instead of) TOTP, and you can register more than one.</p>
+
+  {{if .PasskeyErr}}
+  <div class="rounded-md bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.PasskeyErr}}</div>
+  {{end}}
+
+  {{if not .SecureContext}}
+  <div class="rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[13px] px-4 py-3 mb-4">
+    Passkeys need HTTPS with a real hostname (or localhost). This admin panel is reachable over plain HTTP or a bare IP right now, so registration is unavailable here.
+  </div>
+  {{else}}
+  <div class="flex items-center gap-2 mb-4">
+    <input id="pk-name" type="text" placeholder="Name this passkey (e.g. MacBook)"
+           class="flex-1 rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus:border-brand focus:ring-2 focus:ring-brand/20"/>
+    <button type="button" id="pk-register-btn" class="btn-primary px-5 whitespace-nowrap">Add a passkey</button>
+  </div>
+  <p id="pk-status" class="text-[12px] mb-4"></p>
+  {{end}}
+
+  {{if .Passkeys}}
+  <div class="flex flex-col divide-y divide-line border-t border-line">
+    {{range .Passkeys}}
+    <div class="flex items-center justify-between py-2.5">
+      <div class="min-w-0">
+        <p class="text-[13px] font-medium text-slate-800 truncate">{{.Name}}</p>
+        <p class="text-[11px] text-slate-400">Added {{fmtTime .CreatedAt}}{{if .LastUsedAt}} · last used {{.LastUsedAt}}{{end}}</p>
+      </div>
+      <button type="button" class="pk-delete-btn text-[12px] font-medium text-red-600 hover:bg-red-50 rounded-md px-3 py-1.5 transition-colors cursor-pointer"
+              data-id="{{.ID}}">Remove</button>
+    </div>
+    {{end}}
+  </div>
+  {{else}}
+  <p class="text-[13px] text-slate-400">No passkeys registered yet.</p>
+  {{end}}
+</div>
+{{end}}
+
+{{define "scripts"}}<script src="{{.AdminPath}}/static/js/passkeys.min.js" defer></script>{{end}}

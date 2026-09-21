@@ -15,8 +15,10 @@ import (
 	"sync"
 	"time"
 
+	"coraza-waf-mod/internal/security/passkey"
 	"coraza-waf-mod/internal/security/totp"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/labstack/echo/v4"
 	qrcode "github.com/skip2/go-qrcode"
 )
@@ -45,6 +47,7 @@ type twoFAEntry struct {
 	emailCode        string // emailed recovery code, "" until requested
 	emailCodeExpires time.Time
 	emailSentAt      time.Time
+	waSession        *webauthn.SessionData // set between BeginPasskeyLogin and FinishPasskeyLogin
 }
 
 // twoFAStore holds pending two-factor logins in memory. In-process state is
@@ -176,9 +179,17 @@ func (h *Handler) LoginTOTPPost(c echo.Context) error {
 // whole 30s window even after a successful login with it.
 func (h *Handler) verifySecondFactor(entry *twoFAEntry, code string) bool {
 	secret, err := h.db.GetTOTPSecret()
-	if err != nil || secret == "" {
-		// 2FA was disabled between the two steps; the password already passed.
-		return err == nil
+	if err != nil {
+		return false
+	}
+	if secret == "" {
+		// No active TOTP secret. If passkeys aren't enrolled either, 2FA
+		// was fully disabled between the two steps — the password already
+		// passed, let them in. If passkeys ARE enrolled, TOTP was simply
+		// never the active factor here: don't treat a blank/guessed code
+		// as a pass, the admin must use the passkey button instead.
+		passkeysEnabled, _ := h.passkeys.Enabled()
+		return !passkeysEnabled
 	}
 
 	if ok, counter := totp.Validate(secret, code, time.Now()); ok {
@@ -252,14 +263,16 @@ func (h *Handler) emailRecoveryAvailable() bool {
 }
 
 func (h *Handler) renderLoginTOTP(c echo.Context, status int, errMsg, notice string) error {
+	passkeysEnabled, _ := h.passkeys.Enabled()
 	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
 	c.Response().WriteHeader(status)
 	return h.tmpls["login"].ExecuteTemplate(c.Response(), "login", map[string]any{
-		"TOTPStage":      true,
-		"Error":          errMsg,
-		"Notice":         notice,
-		"EmailAvailable": h.emailRecoveryAvailable(),
-		"AdminPath":      h.cfg.Admin.Path,
+		"TOTPStage":         true,
+		"Error":             errMsg,
+		"Notice":            notice,
+		"EmailAvailable":    h.emailRecoveryAvailable(),
+		"PasskeysAvailable": passkeysEnabled && passkey.IsSecureContext(c.Request()),
+		"AdminPath":         h.cfg.Admin.Path,
 	})
 }
 

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"coraza-waf-mod/internal/config"
+	"coraza-waf-mod/internal/security/passkey"
 	"coraza-waf-mod/internal/security/totp"
 	"coraza-waf-mod/internal/storage"
 
@@ -44,6 +45,8 @@ func newTestLoginHandler(t *testing.T) (*Handler, *echo.Echo, *storage.DB) {
 		staticImgs:   fstest.MapFS{},
 		loginLimiter: newLoginLimiter(),
 		twoFA:        newTwoFAStore(),
+		passkeys:     passkey.New(db),
+		pkEnroll:     newPkEnrollStore(),
 	}
 	if err := h.parseTemplates(); err != nil {
 		t.Fatal(err)
