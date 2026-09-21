@@ -2655,6 +2655,157 @@ func (db *DB) ListWAFExceptionServiceNames() ([]string, error) {
 	return names, rows.Err()
 }
 
+// ── WAF rule feedback (issue #76) ───────────────────────────────────────────
+//
+// Suggestion-only signal collection: an admin marks a blocked request's rule
+// as a false or true positive from the Logs page (MarkWAFRuleFeedback).
+// GetWAFRuleSuggestions surfaces (service, rule) pairs with enough
+// false-positive marks and no true-positive marks in a rolling window as a
+// one-click "add exception" prompt on the WAF Rules page — it never disables
+// a rule itself, only DisableWAFRule/DisableWAFRuleForService do that.
+
+// MarkWAFRuleFeedback records one false/true-positive mark for a blocked
+// request's rule, scoped to the service it hit (serviceName is "" for
+// unmatched-host/global traffic, matching RequestLog.AppName).
+func (db *DB) MarkWAFRuleFeedback(serviceName string, ruleID int, falsePositive bool) error {
+	_, err := db.exec(
+		`INSERT INTO waf_rule_feedback (service_name, rule_id, false_positive) VALUES (?, ?, ?)`,
+		serviceName, ruleID, boolToInt(falsePositive),
+	)
+	return err
+}
+
+// WAFRuleFeedbackConfig controls the false-positive-mark threshold/window
+// GetWAFRuleSuggestions uses. Stored in meta, mirrors AutobanConfig's shape.
+type WAFRuleFeedbackConfig struct {
+	Threshold  int // false-positive marks needed within the window, with zero true-positive marks
+	WindowDays int // rolling window size
+}
+
+// DefaultWAFRuleFeedbackConfig is used when nothing is stored yet: suggest
+// after 5 false-positive marks in 7 days.
+func DefaultWAFRuleFeedbackConfig() WAFRuleFeedbackConfig {
+	return WAFRuleFeedbackConfig{Threshold: 5, WindowDays: 7}
+}
+
+func (db *DB) GetWAFRuleFeedbackConfig() (WAFRuleFeedbackConfig, error) {
+	cfg := DefaultWAFRuleFeedbackConfig()
+	if v, err := db.getMeta("waf_feedback_threshold"); err != nil {
+		return cfg, err
+	} else if v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.Threshold = n
+		}
+	}
+	if v, _ := db.getMeta("waf_feedback_window_days"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.WindowDays = n
+		}
+	}
+	return cfg, nil
+}
+
+func (db *DB) SetWAFRuleFeedbackConfig(cfg WAFRuleFeedbackConfig) error {
+	if err := db.setMeta("waf_feedback_threshold", strconv.Itoa(cfg.Threshold)); err != nil {
+		return err
+	}
+	return db.setMeta("waf_feedback_window_days", strconv.Itoa(cfg.WindowDays))
+}
+
+// WAFRuleSuggestion is one (service, rule) pair with enough false-positive
+// marks and no true-positive marks in the configured window to suggest
+// adding an exception for it.
+type WAFRuleSuggestion struct {
+	ServiceName        string // "" = global/unmatched-host traffic
+	RuleID             int
+	FalsePositiveCount int
+	LastMarked         time.Time
+}
+
+// GetWAFRuleSuggestions aggregates waf_rule_feedback within cfg.WindowDays
+// and returns pairs at or above cfg.Threshold false-positive marks with zero
+// true-positive marks in that same window, excluding any pair that already
+// has an exception (global or per-service) — suggesting one for a rule
+// that's already suppressed for that service would be a dead-end button.
+func (db *DB) GetWAFRuleSuggestions(cfg WAFRuleFeedbackConfig) ([]WAFRuleSuggestion, error) {
+	cutoff := time.Now().Add(-time.Duration(cfg.WindowDays) * 24 * time.Hour)
+	rows, err := db.query(
+		`SELECT service_name, rule_id,
+		        SUM(CASE WHEN false_positive = 1 THEN 1 ELSE 0 END) AS fp,
+		        SUM(CASE WHEN false_positive = 0 THEN 1 ELSE 0 END) AS tp,
+		        MAX(created_at) AS last_marked
+		 FROM waf_rule_feedback
+		 WHERE created_at >= ?
+		 GROUP BY service_name, rule_id`,
+		cutoff,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type ruleKey struct {
+		service string
+		ruleID  int
+	}
+	var candidates []WAFRuleSuggestion
+	seen := make(map[ruleKey]bool)
+	for rows.Next() {
+		var svc string
+		var ruleID, fp, tp int
+		var lastMarkedStr string
+		if err := rows.Scan(&svc, &ruleID, &fp, &tp, &lastMarkedStr); err != nil {
+			return nil, err
+		}
+		if fp < cfg.Threshold || tp > 0 {
+			continue
+		}
+		key := ruleKey{svc, ruleID}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		candidates = append(candidates, WAFRuleSuggestion{
+			ServiceName:        svc,
+			RuleID:             ruleID,
+			FalsePositiveCount: fp,
+			LastMarked:         parseTS(lastMarkedStr),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+
+	globalDisabled, err := db.GetDisabledWAFRuleIDs()
+	if err != nil {
+		return nil, err
+	}
+	globalSet := make(map[int]bool, len(globalDisabled))
+	for _, id := range globalDisabled {
+		globalSet[id] = true
+	}
+	exceptions, err := db.ListWAFServiceExceptions()
+	if err != nil {
+		return nil, err
+	}
+	exceptionSet := make(map[ruleKey]bool, len(exceptions))
+	for _, e := range exceptions {
+		exceptionSet[ruleKey{e.ServiceName, e.RuleID}] = true
+	}
+
+	var suggestions []WAFRuleSuggestion
+	for _, c := range candidates {
+		if globalSet[c.RuleID] || exceptionSet[ruleKey{c.ServiceName, c.RuleID}] {
+			continue
+		}
+		suggestions = append(suggestions, c)
+	}
+	return suggestions, nil
+}
+
 // tsFormats lists the candidate layouts for parsing timestamps returned by
 // SQLite aggregate functions (e.g. MAX(ts)). The driver stores time.Time
 // values as strings internally; aggregate results come back as plain strings

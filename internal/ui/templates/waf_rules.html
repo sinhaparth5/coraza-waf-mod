@@ -58,6 +58,59 @@
 {{define "waf-content"}}
 <div class="flex flex-col gap-6">
 
+  <!-- Suggested exceptions (issue #76) -->
+  <div class="card overflow-hidden">
+    {{template "card-header" (map "Cat" "Feedback" "Title" "Suggested Exceptions" "Badge" (printf "%d suggested" (len .Suggestions)))}}
+    <div class="flex flex-col gap-1 px-2 pb-2">
+      {{if .Suggestions}}
+      {{range .Suggestions}}
+      <div class="flex items-center gap-3 p-3 rounded-lg hover:bg-surface transition-colors duration-150">
+        <div class="w-10 h-10 rounded-md flex items-center justify-center shrink-0 bg-amber-50">
+          <i class="hgi hgi-stroke hgi-rounded hgi-thumbs-down text-base text-amber-500"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="font-mono text-[14px] font-semibold text-slate-900">
+            Rule {{.RuleID}}
+            <span class="ml-1 font-sans text-[11px] font-semibold px-[8px] py-[2px] rounded-sm bg-brand-tint text-brand-dark">{{if .ServiceName}}{{.ServiceName}}{{else}}Global{{end}}</span>
+          </div>
+          <div class="text-[12px] text-slate-500 truncate">
+            Marked false-positive {{.FalsePositiveCount}} times · last {{fmtTime .LastMarked}}
+          </div>
+        </div>
+        <form hx-post="/admin/waf-rules/disable" hx-target="#waf-content" hx-swap="innerHTML" class="inline">
+          <input type="hidden" name="rule_id" value="{{.RuleID}}"/>
+          <input type="hidden" name="service" value="{{.ServiceName}}"/>
+          <input type="hidden" name="reason" value="{{printf "Suggested: %d false-positive marks in the last %d days" .FalsePositiveCount $.FeedbackWindow}}"/>
+          <button type="submit"
+            class="text-[12px] font-medium text-brand hover:text-brand-dark border border-line hover:border-brand rounded-lg px-3 py-1 transition-colors cursor-pointer bg-white">
+            Add exception
+          </button>
+        </form>
+      </div>
+      {{end}}
+      {{else}}
+      {{template "empty-state" (map "Icon" "hgi-thumbs-up" "Message" "No suggestions — mark a blocked request false-positive from the Logs page to start collecting signal")}}
+      {{end}}
+    </div>
+    <form hx-post="/admin/waf-rules/feedback-config" hx-target="#waf-content" hx-swap="innerHTML"
+      class="flex flex-wrap items-end gap-3 border-t border-canvas px-5 py-4">
+      <div>
+        <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">False-positive marks needed</label>
+        <input name="feedback_threshold" type="number" min="1" max="1000" value="{{.FeedbackThreshold}}"
+          class="focus-green w-28 border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden transition-[border] duration-150 text-slate-800 bg-white"/>
+      </div>
+      <div>
+        <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Window (days)</label>
+        <input name="feedback_window" type="number" min="1" max="90" value="{{.FeedbackWindow}}"
+          class="focus-green w-28 border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden transition-[border] duration-150 text-slate-800 bg-white"/>
+      </div>
+      <button type="submit" class="text-[12px] font-medium text-slate-600 hover:text-slate-900 border border-line hover:border-slate-400 rounded-lg px-3 py-[9px] transition-colors cursor-pointer bg-white">
+        Save
+      </button>
+      <p class="text-[12px] text-slate-500 basis-full">A suggestion needs this many false-positive marks and zero true-positive marks on the same rule/service within the window. Suggestion-only — nothing is ever disabled automatically.</p>
+    </form>
+  </div>
+
   <!-- Top firing rules -->
   <div class="card overflow-hidden">
     {{template "card-header" (map "Cat" "Analytics" "Title" "Top Firing Rules" "Badge" "last 30 days")}}

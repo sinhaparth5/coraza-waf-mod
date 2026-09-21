@@ -534,6 +534,11 @@
   // ── Request Detail Modal ──────────────────────────────────────────────────
   var backdrop = document.getElementById('log-detail-backdrop');
   var closeBtn = document.getElementById('log-detail-close');
+  var feedbackRow = document.getElementById('ld-feedback-row');
+  var feedbackFpBtn = document.getElementById('ld-feedback-fp');
+  var feedbackTpBtn = document.getElementById('ld-feedback-tp');
+  var feedbackStatus = document.getElementById('ld-feedback-status');
+  var currentLogID = null;
 
   function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -643,6 +648,11 @@
       }
     }
 
+    if (feedbackStatus) feedbackStatus.textContent = '';
+    if (feedbackRow) {
+      feedbackRow.classList.toggle('hidden', !(d.blocked && d.rule_id));
+    }
+
     var hdrsEl = document.getElementById('ld-headers');
     if (hdrsEl) {
       var h = d.headers;
@@ -662,6 +672,7 @@
   }
 
   function openDetail(id) {
+    currentLogID = id;
     fetch(adminPath + '/logs/' + id)
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function (d) {
@@ -670,6 +681,29 @@
       })
       .catch(function () { });
   }
+
+  function sendFeedback(falsePositive) {
+    if (!currentLogID) return;
+    if (feedbackStatus) feedbackStatus.textContent = 'Saving…';
+    fetch(adminPath + '/logs/feedback/' + currentLogID, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-CSRF-Token': document.body.dataset.csrf || ''
+      },
+      body: 'false_positive=' + (falsePositive ? '1' : '0')
+    })
+      .then(function (r) { return r.ok ? null : Promise.reject(r.status); })
+      .then(function () {
+        if (feedbackStatus) feedbackStatus.textContent = 'Marked ' + (falsePositive ? 'false positive' : 'correct') + '.';
+      })
+      .catch(function () {
+        if (feedbackStatus) feedbackStatus.textContent = 'Failed to save.';
+      });
+  }
+
+  if (feedbackFpBtn) feedbackFpBtn.addEventListener('click', function () { sendFeedback(true); });
+  if (feedbackTpBtn) feedbackTpBtn.addEventListener('click', function () { sendFeedback(false); });
 
   function closeDetail() {
     if (backdrop) backdrop.classList.add('hidden');

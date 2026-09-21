@@ -341,6 +341,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.GET("/logs/stream", h.LogsStream)
 	g.GET("/access-log/stream", h.AccessLogStream)
 	g.GET("/logs/:id", h.LogDetail)
+	g.POST("/logs/feedback/:id", h.MarkLogFeedback)
 	g.GET("/ip-rules", h.IPRulesPage)
 	g.GET("/ip-rules/rows", h.IPRulesRows)
 	g.POST("/ip-rules", h.AddIPRule)
@@ -390,6 +391,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/waf-rules/disable", h.DisableWAFRule)
 	g.DELETE("/waf-rules/:id", h.EnableWAFRule)
 	g.DELETE("/waf-rules/service/:id", h.EnableWAFRuleForService)
+	g.POST("/waf-rules/feedback-config", h.SaveWAFFeedbackConfig)
 	g.GET("/threat-intel", h.ThreatIntelPage)
 	g.POST("/threat-intel", h.AddThreatIntelSource)
 	g.DELETE("/threat-intel/:id", h.DeleteThreatIntelSource)
@@ -1111,6 +1113,29 @@ func (h *Handler) LogDetail(c echo.Context) error {
 	})
 }
 
+// MarkLogFeedback records a false/true-positive mark on a blocked log
+// entry's WAF rule (issue #76) — signal collection only, consumed by
+// GetWAFRuleSuggestions on the WAF Rules page; it never disables anything
+// itself.
+func (h *Handler) MarkLogFeedback(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
+	}
+	d, err := h.db.GetRequestByID(id)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "not found"})
+	}
+	if !d.Blocked || d.RuleID == 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "log entry has no WAF rule to mark"})
+	}
+	falsePositive := c.FormValue("false_positive") == "1"
+	if err := h.db.MarkWAFRuleFeedback(d.AppName, d.RuleID, falsePositive); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // ── IP Rules ───────────────────────────────────────────────────────────────────
 
 // ipRulesPageSize caps how many rows the IP Rules admin page pulls into
@@ -1419,11 +1444,22 @@ func (h *Handler) wafRulesContentData() (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	feedbackCfg, err := h.db.GetWAFRuleFeedbackConfig()
+	if err != nil {
+		return nil, err
+	}
+	suggestions, err := h.db.GetWAFRuleSuggestions(feedbackCfg)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		"Disabled":          disabled,
 		"ServiceExceptions": serviceExceptions,
 		"TopRules":          topRules,
 		"Services":          h.registry.List(),
+		"Suggestions":       suggestions,
+		"FeedbackThreshold": feedbackCfg.Threshold,
+		"FeedbackWindow":    feedbackCfg.WindowDays,
 	}, nil
 }
 
@@ -1485,6 +1521,28 @@ func (h *Handler) EnableWAFRuleForService(c echo.Context) error {
 		return err
 	}
 	h.reloadWAF()
+	data, err := h.wafRulesContentData()
+	if err != nil {
+		return err
+	}
+	return h.renderPartial(c, "waf_rules", "waf-content", data)
+}
+
+// SaveWAFFeedbackConfig persists the false-positive-mark threshold/window
+// used to surface suggested exceptions (issue #76). No hot-reload needed —
+// it only changes which suggestions GetWAFRuleSuggestions returns, not the
+// live WAF engine.
+func (h *Handler) SaveWAFFeedbackConfig(c echo.Context) error {
+	cfg := storage.DefaultWAFRuleFeedbackConfig()
+	if n, err := strconv.Atoi(c.FormValue("feedback_threshold")); err == nil && n >= 1 && n <= 1000 {
+		cfg.Threshold = n
+	}
+	if n, err := strconv.Atoi(c.FormValue("feedback_window")); err == nil && n >= 1 && n <= 90 {
+		cfg.WindowDays = n
+	}
+	if err := h.db.SetWAFRuleFeedbackConfig(cfg); err != nil {
+		return err
+	}
 	data, err := h.wafRulesContentData()
 	if err != nil {
 		return err
