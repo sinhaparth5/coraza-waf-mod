@@ -249,6 +249,23 @@ func main() {
 	redisAddr, redisPwd, _ := db.GetRedisConfig()
 	rl := buildRateLimit(db, redisAddr, redisPwd)
 
+	// A configured Redis instance is this project's existing signal for a
+	// multi-node deployment (issue #77) — reuse it to also sync the IP
+	// blocklist across nodes, instead of adding a second toggle. Without
+	// this, a ban written by one node's autoban never reached any other
+	// node's in-memory blocklist.
+	if redisAddr != "" {
+		if strings.EqualFold(cfg.DB.Driver, "") || strings.EqualFold(cfg.DB.Driver, "sqlite") {
+			log.Printf("WARNING: redis is configured (multi-node mode) but --db-driver is sqlite — SQLite's single-writer model does not support multiple app-server processes writing to the same file; use --db-driver mysql or postgres for a real cluster")
+		}
+		if err := ipbl.EnableClusterSync(context.Background(), redisAddr, redisPwd, db); err != nil {
+			log.Printf("ip blocklist: cluster sync disabled, redis connect failed: %v", err)
+		} else {
+			log.Printf("ip blocklist: cluster sync enabled via redis at %s — bans and rule changes now propagate to every node", redisAddr)
+		}
+	}
+	defer ipbl.Close()
+
 	asnLookup, err := asn.New()
 	if err != nil {
 		log.Printf("asn: failed to load ASN database, ASN/org lookup disabled: %v", err)
