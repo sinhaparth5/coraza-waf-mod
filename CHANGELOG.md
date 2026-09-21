@@ -14,6 +14,8 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+## [1.9.5] - 2026-09-21
+
 ### Added
 
 - **Opt-in TypeSafe refinement for ASN/hosting threat-score classification**
@@ -48,67 +50,5 @@ rather than growing this file forever.
   was it slow in" — a request blocked or redirected early contributes only
   to the stages it actually reached.
 
-## [1.9.0] - 2026-09-06
-
-### Added
-
-- **One active admin session at a time, plus a "Registered devices" card.**
-  Signing in on a new device now immediately signs the previous one out, and
-  the old device is told why — its next action lands on the login screen with
-  "Your account is currently being used on another device" rather than a
-  silent timeout. The legitimate owner can therefore always take back an
-  account someone else is sitting on.
-
-  Settings gained a **Registered devices** card listing every session with its
-  browser/OS, approximate location, IP and last-active time, the current one
-  badged "This device · active now". Each other row carries one button that
-  does whichever thing that row needs: a still-live device is signed out, an
-  already-signed-out one is dropped from the history. "Log out all other
-  devices" clears every session but your own.
-
-  This reuses the existing `sessions` table rather than adding a devices
-  table — there is one admin account, so every row already belongs to it, and
-  the session token already identifies the device. Revoking marks
-  `revoked_at` instead of deleting, which is what lets a signed-out device
-  learn *why*, and what keeps the row as history. Sessions still stop
-  authenticating after 24h; rows are now kept for 30 days.
-
-### Changed
-
-- **`prune` now deletes session rows at 30 days, not 24 hours.** Expiry still
-  happens at 24h — an expired row simply stops authenticating — but the row
-  is retained so the device history above has something to show. Logins are
-  the only thing that grows this table, so it stays small.
-
-- **Every management page now opens the same way.** IP Rules, Geo Rules,
-  Services, Certificates, WAF Rules and Threat Intel each had a different
-  top-of-page form: IP and Geo squeezed theirs into a multi-column grid
-  beside supporting cards of very different heights, Services locked its
-  wizard to half the card and left the rest empty, and Threat Intel used a
-  one-off page header instead of the shared one. All six now lead with the
-  shared hero and a single full-width primary card whose fields sit on one
-  row ending in the submit button, with supporting panels moved underneath
-  rather than alongside. The primary-action accent is the same colour on
-  every page instead of four different ones.
-
-### Fixed
-
-- **Upgrades no longer leave the admin UI styled by the previous release's
-  CSS.** The embedded stylesheet and scripts were served with no `ETag`,
-  `Last-Modified` or `Cache-Control`, which lets a browser keep a cached copy
-  indefinitely — so after an upgrade the new dashboard could render under the
-  old stylesheet, with no error and nothing to indicate why it looked wrong.
-  Asset URLs now carry a hash of the stylesheet, giving every build its own
-  URLs. This was not hypothetical: it hid the layout work above during
-  development while the compiled CSS plainly contained the missing classes.
-
-- **Five admin-UI icons rendered as blank squares.** `hgi-fingerprint-01`,
-  `hgi-server-stack-01`, `hgi-shield-minus`, `hgi-wifi` and
-  `hgi-wifi-router-01` are not glyphs in the icon font the dashboard loads, so
-  the Logs fingerprint and network rows, the "Request Blocked" panel, the
-  Services page and both "Test connection" buttons were drawing empty boxes.
-  A wrong icon name fails silently — nothing validates it — so each was
-  checked against the font itself and replaced with a real equivalent.
-
-[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.9.0...main
-[1.9.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.8.1...v1.9.0
+[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.9.5...main
+[1.9.5]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v1.9.0...v1.9.5
