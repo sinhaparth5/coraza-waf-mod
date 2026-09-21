@@ -297,6 +297,8 @@ var schemaMigrations = []struct{ table, columnDef string }{
 	{"sessions", "last_active_at TEXT NOT NULL DEFAULT ''"},
 	{"sessions", "revoked_at TEXT NOT NULL DEFAULT ''"},
 	{"api_keys", "read_only INTEGER NOT NULL DEFAULT 0"},
+	{"services", "request_schema TEXT NOT NULL DEFAULT ''"},
+	{"services", "schema_mode TEXT NOT NULL DEFAULT 'off'"},
 }
 
 func (db *DB) migrate() error {
@@ -741,6 +743,8 @@ type Service struct {
 	CacheGrace          int    // seconds; 0 = VCL default (30s) — how long a stale object may still be served
 	CacheKeep           int    // seconds; 0 = VCL default (30s) — how long a stale object stays around for conditional revalidation after grace
 	AllowLargeJSUploads bool   // stream JavaScript request bodies without deep WAF body inspection
+	RequestSchema       string // JSON Schema text validated against JSON request bodies; "" disables validation
+	SchemaMode          string // "off" | "log" | "enforce" — see waf.Engine.SetRequestSchema
 }
 
 func (db *DB) AddService(name, host, prefix, backend string, rps float64, burst int) error {
@@ -820,6 +824,34 @@ func (db *DB) SetServiceBotMode(id int, mode string) error {
 // WAF rules and every other request control remain active.
 func (db *DB) SetServiceLargeJSUploads(id int, enabled bool) error {
 	_, err := db.exec(`UPDATE services SET allow_large_js_uploads = ? WHERE id = ?`, boolToInt(enabled), id)
+	return err
+}
+
+// serviceSchemaModes is the allowed set for Service.SchemaMode. Anything else
+// (empty, typo, a value from a future version rolled back) is normalized to
+// "off" — the safe, non-blocking default — rather than silently enforcing or
+// silently skipping validation depending on what happened to be in the row.
+var serviceSchemaModes = map[string]bool{
+	"off":     true,
+	"log":     true,
+	"enforce": true,
+}
+
+// SetServiceSchema attaches a JSON Schema to a service's request-body
+// validation. schemaJSON is expected to already have been compiled once by
+// the caller (waf.ValidateSchema) so a malformed schema is rejected at save
+// time rather than discovered during a WAF reload. mode "off" or an empty
+// schema disables validation; "log" records violations without blocking;
+// "enforce" rejects a mismatching JSON body with 400. See
+// waf.Engine.SetRequestSchema for how this is applied per request.
+func (db *DB) SetServiceSchema(id int, schemaJSON, mode string) error {
+	if !serviceSchemaModes[mode] {
+		mode = "off"
+	}
+	if schemaJSON == "" {
+		mode = "off"
+	}
+	_, err := db.exec(`UPDATE services SET request_schema = ?, schema_mode = ? WHERE id = ?`, schemaJSON, mode, id)
 	return err
 }
 
@@ -966,11 +998,11 @@ func (db *DB) SetBotSettings(enabled bool, threshold, ttl int) error {
 
 // serviceColumns is shared by ListServices/GetService so their SELECT list
 // and Scan args can't drift out of sync as columns are added.
-const serviceColumns = `id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled, cache_by_session, session_cookie_name, cache_ttl_floor, cache_ttl_ceiling, cache_grace, cache_keep, allow_large_js_uploads`
+const serviceColumns = `id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled, cache_by_session, session_cookie_name, cache_ttl_floor, cache_ttl_ceiling, cache_grace, cache_keep, allow_large_js_uploads, request_schema, schema_mode`
 
 func (db *DB) scanService(row interface{ Scan(...any) error }) (Service, error) {
 	var s Service
-	err := row.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled, &s.CacheBySession, &s.SessionCookieName, &s.CacheTTLFloor, &s.CacheTTLCeiling, &s.CacheGrace, &s.CacheKeep, &s.AllowLargeJSUploads)
+	err := row.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled, &s.CacheBySession, &s.SessionCookieName, &s.CacheTTLFloor, &s.CacheTTLCeiling, &s.CacheGrace, &s.CacheKeep, &s.AllowLargeJSUploads, &s.RequestSchema, &s.SchemaMode)
 	return s, err
 }
 

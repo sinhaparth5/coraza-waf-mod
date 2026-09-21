@@ -29,6 +29,7 @@ import (
 	"coraza-waf-mod/internal/security/geo"
 	"coraza-waf-mod/internal/security/ratelimit"
 	"coraza-waf-mod/internal/security/threatscore"
+	"coraza-waf-mod/internal/security/waf"
 	"coraza-waf-mod/internal/services"
 	"coraza-waf-mod/internal/storage"
 
@@ -363,6 +364,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/services/ratelimit", h.SetServiceRateLimit)
 	g.POST("/services/bot/:id", h.SetServiceBotMode)
 	g.POST("/services/uploads/:id", h.SetServiceLargeJSUploads)
+	g.POST("/services/schema/:id", h.SetServiceSchema)
 	g.POST("/services/cache/:id", h.SetServiceCache)
 	g.POST("/services/cache-session/:id", h.SetServiceCacheSession)
 	g.POST("/services/cache-tuning/:id", h.SetServiceCacheTuning)
@@ -2300,6 +2302,41 @@ func (h *Handler) SetServiceLargeJSUploads(c echo.Context) error {
 	}
 	enabled := c.FormValue("enabled") == "1"
 	if err := h.db.SetServiceLargeJSUploads(id, enabled); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	if err := h.registry.Reload(h.db); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	if h.reloadWAF != nil {
+		h.reloadWAF()
+	}
+	w := c.Response().Writer
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return h.tmpls["services"].ExecuteTemplate(w, "services-rows", h.serviceViews())
+}
+
+// SetServiceSchema attaches (or clears) a JSON Schema used to validate this
+// service's JSON request bodies (issue #75). mode "off" (or an empty schema)
+// disables validation, "log" records violations without blocking, "enforce"
+// rejects a mismatching body with 400 — see waf.Engine.SetRequestSchema. A
+// malformed schema is rejected here, before it ever reaches the DB, so a bad
+// save can't later break a WAF reload.
+func (h *Handler) SetServiceSchema(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
+	}
+	schemaJSON := strings.TrimSpace(c.FormValue("schema"))
+	mode := c.FormValue("mode")
+	if mode != "log" && mode != "enforce" {
+		mode = "off"
+	}
+	if schemaJSON != "" && mode != "off" {
+		if err := waf.ValidateSchema(schemaJSON); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid JSON Schema: " + err.Error()})
+		}
+	}
+	if err := h.db.SetServiceSchema(id, schemaJSON, mode); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	if err := h.registry.Reload(h.db); err != nil {

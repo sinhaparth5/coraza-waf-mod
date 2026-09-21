@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"coraza-waf-mod/internal/security/waf"
 	"coraza-waf-mod/internal/services"
 	"coraza-waf-mod/internal/storage"
 
@@ -218,6 +219,8 @@ type apiUpdateServiceRequest struct {
 	Burst               *int     `json:"rate_limit_burst"`
 	BotMode             *string  `json:"bot_mode"` // "inherit" | "always" | "off"
 	AllowLargeJSUploads *bool    `json:"allow_large_js_uploads"`
+	RequestSchema       *string  `json:"request_schema"` // JSON Schema text; "" (with SchemaMode omitted or "off") disables validation
+	SchemaMode          *string  `json:"schema_mode"`    // "off" | "log" | "enforce"
 }
 
 func (h *Handler) APIUpdateService(c echo.Context) error {
@@ -284,11 +287,32 @@ func (h *Handler) APIUpdateService(c echo.Context) error {
 			return apiError(c, http.StatusInternalServerError, err.Error())
 		}
 	}
+	schemaChanged := req.RequestSchema != nil || req.SchemaMode != nil
+	if schemaChanged {
+		schemaJSON, mode := existing.RequestSchema, existing.SchemaMode
+		if req.RequestSchema != nil {
+			schemaJSON = *req.RequestSchema
+		}
+		if req.SchemaMode != nil {
+			mode = *req.SchemaMode
+		}
+		if mode != "off" && mode != "log" && mode != "enforce" {
+			return apiError(c, http.StatusBadRequest, "schema_mode must be off, log, or enforce")
+		}
+		if schemaJSON != "" && mode != "off" {
+			if err := waf.ValidateSchema(schemaJSON); err != nil {
+				return apiError(c, http.StatusBadRequest, "invalid JSON Schema: "+err.Error())
+			}
+		}
+		if err := h.db.SetServiceSchema(id, schemaJSON, mode); err != nil {
+			return apiError(c, http.StatusInternalServerError, err.Error())
+		}
+	}
 
 	if err := h.registry.Reload(h.db); err != nil {
 		return apiError(c, http.StatusInternalServerError, err.Error())
 	}
-	if req.AllowLargeJSUploads != nil && h.reloadWAF != nil {
+	if (req.AllowLargeJSUploads != nil || schemaChanged) && h.reloadWAF != nil {
 		h.reloadWAF()
 	}
 	svc, err := h.db.GetService(id)

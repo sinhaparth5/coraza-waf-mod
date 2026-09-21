@@ -154,21 +154,34 @@ func main() {
 		if err != nil {
 			return nil, nil, err
 		}
-		serviceSet := make(map[string]bool, len(svcNames))
+		// wafServiceOpts groups the per-service extras that require their own
+		// compiled engine — rule exceptions alone are tracked via svcNames
+		// above; this is the rest (large-JS uploads, request-schema
+		// validation, issue #75).
+		type wafServiceOpts struct {
+			allowLargeJS bool
+			schema       string
+			schemaMode   string
+		}
+		serviceSet := make(map[string]wafServiceOpts, len(svcNames))
 		for _, name := range svcNames {
-			serviceSet[name] = false
+			serviceSet[name] = wafServiceOpts{}
 		}
 		services, err := db.ListServices()
 		if err != nil {
 			return nil, nil, err
 		}
 		for _, svc := range services {
-			if svc.AllowLargeJSUploads {
-				serviceSet[svc.Name] = true
+			if svc.AllowLargeJSUploads || (svc.SchemaMode != "" && svc.SchemaMode != "off" && svc.RequestSchema != "") {
+				serviceSet[svc.Name] = wafServiceOpts{
+					allowLargeJS: svc.AllowLargeJSUploads,
+					schema:       svc.RequestSchema,
+					schemaMode:   svc.SchemaMode,
+				}
 			}
 		}
 		byService := make(map[string]*waf.Engine, len(serviceSet))
-		for name, allowLargeJS := range serviceSet {
+		for name, opts := range serviceSet {
 			svcIDs, err := db.GetWAFRuleIDsForService(name)
 			if err != nil {
 				return nil, nil, err
@@ -178,12 +191,20 @@ func main() {
 			// PUT before body inspection. The service upload toggle
 			// deliberately permits both parts of S3 PutObject; all other
 			// header rules remain enabled.
-			if allowLargeJS {
+			if opts.allowLargeJS {
 				merged = append(merged, 911100, 920420)
 			}
 			eng, err := waf.New(cfg.WAF, merged)
 			if err != nil {
 				return nil, nil, err
+			}
+			// A schema that fails to compile here was already rejected at
+			// save time (see ui.Handler's use of waf.ValidateSchema) — this
+			// is defense in depth, e.g. a hand-edited DB row, so it logs and
+			// leaves the service running WITHOUT schema validation rather
+			// than failing the whole engine rebuild.
+			if err := eng.SetRequestSchema(opts.schema, opts.schemaMode); err != nil {
+				log.Printf("waf: service %q: invalid request schema, ignoring: %v", name, err)
 			}
 			byService[name] = eng
 		}
