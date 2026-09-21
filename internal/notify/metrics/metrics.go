@@ -7,6 +7,7 @@ package metrics
 
 import (
 	"net/http"
+	"time"
 
 	"coraza-waf-mod/internal/storage"
 
@@ -51,6 +52,23 @@ var (
 		Name: "coraza_bot_challenged_total",
 		Help: "Requests redirected to the JS PoW challenge because their bot anomaly score exceeded the threshold.",
 	}, []string{"app"})
+
+	// StageDuration breaks RequestDuration's total down by which pipeline
+	// stage the time was actually spent in — "enrich" (ASN/bot/TLS/threat-
+	// score lookups), "blocklist" (IP+geo checks), "challenge" (bot gate),
+	// "ratelimit" (global+per-service), "waf" (Coraza inspection), "proxy"
+	// (backend round trip). A request that's
+	// blocked or redirected early only contributes to the stages it actually
+	// reached, which is the point: RequestDuration alone can't tell you
+	// whether a slow reply was spent in the WAF or waiting on the backend,
+	// this can. Deliberately not labeled by app too — stage x app would
+	// multiply cardinality for a breakdown that's meant to answer "which
+	// stage is slow", not "which stage is slow for which app".
+	StageDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "coraza_stage_duration_seconds",
+		Help:    "Time spent per request-pipeline stage, labeled by stage.",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"stage"})
 )
 
 // currentDB/currentRegistry/currentLimiter back the gauges below. Set once
@@ -107,6 +125,11 @@ var _ = promauto.NewGaugeFunc(prometheus.GaugeOpts{
 func RecordRequest(app, status string, seconds float64) {
 	RequestsTotal.WithLabelValues(app, status).Inc()
 	RequestDuration.WithLabelValues(app).Observe(seconds)
+}
+
+// ObserveStage records how long one pipeline stage took. See StageDuration.
+func ObserveStage(stage string, d time.Duration) {
+	StageDuration.WithLabelValues(stage).Observe(d.Seconds())
 }
 
 // Handler serves the Prometheus text exposition format.

@@ -2131,6 +2131,7 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 // persisted (see newAPIKey, ui/api.go).
 func (h *Handler) CreateAPIKey(c echo.Context) error {
 	name := strings.TrimSpace(c.FormValue("name"))
+	readOnly := c.FormValue("read_only") == "1"
 	apiKeys, _ := h.db.ListAPIKeys()
 
 	if name == "" {
@@ -2149,7 +2150,7 @@ func (h *Handler) CreateAPIKey(c echo.Context) error {
 			"APIKeySaveErr": "Could not generate a key: " + err.Error(),
 		})
 	}
-	if _, err := h.db.CreateAPIKey(name, prefix, hash); err != nil {
+	if _, err := h.db.CreateAPIKey(name, prefix, hash, readOnly); err != nil {
 		return h.renderPartial(c, "settings", "api-keys-card", map[string]any{
 			"AdminPath":     h.cfg.Admin.Path,
 			"APIKeys":       apiKeys,

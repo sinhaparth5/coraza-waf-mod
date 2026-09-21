@@ -195,6 +195,19 @@ func NewHandler(registry *services.Registry, engine *waf.Engine, wafByService ma
 
 func (h *Handler) Handle(c echo.Context) error {
 	start := time.Now()
+
+	// mark reports how long has elapsed since the last mark (or since start,
+	// for the first call) as the given pipeline stage's duration — see
+	// metrics.StageDuration. A stage a request never reaches (e.g. WAF, for
+	// one blocked earlier) simply never gets an observation, which is the
+	// intended behavior: only stages actually executed contribute.
+	lastMark := start
+	mark := func(stage string) {
+		now := time.Now()
+		metrics.ObserveStage(stage, now.Sub(lastMark))
+		lastMark = now
+	}
+
 	r := c.Request()
 	w := c.Response().Writer
 	w.Header().Set("Server", serverHeader)
@@ -263,6 +276,7 @@ func (h *Handler) Handle(c echo.Context) error {
 	// updates its cache asynchronously on the log-worker goroutine).
 	threatScore := h.scorer.CurrentScore(clientIP)
 	adaptiveDecision := h.adaptive.Decide(threatScore)
+	mark("enrich")
 
 	// The /_cz/ namespace belongs to the challenge system. Its real routes
 	// (GET /_cz/challenge etc.) are registered before the catch-all, so any
@@ -295,17 +309,20 @@ func (h *Handler) Handle(c echo.Context) error {
 	// points before autoban ever creates one.
 	blockedByIP, ipReason := h.ipbl.Check(clientIP, appName)
 	if blockedByIP {
+		mark("blocklist")
 		metrics.IPBlockedTotal.WithLabelValues(appName).Inc()
 		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, ipReason, time.Since(start), meta)
 		w.Header().Set("X-WAF-Block-Reason", "ip_blocked")
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied"})
 	}
 	if blockedByGeo {
+		mark("blocklist")
 		metrics.GeoBlockedTotal.WithLabelValues(appName, country).Inc()
 		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, geoReason, time.Since(start), meta)
 		w.Header().Set("X-WAF-Block-Reason", "geo_blocked")
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied", "country": country})
 	}
+	mark("blocklist")
 
 	// 3. Bot protection: challenge clients based on global setting + per-service
 	// override + threat-score-driven adaptive enforcement (issue #16).
@@ -330,11 +347,13 @@ func (h *Handler) Handle(c echo.Context) error {
 					// Action-string convention as every other decision here.
 					reason = "bot_challenge:adaptive"
 				}
+				mark("challenge")
 				h.logChallenged(r, appName, clientIP, http.StatusTemporaryRedirect, reason, time.Since(start), meta)
 				return c.Redirect(http.StatusTemporaryRedirect, ch.ChallengeURL(r.RequestURI))
 			}
 		}
 	}
+	mark("challenge")
 
 	// 4. Rate limit — cheap per-IP throttle, before WAF inspection.
 	// Scaled by threat-score-driven adaptive enforcement (issue #16) when
@@ -350,6 +369,7 @@ func (h *Handler) Handle(c echo.Context) error {
 	}
 	setRateLimitHeaders(c.Response().Header(), rlRes)
 	if !rlRes.Allowed {
+		mark("ratelimit")
 		metrics.RateLimitedTotal.WithLabelValues(appName).Inc()
 		rlReason := "rate_limited"
 		if adaptiveDecision.RateScale != 1.0 {
@@ -370,6 +390,7 @@ func (h *Handler) Handle(c echo.Context) error {
 		svRes := h.registry.AllowService(app.Name, clientIP)
 		setRateLimitHeaders(c.Response().Header(), svRes)
 		if !svRes.Allowed {
+			mark("ratelimit")
 			metrics.RateLimitedTotal.WithLabelValues(appName).Inc()
 			h.logBlocked(r, appName, clientIP, country, http.StatusTooManyRequests, 0, "rate_limited", time.Since(start), meta)
 			secs := int(svRes.RetryAfter.Seconds())
@@ -381,6 +402,7 @@ func (h *Handler) Handle(c echo.Context) error {
 			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 		}
 	}
+	mark("ratelimit")
 
 	// 5. WAF — deep inspection of headers + body. Per-service override engine
 	// (if this service has its own rule exceptions) takes precedence over
@@ -392,11 +414,13 @@ func (h *Handler) Handle(c echo.Context) error {
 	}
 	result, err := engine.CheckWithOptions(r, clientIP, checkOpts)
 	if err != nil {
+		mark("waf")
 		log.Printf("waf error: %v", err)
 		metrics.RecordRequest(appName, strconv.Itoa(http.StatusInternalServerError), time.Since(start).Seconds())
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
 	}
 	if result.Blocked {
+		mark("waf")
 		status := result.Status
 		if status == 0 {
 			status = http.StatusForbidden
@@ -406,9 +430,11 @@ func (h *Handler) Handle(c echo.Context) error {
 		w.Header().Set("X-WAF-Block-Reason", "waf_rule")
 		return c.JSON(status, map[string]any{"error": "request blocked", "rule_id": result.RuleID})
 	}
+	mark("waf")
 
 	// 6. Proxy to backend.
 	if app == nil {
+		mark("proxy")
 		h.logRequest(r, appName, clientIP, country, http.StatusBadGateway, result, time.Since(start), meta)
 		return c.JSON(http.StatusBadGateway, map[string]string{
 			"error": fmt.Sprintf("no backend configured for host %q", r.Host),
@@ -416,6 +442,7 @@ func (h *Handler) Handle(c echo.Context) error {
 	}
 	rp, ok := h.registry.Proxy(app.Name)
 	if !ok {
+		mark("proxy")
 		h.logRequest(r, appName, clientIP, country, http.StatusBadGateway, result, time.Since(start), meta)
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": "proxy not initialised"})
 	}
@@ -442,6 +469,7 @@ func (h *Handler) Handle(c echo.Context) error {
 	w.Header().Set("X-WAF-Status", "inspected")
 	rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 	rp.ServeHTTP(rw, r)
+	mark("proxy")
 	r.URL.Path = originalPath
 	h.logRequest(r, appName, clientIP, country, rw.status, result, time.Since(start), meta)
 	return nil

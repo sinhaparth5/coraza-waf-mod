@@ -16,6 +16,7 @@ type captureServer struct {
 	mu     sync.Mutex
 	bodies [][]byte
 	ct     []string
+	sig    []string
 	status int
 	*httptest.Server
 }
@@ -28,10 +29,20 @@ func newCaptureServer(status int) *captureServer {
 		s.mu.Lock()
 		s.bodies = append(s.bodies, body)
 		s.ct = append(s.ct, r.Header.Get("Content-Type"))
+		s.sig = append(s.sig, r.Header.Get("X-WAF-Signature-256"))
 		s.mu.Unlock()
 		w.WriteHeader(s.status)
 	}))
 	return s
+}
+
+func (s *captureServer) lastSignature() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.sig) == 0 {
+		return ""
+	}
+	return s.sig[len(s.sig)-1]
 }
 
 func (s *captureServer) count() int {
@@ -134,6 +145,43 @@ func TestPusherSendTestRequiresURL(t *testing.T) {
 	defer p.Stop()
 	if err := p.SendTest(); err == nil {
 		t.Fatal("SendTest with no URL configured should error, got nil")
+	}
+}
+
+func TestPusherSignsPayloadWhenSecretConfigured(t *testing.T) {
+	srv := newCaptureServer(200)
+	defer srv.Close()
+
+	cfg := storage.WebhookConfig{URL: srv.URL, Secret: "s3cr3t", DestinationType: "generic"}
+	p := New(func() (storage.WebhookConfig, error) { return cfg, nil })
+	defer p.Stop()
+
+	if err := p.SendTest(); err != nil {
+		t.Fatalf("SendTest: %v", err)
+	}
+
+	want := signPayload(cfg.Secret, srv.last())
+	if got := srv.lastSignature(); got != want {
+		t.Fatalf("X-WAF-Signature-256 = %q, want %q (HMAC of the delivered body)", got, want)
+	}
+	if want == "" || srv.last() == nil {
+		t.Fatal("expected a non-empty signature over a non-empty body")
+	}
+}
+
+func TestPusherOmitsSignatureWithoutSecret(t *testing.T) {
+	srv := newCaptureServer(200)
+	defer srv.Close()
+
+	cfg := storage.WebhookConfig{URL: srv.URL, DestinationType: "generic"}
+	p := New(func() (storage.WebhookConfig, error) { return cfg, nil })
+	defer p.Stop()
+
+	if err := p.SendTest(); err != nil {
+		t.Fatalf("SendTest: %v", err)
+	}
+	if got := srv.lastSignature(); got != "" {
+		t.Fatalf("expected no signature header with no secret configured, got %q", got)
 	}
 }
 

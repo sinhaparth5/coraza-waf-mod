@@ -2,6 +2,9 @@ package webhook
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -121,7 +124,7 @@ func (p *Pusher) post(cfg storage.WebhookConfig, entry storage.RequestLog) error
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "coraza-waf-mod/internal/notify/webhook")
 	if cfg.Secret != "" {
-		req.Header.Set("X-WAF-Secret", cfg.Secret)
+		req.Header.Set("X-WAF-Signature-256", signPayload(cfg.Secret, body))
 	}
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -132,6 +135,19 @@ func (p *Pusher) post(cfg storage.WebhookConfig, entry storage.RequestLog) error
 		return fmt.Errorf("endpoint returned %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// signPayload HMAC-SHA256-signs body with secret, formatted like GitHub's
+// X-Hub-Signature-256 ("sha256=<hex>") so the receiver verifies both that
+// the delivery came from this WAF and that the body wasn't altered in
+// transit. Replaces the previous X-WAF-Secret header, which sent the shared
+// secret itself on every request — anyone who saw one delivery saw the
+// secret and could forge or replay future ones; a signature reveals nothing
+// the receiver doesn't already know and can't be reused for a different body.
+func signPayload(secret string, body []byte) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }
 
 // shouldSend returns true if the entry's event category is in the

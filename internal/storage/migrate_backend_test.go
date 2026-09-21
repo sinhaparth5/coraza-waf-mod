@@ -41,7 +41,7 @@ func TestMigrateConfigTo(t *testing.T) {
 	if err := source.AddGeoRule("", "ZZ", "block"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := source.CreateAPIKey("key1", "cwaf_abc", "somehash"); err != nil {
+	if _, err := source.CreateAPIKey("key1", "cwaf_abc", "somehash", false); err != nil {
 		t.Fatal(err)
 	}
 	if err := source.DisableWAFRule(942100, "false positive"); err != nil {

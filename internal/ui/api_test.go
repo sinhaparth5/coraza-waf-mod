@@ -51,13 +51,13 @@ func newTestAPIHandler(t *testing.T) (*Handler, *echo.Echo) {
 	return h, e
 }
 
-func createTestKey(t *testing.T, h *Handler) string {
+func createTestKey(t *testing.T, h *Handler, readOnly bool) string {
 	t.Helper()
 	raw, prefix, hash, err := newAPIKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.db.CreateAPIKey("test", prefix, hash); err != nil {
+	if _, err := h.db.CreateAPIKey("test", prefix, hash, readOnly); err != nil {
 		t.Fatal(err)
 	}
 	return raw
@@ -101,7 +101,7 @@ func TestAPIKeyAuthRejectsInvalidKey(t *testing.T) {
 
 func TestAPIKeyAuthAcceptsValidKey(t *testing.T) {
 	h, e := newTestAPIHandler(t)
-	key := createTestKey(t, h)
+	key := createTestKey(t, h, false)
 	rec := apiRequest(e, http.MethodGet, "/admin/api/v1/services", key, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200, body=%s", rec.Code, rec.Body.String())
@@ -110,7 +110,7 @@ func TestAPIKeyAuthAcceptsValidKey(t *testing.T) {
 
 func TestAPIKeyAuthRejectsRevokedKey(t *testing.T) {
 	h, e := newTestAPIHandler(t)
-	key := createTestKey(t, h)
+	key := createTestKey(t, h, false)
 	keys, err := h.db.ListAPIKeys()
 	if err != nil || len(keys) != 1 {
 		t.Fatalf("ListAPIKeys() = %v, %v", keys, err)
@@ -145,9 +145,48 @@ func TestAPIKeyAuthLocksOutAfterFailures(t *testing.T) {
 	}
 }
 
+// TestAPIReadOnlyKeyBlocksMutationsButAllowsReads checks requireWrite
+// (ui/api.go): a read-only key must 403 on every mutating verb (POST/PUT/
+// DELETE) across all three resources, while still succeeding on GET —
+// requireWrite is wired per-route rather than group-wide specifically so
+// this asymmetry holds.
+func TestAPIReadOnlyKeyBlocksMutationsButAllowsReads(t *testing.T) {
+	h, e := newTestAPIHandler(t)
+	key := createTestKey(t, h, true)
+
+	if rec := apiRequest(e, http.MethodGet, "/admin/api/v1/services", key, nil); rec.Code != http.StatusOK {
+		t.Fatalf("GET /services with read-only key: status=%d, want 200", rec.Code)
+	}
+	if rec := apiRequest(e, http.MethodGet, "/admin/api/v1/ip-rules", key, nil); rec.Code != http.StatusOK {
+		t.Fatalf("GET /ip-rules with read-only key: status=%d, want 200", rec.Code)
+	}
+	if rec := apiRequest(e, http.MethodGet, "/admin/api/v1/bans", key, nil); rec.Code != http.StatusOK {
+		t.Fatalf("GET /bans with read-only key: status=%d, want 200", rec.Code)
+	}
+
+	mutations := []struct {
+		method, path string
+		body         any
+	}{
+		{http.MethodPost, "/admin/api/v1/services", map[string]any{"name": "x", "match_type": "prefix", "match_value": "/x", "backend": "http://127.0.0.1:9"}},
+		{http.MethodPut, "/admin/api/v1/services/1", map[string]any{}},
+		{http.MethodDelete, "/admin/api/v1/services/1", nil},
+		{http.MethodPost, "/admin/api/v1/ip-rules", map[string]any{"ip": "10.0.0.5", "rule_type": "block"}},
+		{http.MethodDelete, "/admin/api/v1/ip-rules/1", nil},
+		{http.MethodPost, "/admin/api/v1/bans", map[string]any{"ip": "10.0.0.6"}},
+		{http.MethodDelete, "/admin/api/v1/bans/1", nil},
+	}
+	for _, m := range mutations {
+		rec := apiRequest(e, m.method, m.path, key, m.body)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("%s %s with read-only key: status=%d, want 403", m.method, m.path, rec.Code)
+		}
+	}
+}
+
 func TestAPIServiceCRUD(t *testing.T) {
 	h, e := newTestAPIHandler(t)
-	key := createTestKey(t, h)
+	key := createTestKey(t, h, false)
 
 	// services.Probe dials the backend for real, so point it at a live
 	// httptest server rather than an arbitrary URL.
@@ -222,7 +261,7 @@ func TestAPIServiceCRUD(t *testing.T) {
 
 func TestAPIIPRulesCRUD(t *testing.T) {
 	h, e := newTestAPIHandler(t)
-	key := createTestKey(t, h)
+	key := createTestKey(t, h, false)
 
 	rec := apiRequest(e, http.MethodPost, "/admin/api/v1/ip-rules", key, map[string]any{"ip": "10.0.0.5", "rule_type": "block"})
 	if rec.Code != http.StatusCreated {
@@ -258,7 +297,7 @@ func TestAPIIPRulesCRUD(t *testing.T) {
 // and a per-service block rule must never show up as a "ban".
 func TestAPIBansAreFilteredGlobalBlocks(t *testing.T) {
 	h, e := newTestAPIHandler(t)
-	key := createTestKey(t, h)
+	key := createTestKey(t, h, false)
 
 	rec := apiRequest(e, http.MethodPost, "/admin/api/v1/bans", key, map[string]any{"ip": "10.0.0.9", "reason": "abuse"})
 	if rec.Code != http.StatusCreated {

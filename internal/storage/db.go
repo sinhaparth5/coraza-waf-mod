@@ -296,6 +296,7 @@ var schemaMigrations = []struct{ table, columnDef string }{
 	{"sessions", "user_agent TEXT NOT NULL DEFAULT ''"},
 	{"sessions", "last_active_at TEXT NOT NULL DEFAULT ''"},
 	{"sessions", "revoked_at TEXT NOT NULL DEFAULT ''"},
+	{"api_keys", "read_only INTEGER NOT NULL DEFAULT 0"},
 }
 
 func (db *DB) migrate() error {
@@ -2082,6 +2083,7 @@ type APIKey struct {
 	ID         int
 	Name       string
 	Prefix     string
+	ReadOnly   bool // true: GET endpoints only, every mutating route 403s (see ui.requireWrite)
 	CreatedAt  time.Time
 	LastUsedAt *time.Time
 }
@@ -2089,10 +2091,10 @@ type APIKey struct {
 // CreateAPIKey stores a new key and returns its row id. hash is the SHA-256
 // hex digest of the raw key; the raw key itself is shown to the admin exactly
 // once by the caller and never persisted.
-func (db *DB) CreateAPIKey(name, prefix, hash string) (int, error) {
+func (db *DB) CreateAPIKey(name, prefix, hash string, readOnly bool) (int, error) {
 	id, err := db.insertReturningID(
-		`INSERT INTO api_keys (name, key_prefix, key_hash) VALUES (?, ?, ?)`,
-		name, prefix, hash,
+		`INSERT INTO api_keys (name, key_prefix, key_hash, read_only) VALUES (?, ?, ?, ?)`,
+		name, prefix, hash, readOnly,
 	)
 	return int(id), err
 }
@@ -2101,7 +2103,7 @@ func (db *DB) CreateAPIKey(name, prefix, hash string) (int, error) {
 // intentionally never selected.
 func (db *DB) ListAPIKeys() ([]APIKey, error) {
 	rows, err := db.query(
-		`SELECT id, name, key_prefix, created_at, last_used_at FROM api_keys ORDER BY created_at DESC`,
+		`SELECT id, name, key_prefix, read_only, created_at, last_used_at FROM api_keys ORDER BY created_at DESC`,
 	)
 	if err != nil {
 		return nil, err
@@ -2112,7 +2114,7 @@ func (db *DB) ListAPIKeys() ([]APIKey, error) {
 	for rows.Next() {
 		var k APIKey
 		var lastUsed sql.NullTime
-		if err := rows.Scan(&k.ID, &k.Name, &k.Prefix, &k.CreatedAt, &lastUsed); err != nil {
+		if err := rows.Scan(&k.ID, &k.Name, &k.Prefix, &k.ReadOnly, &k.CreatedAt, &lastUsed); err != nil {
 			return nil, err
 		}
 		if lastUsed.Valid {
@@ -2137,8 +2139,8 @@ func (db *DB) ValidateAPIKey(hash string) (*APIKey, error) {
 	var k APIKey
 	var lastUsed sql.NullTime
 	err := db.queryRow(
-		`SELECT id, name, key_prefix, created_at, last_used_at FROM api_keys WHERE key_hash = ?`, hash,
-	).Scan(&k.ID, &k.Name, &k.Prefix, &k.CreatedAt, &lastUsed)
+		`SELECT id, name, key_prefix, read_only, created_at, last_used_at FROM api_keys WHERE key_hash = ?`, hash,
+	).Scan(&k.ID, &k.Name, &k.Prefix, &k.ReadOnly, &k.CreatedAt, &lastUsed)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}

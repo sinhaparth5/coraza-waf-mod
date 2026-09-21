@@ -84,6 +84,19 @@ func (h *Handler) apiKeyAuth(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		c.Set("api_key_id", key.ID)
+		c.Set("api_key_read_only", key.ReadOnly)
+		return next(c)
+	}
+}
+
+// requireWrite 403s a request authenticated by a read-only API key. Applied
+// per-route to every mutating endpoint below rather than group-wide, since a
+// read-only key must still reach every GET endpoint.
+func (h *Handler) requireWrite(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		if ro, _ := c.Get("api_key_read_only").(bool); ro {
+			return apiError(c, http.StatusForbidden, "this API key is read-only")
+		}
 		return next(c)
 	}
 }
@@ -99,18 +112,18 @@ func (h *Handler) RegisterAPI(e *echo.Echo) {
 	api.Use(h.hostGuard, middleware.BodyLimit("1M"), h.apiKeyAuth)
 
 	api.GET("/services", h.APIListServices)
-	api.POST("/services", h.APICreateService)
+	api.POST("/services", h.APICreateService, h.requireWrite)
 	api.GET("/services/:id", h.APIGetService)
-	api.PUT("/services/:id", h.APIUpdateService)
-	api.DELETE("/services/:id", h.APIDeleteService)
+	api.PUT("/services/:id", h.APIUpdateService, h.requireWrite)
+	api.DELETE("/services/:id", h.APIDeleteService, h.requireWrite)
 
 	api.GET("/ip-rules", h.APIListIPRules)
-	api.POST("/ip-rules", h.APICreateIPRule)
-	api.DELETE("/ip-rules/:id", h.APIDeleteIPRule)
+	api.POST("/ip-rules", h.APICreateIPRule, h.requireWrite)
+	api.DELETE("/ip-rules/:id", h.APIDeleteIPRule, h.requireWrite)
 
 	api.GET("/bans", h.APIListBans)
-	api.POST("/bans", h.APICreateBan)
-	api.DELETE("/bans/:id", h.APIDeleteBan)
+	api.POST("/bans", h.APICreateBan, h.requireWrite)
+	api.DELETE("/bans/:id", h.APIDeleteBan, h.requireWrite)
 }
 
 func apiError(c echo.Context, status int, msg string) error {
