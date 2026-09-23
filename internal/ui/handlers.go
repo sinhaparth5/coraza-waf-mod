@@ -205,7 +205,7 @@ func (h *Handler) parseTemplates() error {
 		return fmt.Errorf("parse template login: %w", err)
 	}
 
-	pages := []string{"dashboard", "logs", "ip_rules", "geo_rules", "services", "certificates", "waf_rules", "threat_intel", "settings"}
+	pages := []string{"dashboard", "logs", "ip_rules", "geo_rules", "services", "certificates", "waf_rules", "threat_intel", "ai_usage", "settings"}
 	h.tmpls = make(map[string]*template.Template, len(pages)+1)
 	h.tmpls["login"] = login
 	for _, page := range pages {
@@ -398,6 +398,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.DELETE("/waf-rules/:id", h.EnableWAFRule)
 	g.DELETE("/waf-rules/service/:id", h.EnableWAFRuleForService)
 	g.POST("/waf-rules/feedback-config", h.SaveWAFFeedbackConfig)
+	g.GET("/ai-usage", h.AIUsagePage)
 	g.GET("/threat-intel", h.ThreatIntelPage)
 	g.POST("/threat-intel", h.AddThreatIntelSource)
 	g.DELETE("/threat-intel/:id", h.DeleteThreatIntelSource)
@@ -1575,6 +1576,32 @@ var threatIntelPresets = []struct {
 	{"Spamhaus DROP", "https://www.spamhaus.org/drop/drop.txt", 24},
 	{"Feodo Tracker", "https://feodotracker.abuse.ch/downloads/ipblocklist.txt", 12},
 	{"CINS Score", "http://cinsscore.com/list/ci-badguys.txt", 24},
+}
+
+// aiUsageRecentLimit bounds the Jev API call log the AI Usage page shows —
+// typesafe_calls itself is already capped at storage.typesafeCallsKeep rows,
+// this just avoids rendering all of them in one page load.
+const aiUsageRecentLimit = 200
+
+// AIUsagePage shows the Jev API calls the ASN/hosting classifier
+// (threatscore/typesafeclassify.go) has made — where TypeSafe token usage
+// goes and why, since that classifier is otherwise invisible: it runs off
+// the request hot path and only ever logs a one-line error to stderr.
+func (h *Handler) AIUsagePage(c echo.Context) error {
+	calls, err := h.db.ListTypeSafeCalls(aiUsageRecentLimit)
+	if err != nil {
+		calls = nil
+	}
+	now := time.Now()
+	usage24h, _ := h.db.TypeSafeUsageSince(now.Add(-24 * time.Hour))
+	usage7d, _ := h.db.TypeSafeUsageSince(now.Add(-7 * 24 * time.Hour))
+	tc, _ := h.db.GetTypeSafeConfig()
+	return h.render(c, "ai_usage", map[string]any{
+		"Calls":           calls,
+		"Usage24h":        usage24h,
+		"Usage7d":         usage7d,
+		"TypeSafeEnabled": tc.Enabled,
+	})
 }
 
 func (h *Handler) threatIntelData() map[string]any {
@@ -3117,6 +3144,7 @@ func (h *Handler) render(c echo.Context, page string, data map[string]any) error
 		"services":     "Services",
 		"waf_rules":    "WAF Rules",
 		"threat_intel": "Threat Intel",
+		"ai_usage":     "AI Usage",
 		"certificates": "Certificates",
 		"settings":     "Settings",
 	}

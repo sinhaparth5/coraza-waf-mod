@@ -253,6 +253,22 @@ func (db *DB) schemaStatements() []string {
 			last_seen    %s NOT NULL
 		)`, ts),
 
+		// One row per Jev API call the ASN/hosting classifier
+		// (threatscore/typesafeclassify.go) makes, so the admin UI can show
+		// where TypeSafe token usage goes and why. Capped at
+		// typesafeCallsKeep rows by InsertTypeSafeCall — see its comment.
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS typesafe_calls (
+			id            %s,
+			ts            %s NOT NULL,
+			asn           INTEGER NOT NULL,
+			org           TEXT NOT NULL DEFAULT '',
+			hosting       INTEGER NOT NULL DEFAULT 0,
+			input_tokens  INTEGER NOT NULL DEFAULT 0,
+			output_tokens INTEGER NOT NULL DEFAULT 0,
+			duration_ms   INTEGER NOT NULL DEFAULT 0,
+			error         TEXT NOT NULL DEFAULT ''
+		)`, pk, ts),
+
 		// One row per false/true-positive mark an admin makes on a blocked
 		// request from the Logs page (issue #76). Append-only signal log, not
 		// upserted — GetWAFRuleSuggestions aggregates it per (service_name,

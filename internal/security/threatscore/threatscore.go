@@ -71,6 +71,7 @@ const (
 type store interface {
 	UpsertIPThreatScore(storage.IPThreatScore) error
 	BumpJA4Reputation(ja4 string, blocked bool) (hits, blockedHits int, err error)
+	InsertTypeSafeCall(storage.TypeSafeCall) error
 }
 
 // Scorer accumulates the composite per-IP threat score.
@@ -282,13 +283,32 @@ func (s *Scorer) judgeASN(c hostingClassifier, asn uint, org string) {
 		delete(s.asnInFlight, asn)
 		s.mu.Unlock()
 	}()
-	hosting, err := c.judgeHosting(org)
+	start := s.now()
+	judgment, err := c.judgeHosting(org)
+	duration := s.now().Sub(start)
+
+	call := storage.TypeSafeCall{
+		Ts:           start,
+		ASN:          asn,
+		Org:          org,
+		Hosting:      judgment.Hosting,
+		InputTokens:  judgment.InputTokens,
+		OutputTokens: judgment.OutputTokens,
+		DurationMs:   duration.Milliseconds(),
+	}
+	if err != nil {
+		call.Error = err.Error()
+	}
+	if logErr := s.db.InsertTypeSafeCall(call); logErr != nil {
+		log.Printf("threatscore: log typesafe call for ASN %d: %v", asn, logErr)
+	}
+
 	if err != nil {
 		log.Printf("threatscore: typesafe classify ASN %d (%q): %v", asn, org, err)
 		return // uncached; the heuristic keeps being used, and this retries next time
 	}
 	s.mu.Lock()
-	s.asnCache[asn] = hosting
+	s.asnCache[asn] = judgment.Hosting
 	s.mu.Unlock()
 }
 

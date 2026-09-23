@@ -14,6 +14,24 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Added
+
+- **AI Usage page** (`/admin/ai-usage`) showing every Jev API call the
+  TypeSafe-backed ASN/hosting classifier (Settings' "AI Classification"
+  card) has made — timestamp, ASN, organization, hosting verdict, input/
+  output token counts, duration, and any error — plus 24h/7d call and
+  token totals. The classifier previously wasn't logged anywhere and
+  didn't even parse the API's `usage` field, so there was no way to see
+  where TypeSafe token usage was going. Logged to a new capped
+  `typesafe_calls` table (newest 2000 rows).
+
+  Note: `classifyASN` still only caches a *successful* Jev judgment — an
+  erroring call (bad key, rate limit, timeout) leaves the ASN uncached, so
+  every subsequent request from that ASN re-triggers a fresh API call
+  instead of the intended once-ever-per-ASN. Not changed by this release;
+  now at least visible per-call via the AI Usage page's error column
+  instead of only a one-line stderr log.
+
 ## [2.0.1] - 2026-09-21
 
 ### Fixed

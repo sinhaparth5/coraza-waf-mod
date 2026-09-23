@@ -23,7 +23,16 @@ const typesafeTimeout = 5 * time.Second
 // hostingClassifier is judgeHosting's shape as an interface, so tests can
 // fake it without a network call.
 type hostingClassifier interface {
-	judgeHosting(org string) (bool, error)
+	judgeHosting(org string) (hostingJudgment, error)
+}
+
+// hostingJudgment is judgeHosting's result plus the token usage TypeSafe
+// billed for it, so callers can log where usage goes (see
+// storage.TypeSafeCall).
+type hostingJudgment struct {
+	Hosting      bool
+	InputTokens  int
+	OutputTokens int
 }
 
 // typesafeClient judges whether an ASN organization name describes
@@ -56,11 +65,15 @@ type typesafeResponse struct {
 	Answers map[string]struct {
 		Noul float64 `json:"noul"`
 	} `json:"answers"`
+	Usage struct {
+		InputTokens  int `json:"input_tokens"`
+		OutputTokens int `json:"output_tokens"`
+	} `json:"usage"`
 }
 
 // judgeHosting asks whether org names datacenter/hosting/VPN infrastructure
 // rather than a residential ISP or ordinary business. A noul >= 0.5 is "yes".
-func (c *typesafeClient) judgeHosting(org string) (bool, error) {
+func (c *typesafeClient) judgeHosting(org string) (hostingJudgment, error) {
 	body, err := json.Marshal(typesafeRequest{
 		State: org,
 		Model: "jev-latest",
@@ -76,33 +89,37 @@ func (c *typesafeClient) judgeHosting(org string) (bool, error) {
 		},
 	})
 	if err != nil {
-		return false, err
+		return hostingJudgment{}, err
 	}
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, c.baseURL, bytes.NewReader(body))
 	if err != nil {
-		return false, err
+		return hostingJudgment{}, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return false, err
+		return hostingJudgment{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("typesafe: status %d", resp.StatusCode)
+		return hostingJudgment{}, fmt.Errorf("typesafe: status %d", resp.StatusCode)
 	}
 
 	var out typesafeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return false, err
+		return hostingJudgment{}, err
 	}
 	ans, ok := out.Answers["is_hosting"]
 	if !ok {
-		return false, fmt.Errorf("typesafe: response missing is_hosting answer")
+		return hostingJudgment{}, fmt.Errorf("typesafe: response missing is_hosting answer")
 	}
-	return ans.Noul >= 0.5, nil
+	return hostingJudgment{
+		Hosting:      ans.Noul >= 0.5,
+		InputTokens:  out.Usage.InputTokens,
+		OutputTokens: out.Usage.OutputTokens,
+	}, nil
 }

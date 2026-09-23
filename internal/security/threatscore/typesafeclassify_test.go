@@ -18,19 +18,22 @@ func TestJudgeHostingSendsExpectedRequestAndParsesNoul(t *testing.T) {
 			t.Fatalf("decode request body: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"model":"jev-1.0.0","answers":{"is_hosting":{"type":"noul","noul":0.92}}}`))
+		_, _ = w.Write([]byte(`{"model":"jev-1.0.0","answers":{"is_hosting":{"type":"noul","noul":0.92}},"usage":{"input_tokens":296,"output_tokens":20}}`))
 	}))
 	defer srv.Close()
 
 	c := newTypeSafeClient("test-key")
 	c.baseURL = srv.URL
 
-	hosting, err := c.judgeHosting("Some Hosting Provider LLC")
+	judgment, err := c.judgeHosting("Some Hosting Provider LLC")
 	if err != nil {
 		t.Fatalf("judgeHosting: %v", err)
 	}
-	if !hosting {
+	if !judgment.Hosting {
 		t.Fatal("noul 0.92 should classify as hosting (>= 0.5)")
+	}
+	if judgment.InputTokens != 296 || judgment.OutputTokens != 20 {
+		t.Errorf("token usage = %d/%d, want 296/20", judgment.InputTokens, judgment.OutputTokens)
 	}
 	if gotAuth != "Bearer test-key" {
 		t.Errorf("Authorization header = %q, want %q", gotAuth, "Bearer test-key")
@@ -57,11 +60,11 @@ func TestJudgeHostingBelowThresholdIsNotHosting(t *testing.T) {
 	c := newTypeSafeClient("test-key")
 	c.baseURL = srv.URL
 
-	hosting, err := c.judgeHosting("Comcast Cable Communications")
+	judgment, err := c.judgeHosting("Comcast Cable Communications")
 	if err != nil {
 		t.Fatalf("judgeHosting: %v", err)
 	}
-	if hosting {
+	if judgment.Hosting {
 		t.Fatal("noul 0.1 should not classify as hosting")
 	}
 }

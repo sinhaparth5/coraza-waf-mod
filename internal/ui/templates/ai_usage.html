@@ -1,0 +1,73 @@
+{{define "content"}}
+
+<p class="text-[13px] text-slate-500 mb-4 max-w-2xl">
+  Every Jev API call the ASN/hosting classifier (Settings' "AI Classification" card) has made, so you can see where TypeSafe token usage goes and why. A call is made once per never-before-seen ASN organization — unless it errors, in which case it retries on the next request from that ASN, which is the usual explanation for a spike here.
+  {{if not .TypeSafeEnabled}}<span class="font-semibold text-slate-600">AI classification is currently disabled</span> — these are past calls; nothing new is being sent.{{end}}
+</p>
+
+<!-- ── Usage tiles ── -->
+<div class="grid grid-cols-2 gap-4 mb-4 lg:grid-cols-4">
+  <div class="card p-5">
+    <p class="text-[12px] text-slate-500 mb-1">Calls (24h)</p>
+    <p class="text-[24px] font-extrabold text-slate-900">{{.Usage24h.Calls}}</p>
+    {{if gt .Usage24h.Errors 0}}<p class="text-[11px] font-semibold text-red-500 mt-1">{{.Usage24h.Errors}} errored</p>{{end}}
+  </div>
+  <div class="card p-5">
+    <p class="text-[12px] text-slate-500 mb-1">Tokens (24h)</p>
+    <p class="text-[24px] font-extrabold text-slate-900">{{add .Usage24h.InputTokens .Usage24h.OutputTokens}}</p>
+    <p class="text-[11px] text-slate-400 mt-1">{{.Usage24h.InputTokens}} in / {{.Usage24h.OutputTokens}} out</p>
+  </div>
+  <div class="card p-5">
+    <p class="text-[12px] text-slate-500 mb-1">Calls (7d)</p>
+    <p class="text-[24px] font-extrabold text-slate-900">{{.Usage7d.Calls}}</p>
+    {{if gt .Usage7d.Errors 0}}<p class="text-[11px] font-semibold text-red-500 mt-1">{{.Usage7d.Errors}} errored</p>{{end}}
+  </div>
+  <div class="card p-5">
+    <p class="text-[12px] text-slate-500 mb-1">Tokens (7d)</p>
+    <p class="text-[24px] font-extrabold text-slate-900">{{add .Usage7d.InputTokens .Usage7d.OutputTokens}}</p>
+    <p class="text-[11px] text-slate-400 mt-1">{{.Usage7d.InputTokens}} in / {{.Usage7d.OutputTokens}} out</p>
+  </div>
+</div>
+
+<!-- ── Call log ── -->
+<div class="card overflow-hidden">
+  {{template "card-header" (map "Cat" "TypeSafe" "Title" "Recent Jev Calls" "Badge" (printf "%d shown" (len .Calls)))}}
+  {{if .Calls}}
+  <div class="table-scroll"><table class="w-full text-[13px]">
+    <thead>
+      <tr class="text-slate-400 text-[11px] font-semibold uppercase tracking-wide bg-surface">
+        <th class="px-5 py-3 text-left">Time</th>
+        <th class="px-5 py-3 text-left">ASN</th>
+        <th class="px-5 py-3 text-left">Organization</th>
+        <th class="px-5 py-3 text-left">Result</th>
+        <th class="px-5 py-3 text-right">Tokens (in/out)</th>
+        <th class="px-5 py-3 text-right">Duration</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Calls}}
+      <tr class="border-t border-canvas hover:bg-surface transition-colors duration-100">
+        <td class="px-5 py-3 text-slate-500 whitespace-nowrap">{{fmtTime .Ts}}</td>
+        <td class="px-5 py-3 font-mono text-slate-700">AS{{.ASN}}</td>
+        <td class="px-5 py-3 text-slate-700 truncate max-w-[280px]" title="{{.Org}}">{{.Org}}</td>
+        <td class="px-5 py-3">
+          {{if .Error}}
+          <span class="text-[11px] font-semibold px-[10px] py-1 rounded-sm bg-red-100 text-red-700" title="{{.Error}}">Error: {{truncate .Error 40}}</span>
+          {{else if .Hosting}}
+          <span class="text-[11px] font-semibold px-[10px] py-1 rounded-sm bg-amber-100 text-amber-700">Hosting/VPN</span>
+          {{else}}
+          <span class="text-[11px] font-semibold px-[10px] py-1 rounded-sm bg-green-100 text-green-700">Not hosting</span>
+          {{end}}
+        </td>
+        <td class="px-5 py-3 text-right font-mono text-slate-600">{{.InputTokens}} / {{.OutputTokens}}</td>
+        <td class="px-5 py-3 text-right text-slate-500">{{.DurationMs}}ms</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table></div>
+  {{else}}
+  {{template "empty-state" (map "Icon" "hgi-artificial-intelligence-04" "Message" "No Jev API calls recorded yet.")}}
+  {{end}}
+</div>
+
+{{end}}

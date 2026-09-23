@@ -1,6 +1,7 @@
 package threatscore
 
 import (
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -10,8 +11,10 @@ import (
 
 // fakeStore satisfies the store interface without a database.
 type fakeStore struct {
-	scores map[string]storage.IPThreatScore
-	ja4    map[string][2]int // ja4 -> [hits, blockedHits]
+	scores   map[string]storage.IPThreatScore
+	ja4      map[string][2]int // ja4 -> [hits, blockedHits]
+	typesafe []storage.TypeSafeCall
+	mu       sync.Mutex
 }
 
 func newFakeStore() *fakeStore {
@@ -19,6 +22,13 @@ func newFakeStore() *fakeStore {
 		scores: make(map[string]storage.IPThreatScore),
 		ja4:    make(map[string][2]int),
 	}
+}
+
+func (f *fakeStore) InsertTypeSafeCall(c storage.TypeSafeCall) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.typesafe = append(f.typesafe, c)
+	return nil
 }
 
 func (f *fakeStore) UpsertIPThreatScore(s storage.IPThreatScore) error {
@@ -318,9 +328,9 @@ type fakeClassifier struct {
 	calls   int32
 }
 
-func (f *fakeClassifier) judgeHosting(string) (bool, error) {
+func (f *fakeClassifier) judgeHosting(string) (hostingJudgment, error) {
 	atomic.AddInt32(&f.calls, 1)
-	return f.hosting, nil
+	return hostingJudgment{Hosting: f.hosting}, nil
 }
 
 // TestClassifyASNUsesHeuristicUntilTypeSafeJudgmentArrives checks the core

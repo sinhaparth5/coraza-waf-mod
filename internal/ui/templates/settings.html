@@ -334,7 +334,7 @@
 {{define "typesafe-card"}}
 <div class="card p-5" id="typesafe-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">AI Classification</h2>
-  <p class="text-[13px] text-slate-500 mb-5">The per-IP threat score's ASN/hosting signal is a hardcoded keyword heuristic by default. Enabling this refines it with <a href="https://typesafe.ai" target="_blank" rel="noopener" class="text-brand underline">TypeSafe</a>: an ASN organization name never seen before is judged once, off the request path, and cached — never on the hot path or the logging worker.</p>
+  <p class="text-[13px] text-slate-500 mb-5">The per-IP threat score's ASN/hosting signal is a hardcoded keyword heuristic by default. Enabling this refines it with <a href="https://typesafe.ai" target="_blank" rel="noopener" class="text-brand underline">TypeSafe</a>: an ASN organization name never seen before is judged once, off the request path, and cached — never on the hot path or the logging worker. See <a href="{{.AdminPath}}/ai-usage" class="text-brand underline">AI Usage</a> for a log of every call made and its token cost.</p>
 
   {{if .TypeSafeSaveOK}}
   <div class="rounded-md bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">TypeSafe settings saved.</div>

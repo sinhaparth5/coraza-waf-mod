@@ -135,3 +135,80 @@ func TestBumpJA4Reputation(t *testing.T) {
 		t.Fatalf("other fingerprint: hits=%d blocked=%d, want 1/0 (independent counters)", otherHits, otherBlocked)
 	}
 }
+
+// TestTypeSafeCallRoundtrip exercises Insert/List/UsageSince for
+// typesafe_calls — the log the AI Usage admin page reads.
+func TestTypeSafeCallRoundtrip(t *testing.T) {
+	db := openTestDB(t)
+
+	now := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
+	if err := db.InsertTypeSafeCall(TypeSafeCall{
+		Ts: now, ASN: 16509, Org: "Amazon.com, Inc.", Hosting: true,
+		InputTokens: 296, OutputTokens: 20, DurationMs: 412,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.InsertTypeSafeCall(TypeSafeCall{
+		Ts: now.Add(time.Minute), ASN: 64512, Org: "Some Residential ISP",
+		Error: "typesafe: status 401",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	calls, err := db.ListTypeSafeCalls(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 2 {
+		t.Fatalf("got %d calls, want 2", len(calls))
+	}
+	// Newest first.
+	if calls[0].ASN != 64512 || calls[0].Error == "" {
+		t.Errorf("calls[0] = %+v, want the errored ASN-64512 call first", calls[0])
+	}
+	if calls[1].ASN != 16509 || !calls[1].Hosting || calls[1].InputTokens != 296 || calls[1].OutputTokens != 20 {
+		t.Errorf("calls[1] = %+v, want the Amazon call with its token counts", calls[1])
+	}
+
+	usage, err := db.TypeSafeUsageSince(now.Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usage.Calls != 2 || usage.Errors != 1 || usage.InputTokens != 296 || usage.OutputTokens != 20 {
+		t.Errorf("usage = %+v, want Calls=2 Errors=1 InputTokens=296 OutputTokens=20", usage)
+	}
+
+	usageAfter, err := db.TypeSafeUsageSince(now.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usageAfter.Calls != 0 {
+		t.Errorf("usage since after both calls = %+v, want 0 calls", usageAfter)
+	}
+}
+
+// TestTypeSafeCallPrunesToKeepLimit checks InsertTypeSafeCall bounds the
+// table to its newest typesafeCallsKeep rows — the defense against a
+// misbehaving ASN retrying every request (see TypeSafeCall's doc comment).
+func TestTypeSafeCallPrunesToKeepLimit(t *testing.T) {
+	db := openTestDB(t)
+
+	const over = 5
+	for i := 0; i < typesafeCallsKeep+over; i++ {
+		if err := db.InsertTypeSafeCall(TypeSafeCall{ASN: uint(i), Ts: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	calls, err := db.ListTypeSafeCalls(typesafeCallsKeep + over)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != typesafeCallsKeep {
+		t.Fatalf("got %d rows after pruning, want capped at %d", len(calls), typesafeCallsKeep)
+	}
+	// The oldest `over` rows (ASN 0..over-1) must be the ones dropped.
+	if calls[len(calls)-1].ASN != over {
+		t.Errorf("oldest surviving row ASN = %d, want %d (the first `over` rows pruned)", calls[len(calls)-1].ASN, over)
+	}
+}
