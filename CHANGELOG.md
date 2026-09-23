@@ -14,6 +14,8 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-09-23
+
 ### Added
 
 - **AI Usage page** (`/admin/ai-usage`) showing every Jev API call the
@@ -32,17 +34,5 @@ rather than growing this file forever.
   now at least visible per-call via the AI Usage page's error column
   instead of only a one-line stderr log.
 
-## [2.0.1] - 2026-09-21
-
-### Fixed
-
-- **`webauthn_credentials.credential_id` broke on MySQL.** The new passkey
-  table (v2.0.0) declared it as a plain `UNIQUE TEXT` column — MySQL
-  refuses a `TEXT`/`BLOB` column in a key specification without an
-  explicit length, so no MySQL-backed deployment could even open its
-  database, let alone use passkeys. Sized to `VARCHAR(768)`, matching the
-  existing `threat_intel_sources.url` precedent, and verified against a
-  live `mysql:8` instance.
-
-[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.0.1...main
-[2.0.1]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.0.0...v2.0.1
+[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.0.2...main
+[2.0.2]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.0.1...v2.0.2
