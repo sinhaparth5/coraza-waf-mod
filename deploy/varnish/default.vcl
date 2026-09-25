@@ -54,8 +54,18 @@ sub vcl_recv {
     # object tagged with this service by vcl_backend_response below — objects
     # cached before that tagging existed simply won't match and age out on
     # their own TTL instead.
+    #
+    # X-Cache-Purge-Url (optional) narrows the ban to one path prefix. The WAF
+    # builds it as an anchored regex from a strict character set (services.
+    # Purge) — ban() has no escaping, so it must never come from a client.
+    # Objects cached before URL tagging existed won't match a path purge.
     if (req.method == "PURGE") {
-        ban("obj.http.X-Cache-Service == " + req.http.X-Cache-Service);
+        if (req.http.X-Cache-Purge-Url) {
+            ban("obj.http.X-Cache-Service == " + req.http.X-Cache-Service +
+                " && obj.http.X-Cache-Url ~ " + req.http.X-Cache-Purge-Url);
+        } else {
+            ban("obj.http.X-Cache-Service == " + req.http.X-Cache-Service);
+        }
         return (synth(200, "Purged"));
     }
 
@@ -65,6 +75,26 @@ sub vcl_recv {
     # straight through.
     if (req.method != "GET" && req.method != "HEAD") {
         return (pass);
+    }
+
+    # Bearer-token / Basic-auth requests are per-caller by definition — pass
+    # them before any cacheable rule. This must precede the static-asset rule
+    # below: otherwise an authenticated GET /private/report.png is hashed,
+    # cached, and served to every later anonymous request for that URL (#85).
+    if (req.http.Authorization) {
+        return (pass);
+    }
+
+    # Normalize the query string so equivalent URLs share one cache object:
+    # drop tracking params the backend never reads, then sort the rest
+    # (?b=2&a=1 and ?a=1&b=2 hash identically). Runs before vcl_hash, and
+    # req.url is also what the miss fetch sends to the backend.
+    if (req.url ~ "\?") {
+        set req.url = regsuball(req.url, "(?i)([?&])(utm_[a-z]+|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|_ga|yclid)=[^&]*", "\1");
+        set req.url = regsuball(req.url, "&+", "&");
+        set req.url = regsub(req.url, "\?&", "?");
+        set req.url = regsub(req.url, "[?&]$", "");
+        set req.url = std.querysort(req.url);
     }
 
     # The WAF's challenge-bypass cookie (cz_bot_ok) is meaningless to the
@@ -83,11 +113,8 @@ sub vcl_recv {
         return (hash);
     }
 
-    # Rule B: authenticated / session traffic — never cache, with one opt-in
-    # exception. Bearer-token APIs always pass straight through.
-    if (req.http.Authorization) {
-        return (pass);
-    }
+    # Rule B: session traffic — never cache, with one opt-in exception.
+    # (Authorization was already passed above, before Rule A.)
     if (req.http.Cookie) {
         # X-Cache-Session is only set by the WAF when a service has opted
         # into session-aware caching (admin toggle, off by default) AND this
@@ -113,12 +140,23 @@ sub vcl_hash {
     # host+url hash alone would mix their entries.
     hash_data(req.http.X-Cache-Service);
 
+    # Replaces the built-in url+host hash (see return below). Host is
+    # lowercased and its port dropped so Example.com and example.com:443
+    # share one object instead of fragmenting the shared memory pool.
+    hash_data(req.url);
+    if (req.http.host) {
+        hash_data(std.tolower(regsub(req.http.host, ":[0-9]+$", "")));
+    } else {
+        hash_data(server.ip);
+    }
+
     # Session-aware caching (opt-in, see vcl_recv Rule B): further partition
     # by session so two different logged-in users never share a cached
     # response for the same URL.
     if (req.http.X-Cache-Session) {
         hash_data(req.http.X-Cache-Session);
     }
+    return (lookup);
 }
 
 sub vcl_backend_response {
@@ -175,6 +213,8 @@ sub vcl_backend_response {
     # (vcl_recv) can target it without affecting other services' entries.
     # Stripped from the client-visible response in vcl_deliver.
     set beresp.http.X-Cache-Service = bereq.http.X-Cache-Service;
+    # Path-prefix purges match on this (see vcl_recv PURGE).
+    set beresp.http.X-Cache-Url = bereq.url;
 
     # Grace: how long a stale object may still be served (e.g. while a fresh
     # copy is being fetched, or if the backend is briefly unreachable). Keep:
@@ -196,11 +236,16 @@ sub vcl_backend_response {
 
 sub vcl_deliver {
     # Surface cache effectiveness to the WAF logs / curl -I debugging.
-    if (obj.hits > 0) {
+    # PASS = never looked up (auth/session/non-GET) or hit-for-miss — the
+    # WAF logs this per request and exports coraza_cache_results_total.
+    if (obj.uncacheable) {
+        set resp.http.X-Cache = "PASS";
+    } elsif (obj.hits > 0) {
         set resp.http.X-Cache = "HIT";
     } else {
         set resp.http.X-Cache = "MISS";
     }
     # Internal partition marker (see vcl_backend_response) — not for clients.
     unset resp.http.X-Cache-Service;
+    unset resp.http.X-Cache-Url;
 }

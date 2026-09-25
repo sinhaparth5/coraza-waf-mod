@@ -200,6 +200,7 @@
     graceInput.value = parseInt(d.grace) > 0 ? d.grace : '';
     keepInput.value = parseInt(d.keep) > 0 ? d.keep : '';
 
+    cachePurgeForm.reset();
     cachePurgeForm.setAttribute('hx-post', adminPath + '/services/cache-purge/' + d.id);
     htmx.process(cachePurgeForm);
     cachePurgeStatus.textContent = '';

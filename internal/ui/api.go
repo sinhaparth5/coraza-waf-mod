@@ -117,6 +117,7 @@ func (h *Handler) RegisterAPI(e *echo.Echo) {
 	api.GET("/services/:id", h.APIGetService)
 	api.PUT("/services/:id", h.APIUpdateService, h.requireWrite)
 	api.DELETE("/services/:id", h.APIDeleteService, h.requireWrite)
+	api.POST("/services/:id/purge", h.APIPurgeService, h.requireWrite)
 
 	api.GET("/ip-rules", h.APIListIPRules)
 	api.POST("/ip-rules", h.APICreateIPRule, h.requireWrite)
@@ -147,6 +148,36 @@ func (h *Handler) APIGetService(c echo.Context) error {
 		return apiError(c, http.StatusNotFound, "service not found")
 	}
 	return c.JSON(http.StatusOK, svc)
+}
+
+// APIPurgeService evicts a service's cached objects from Varnish — all of
+// them, or only those under the optional JSON "path" prefix. Meant for
+// deploy pipelines (purge right after shipping new content).
+func (h *Handler) APIPurgeService(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return apiError(c, http.StatusBadRequest, "invalid id")
+	}
+	var req struct {
+		Path string `json:"path"`
+	}
+	if c.Request().ContentLength != 0 {
+		if err := c.Bind(&req); err != nil {
+			return apiError(c, http.StatusBadRequest, "invalid JSON body")
+		}
+	}
+	svc, err := h.db.GetService(id)
+	if err != nil {
+		return apiError(c, http.StatusNotFound, "service not found")
+	}
+	vcfg, err := h.db.GetVarnishConfig()
+	if err != nil {
+		return apiError(c, http.StatusInternalServerError, err.Error())
+	}
+	if err := services.Purge(vcfg, svc, strings.TrimSpace(req.Path)); err != nil {
+		return apiError(c, http.StatusBadRequest, err.Error())
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "purged", "path": req.Path})
 }
 
 // apiCreateServiceRequest mirrors the fields accepted by the admin UI's

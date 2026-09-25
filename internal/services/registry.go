@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -103,6 +104,8 @@ type Registry struct {
 	list      []storage.Service
 	proxies   map[string]*httputil.ReverseProxy
 	direct    map[string]*httputil.ReverseProxy // straight-to-backend proxies for the cache-return path
+	cached    map[string]bool                   // services whose outer proxy currently targets Varnish
+	varnish   string                            // Varnish address the cached proxies target (for auto-purge on change)
 	limiters  map[string]*ratelimit.Limiter     // service name -> per-service limiter (nil if not configured)
 	certs     map[string]*tls.Certificate       // host (lowercase) -> uploaded custom cert
 	autoHosts map[string]bool                   // host (lowercase) -> true if tls_mode == "auto"
@@ -131,6 +134,7 @@ func (r *Registry) Reload(db *storage.DB) error {
 	reg := r // avoid shadowing by the *http.Request param named "r" below
 	proxies := make(map[string]*httputil.ReverseProxy, len(list))
 	direct := make(map[string]*httputil.ReverseProxy, len(list))
+	cached := make(map[string]bool)
 	for _, s := range list {
 		target, err := url.Parse(s.Backend)
 		if err != nil {
@@ -140,6 +144,7 @@ func (r *Registry) Reload(db *storage.DB) error {
 		name := s.Name
 		rp := httputil.NewSingleHostReverseProxy(target)
 		if vcfg.Enabled && s.CacheEnabled {
+			cached[name] = true
 			// Route this service's clean traffic through the local Varnish
 			// daemon instead of straight to the backend. The stock director
 			// runs first so the path/query are exactly what the backend
@@ -163,6 +168,12 @@ func (r *Registry) Reload(db *storage.DB) error {
 				stock(req)
 				for _, hn := range spoofableHostHeaders {
 					req.Header.Del(hn)
+				}
+				// Only GET/HEAD can ever be cached (the VCL passes every
+				// other method), so the rest skip the Varnish round trip
+				// and go straight to the backend the stock director chose.
+				if req.Method != http.MethodGet && req.Method != http.MethodHead {
+					return
 				}
 				req.Header.Set("X-Cache-Service", name)
 				req.Header.Set("X-Waf-Backend", backendHost)
@@ -205,15 +216,40 @@ func (r *Registry) Reload(db *storage.DB) error {
 			}
 		}
 		rp.Transport = &timedTransport{rt: backendTransport, name: name}
+		var bypass *httputil.ReverseProxy
+		if cached[name] {
+			bypass = httputil.NewSingleHostReverseProxy(target)
+			bypass.Transport = rp.Transport
+		}
 		// Passive health tracking: no separate probe traffic at all — a
 		// service is marked down the instant a real proxied request fails
 		// to reach it, and healthy again on the next real request that
 		// gets a response (matches how nginx/HAProxy/Envoy do "passive"
 		// health checks, and how SafeLine avoids logging synthetic probes).
-		rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		backendErr := func(w http.ResponseWriter, r *http.Request, err error) {
 			log.Printf("proxy error [%s]: %v", name, err)
 			reg.markHealth(name, false)
 			http.Error(w, "bad gateway", http.StatusBadGateway)
+		}
+		rp.ErrorHandler = backendErr
+		if bypass != nil {
+			// Varnish is an accelerator, not a dependency: if varnishd is down
+			// (not installed, crashed, mid-restart) a cache-routed service
+			// would otherwise 502 while its backend is perfectly healthy —
+			// and get marked unhealthy for it. Fail open to the backend when
+			// the dial to Varnish itself fails; anything else (or a failure
+			// past the dial) is a real error.
+			rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+				var opErr *net.OpError
+				// Only GET/HEAD are routed to Varnish (see Director), and
+				// neither carries a body a failed dial could have consumed.
+				if errors.As(err, &opErr) && opErr.Op == "dial" && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+					log.Printf("cache [%s]: varnish unreachable, serving from backend: %v", name, err)
+					bypass.ServeHTTP(w, r)
+					return
+				}
+				backendErr(w, r, err)
+			}
 		}
 		// Override whatever Server header the backend sends — the WAF/proxy
 		// is what the client actually talks to, so it should identify itself.
@@ -222,6 +258,10 @@ func (r *Registry) Reload(db *storage.DB) error {
 		// the client sees, avoiding duplicate headers.
 		rp.ModifyResponse = func(resp *http.Response) error {
 			resp.Header.Set("Server", serverHeader)
+			// Internal VCL partition/purge tags — never for clients, even if
+			// an older VCL without the vcl_deliver unset is installed.
+			resp.Header.Del("X-Cache-Service")
+			resp.Header.Del("X-Cache-Url")
 			for _, h := range []string{
 				"X-Content-Type-Options",
 				"X-Frame-Options",
@@ -235,6 +275,10 @@ func (r *Registry) Reload(db *storage.DB) error {
 			}
 			reg.markHealth(name, true)
 			return nil
+		}
+		if bypass != nil {
+			bypass.ModifyResponse = rp.ModifyResponse
+			bypass.ErrorHandler = backendErr
 		}
 		proxies[s.Name] = rp
 
@@ -305,9 +349,12 @@ func (r *Registry) Reload(db *storage.DB) error {
 
 	r.mu.Lock()
 	oldLimiters := r.limiters
+	oldList, oldCached, oldVarnish := r.list, r.cached, r.varnish
 	r.list = list
 	r.proxies = proxies
 	r.direct = direct
+	r.cached = cached
+	r.varnish = vcfg.Addr
 	r.limiters = newLimiters
 	r.certs = certs
 	r.autoHosts = autoHosts
@@ -316,6 +363,18 @@ func (r *Registry) Reload(db *storage.DB) error {
 	// Stop old janitor goroutines after the swap so in-flight checks still work.
 	for _, l := range oldLimiters {
 		l.Stop()
+	}
+
+	// Anything Varnish still holds for a service that was removed, re-pointed
+	// or taken off the cache is now wrong: re-adding it (or re-enabling
+	// caching) would serve the old backend's content until TTL. Best-effort,
+	// off the reload path — a failure just leaves objects to age out.
+	for _, stale := range staleCacheServices(oldList, oldCached, list, cached) {
+		go func(name string) {
+			if err := sendPurge(oldVarnish, name, ""); err != nil {
+				log.Printf("cache [%s]: auto-purge after service change: %v", name, err)
+			}
+		}(stale)
 	}
 
 	// Drop health entries for services that no longer exist, so a removed
@@ -455,6 +514,40 @@ func (r *Registry) Proxy(name string) (*httputil.ReverseProxy, bool) {
 	return rp, ok
 }
 
+// Cached reports whether the named service's traffic currently goes through
+// Varnish — i.e. whether an X-Cache response header on it is Varnish's own
+// verdict rather than something the backend (or a CDN in front of it) set.
+func (r *Registry) Cached(name string) bool {
+	if r == nil {
+		return false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.cached[name]
+}
+
+// staleCacheServices lists previously cache-routed services whose cached
+// objects no longer belong to what the service is now: removed, no longer
+// cached, or with a different backend/host/prefix (the old backend's content
+// would otherwise be served under the new routing).
+func staleCacheServices(oldList []storage.Service, oldCached map[string]bool, newList []storage.Service, newCached map[string]bool) []string {
+	cur := make(map[string]storage.Service, len(newList))
+	for _, s := range newList {
+		cur[s.Name] = s
+	}
+	var out []string
+	for _, o := range oldList {
+		if !oldCached[o.Name] {
+			continue
+		}
+		n, ok := cur[o.Name]
+		if !ok || !newCached[o.Name] || n.Backend != o.Backend || n.Host != o.Host || n.Prefix != o.Prefix {
+			out = append(out, o.Name)
+		}
+	}
+	return out
+}
+
 // CacheReturnHandler serves the loopback listener Varnish fetches cache
 // misses from (VarnishConfig.ReturnAddr). Requests arriving here already
 // passed the full WAF pipeline on the way in — the outer proxy tagged them
@@ -480,6 +573,8 @@ func (r *Registry) CacheReturnHandler() http.Handler {
 			// Unknown or missing service tag: either Varnish got traffic
 			// that didn't come from the WAF, or the service was removed
 			// between the outer hop and the miss fetch.
+			// no-store: Varnish must not cache this 404 under the tag.
+			w.Header().Set("Cache-Control", "no-store")
 			http.Error(w, "unknown service", http.StatusNotFound)
 			return
 		}
@@ -570,32 +665,71 @@ func Probe(backend string) error {
 // is enforced here rather than at service-creation time.
 var safeServiceNameForBan = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
-// Purge invalidates every object cached for one service by sending a PURGE
+// safePurgePath is the character set a path-prefix purge may use. The
+// prefix becomes a regex inside a Varnish ban() expression, which has no
+// escaping mechanism, so anything that could close a quote or add a clause
+// ("&&", whitespace) is refused; "." is escaped as "[.]" by purgeRegex.
+var safePurgePath = regexp.MustCompile(`^/[A-Za-z0-9/_.~%-]*$`)
+
+// Purge invalidates cached objects for one service by sending a PURGE
 // request directly to Varnish's client port over loopback — the WAF issuing
 // it, never client traffic, same trust model as the cache-return listener
 // (see main.go's startCacheReturn). deploy/varnish/default.vcl bans on
-// obj.http.X-Cache-Service, the same header the outer Director already tags
-// every cached object with, so this only affects objects belonging to
-// serviceName. Intended for the admin UI's "Purge" button, e.g. right after
-// deploying new content to a backend.
-func Purge(vcfg storage.VarnishConfig, serviceName string) error {
+// obj.http.X-Cache-Service, the tag every cached object carries, so this
+// only affects objects belonging to svc. pathPrefix is optional: empty
+// purges the whole service; otherwise only objects whose URL starts with it
+// (as the client requests it — the service's routing prefix and backend base
+// path are applied here, since that is the URL Varnish actually cached).
+func Purge(vcfg storage.VarnishConfig, svc storage.Service, pathPrefix string) error {
 	if !vcfg.Enabled {
 		return fmt.Errorf("varnish integration is not enabled")
 	}
+	re := ""
+	if pathPrefix != "" {
+		if !safePurgePath.MatchString(pathPrefix) {
+			return fmt.Errorf("path must start with / and use only letters, digits and / _ . ~ %% -")
+		}
+		re = purgeRegex(backendURLPath(svc, pathPrefix))
+	}
+	return sendPurge(vcfg.Addr, svc.Name, re)
+}
+
+// backendURLPath maps a client-facing path to the URL the backend (and so
+// Varnish's cache) sees for svc: routing prefix stripped, backend base path
+// joined — the same two steps Handle and the outer Director apply.
+func backendURLPath(svc storage.Service, p string) string {
+	if svc.Prefix != "" && PrefixMatch(p, svc.Prefix) {
+		p = StripPrefix(p, svc.Prefix)
+	}
+	if u, err := url.Parse(svc.Backend); err == nil {
+		p = strings.TrimSuffix(u.Path, "/") + p
+	}
+	return p
+}
+
+// purgeRegex anchors a safePurgePath-validated path as a ban regex.
+func purgeRegex(p string) string {
+	return "^" + strings.ReplaceAll(p, ".", "[.]")
+}
+
+func sendPurge(addr, serviceName, urlRegex string) error {
 	if !safeServiceNameForBan.MatchString(serviceName) {
 		return fmt.Errorf("service name contains characters not safe to purge by")
 	}
-	host, _, err := net.SplitHostPort(vcfg.Addr)
+	host, _, err := net.SplitHostPort(addr)
 	if err != nil || (host != "localhost" && (net.ParseIP(host) == nil || !net.ParseIP(host).IsLoopback())) {
 		return fmt.Errorf("refusing to purge a non-loopback varnish address")
 	}
 
 	client := &http.Client{Timeout: probeTimeout}
-	req, err := http.NewRequest("PURGE", "http://"+vcfg.Addr+"/", nil)
+	req, err := http.NewRequest("PURGE", "http://"+addr+"/", nil)
 	if err != nil {
 		return fmt.Errorf("invalid varnish address: %w", err)
 	}
 	req.Header.Set("X-Cache-Service", serviceName)
+	if urlRegex != "" {
+		req.Header.Set("X-Cache-Purge-Url", urlRegex)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("varnish not reachable: %w", err)

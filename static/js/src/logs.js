@@ -567,7 +567,7 @@
       statusEl.className = 'font-bold text-[15px] shrink-0 tabular-nums ' + statusColor(d.status);
     }
     setText('ld-ts', d.timestamp ? new Date(d.timestamp).toUTCString() : '—');
-    setText('ld-dur', d.duration_ms + 'ms');
+    setText('ld-dur', d.duration_ms + 'ms' + (d.cache_status ? ' · cache ' + d.cache_status : ''));
     setText('ld-app', d.app_name || '—');
     setText('ld-host', d.host || '—');
     setText('ld-ua', d.user_agent || '—');

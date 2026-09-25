@@ -376,6 +376,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/services/cache-session/:id", h.SetServiceCacheSession)
 	g.POST("/services/cache-tuning/:id", h.SetServiceCacheTuning)
 	g.POST("/services/cache-purge/:id", h.PurgeServiceCache)
+	g.GET("/services/cache-stats", h.ServicesCacheStats)
 	g.POST("/settings/varnish", h.SaveVarnishConfig)
 	g.POST("/settings/acme-email", h.SaveAcmeEmail)
 	g.POST("/settings/bot", h.SaveBotSettings)
@@ -1115,6 +1116,7 @@ func (h *Handler) LogDetail(c echo.Context) error {
 		"ja4":              d.JA4,
 		"visitor_id":       d.VisitorID,
 		"bot_score":        d.BotScore,
+		"cache_status":     d.CacheStatus,
 		"headers":          headers,
 		"has_threat_score": hasThreat,
 		"threat_score":     threat.Total,
@@ -2546,8 +2548,9 @@ func (h *Handler) SetServiceCacheTuning(c echo.Context) error {
 	return h.tmpls["services"].ExecuteTemplate(w, "services-rows", h.serviceViews())
 }
 
-// PurgeServiceCache invalidates every object Varnish holds for one service,
-// e.g. right after deploying new content to its backend. Returns a small
+// PurgeServiceCache invalidates the objects Varnish holds for one service —
+// all of them, or only those under the optional "path" prefix (e.g. /blog/
+// after a content deploy). Returns a small
 // status fragment rather than the services list, since purging doesn't
 // change any row's displayed state.
 func (h *Handler) PurgeServiceCache(c echo.Context) error {
@@ -2563,10 +2566,66 @@ func (h *Handler) PurgeServiceCache(c echo.Context) error {
 	if err != nil {
 		return c.HTML(http.StatusOK, `<span class="text-red-500">`+html.EscapeString(err.Error())+`</span>`)
 	}
-	if err := services.Purge(vcfg, svc.Name); err != nil {
+	path := strings.TrimSpace(c.FormValue("path"))
+	if err := services.Purge(vcfg, svc, path); err != nil {
 		return c.HTML(http.StatusOK, `<span class="text-red-500">`+html.EscapeString(err.Error())+`</span>`)
 	}
+	if path != "" {
+		return c.HTML(http.StatusOK, `<span class="text-brand-dark">Purged `+html.EscapeString(path)+`*.</span>`)
+	}
 	return c.HTML(http.StatusOK, `<span class="text-brand-dark">Purged.</span>`)
+}
+
+// cacheRatio formats hits as a share of cacheable lookups (hits+misses);
+// passes are excluded, since they were never eligible for a hit.
+func cacheRatio(hits, misses uint64) string {
+	if hits+misses == 0 {
+		return "—"
+	}
+	return fmt.Sprintf("%.1f%%", float64(hits)*100/float64(hits+misses))
+}
+
+func fmtMiB(b uint64) string {
+	return fmt.Sprintf("%.0f MiB", float64(b)/(1<<20))
+}
+
+// ServicesCacheStats renders the Services page's "Cache performance" card:
+// Varnish-wide counters from varnishstat (best-effort — an error is shown,
+// not fatal) plus per-service hit ratios from the request log's
+// cache_status, which varnishstat can't split by service.
+func (h *Handler) ServicesCacheStats(c echo.Context) error {
+	vcfg, err := h.db.GetVarnishConfig()
+	if err != nil {
+		return err
+	}
+	data := map[string]any{"AdminPath": h.cfg.Admin.Path, "Enabled": vcfg.Enabled}
+	if !vcfg.Enabled {
+		return h.renderPartial(c, "services", "cache-stats", data)
+	}
+	if st, err := services.ReadVarnishStats(c.Request().Context()); err != nil {
+		data["StatsErr"] = err.Error()
+	} else {
+		data["Stats"] = map[string]any{
+			"Ratio":   cacheRatio(st.Hits, st.Misses),
+			"Objects": st.Objects,
+			"Used":    fmtMiB(st.BytesUsed),
+			"Total":   fmtMiB(st.BytesUsed + st.BytesFree),
+			"Evicted": st.Evicted,
+		}
+	}
+	results, err := h.db.CacheResultsSince(time.Now().Add(-24 * time.Hour))
+	if err != nil {
+		return err
+	}
+	rows := make([]map[string]any, 0, len(results))
+	for _, r := range results {
+		rows = append(rows, map[string]any{
+			"App": r.App, "Hits": r.Hits, "Misses": r.Misses, "Passes": r.Passes,
+			"Ratio": cacheRatio(uint64(r.Hits), uint64(r.Misses)),
+		})
+	}
+	data["Services"] = rows
+	return h.renderPartial(c, "services", "cache-stats", data)
 }
 
 // SaveVarnishConfig persists the global Varnish accelerator settings and
