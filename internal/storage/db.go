@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"crypto/cipher"
 	"crypto/rand"
 	"database/sql"
@@ -252,6 +253,11 @@ func (db *DB) Close() error {
 	close(db.logQueue)
 	<-db.logDone
 	return db.conn.Close()
+}
+
+// Ping checks the database is reachable; backs the /_cz/readyz probe.
+func (db *DB) Ping(ctx context.Context) error {
+	return db.conn.PingContext(ctx)
 }
 
 // schemaMigrations lists every idempotent "ALTER TABLE ... ADD COLUMN ..."

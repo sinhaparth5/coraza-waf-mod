@@ -77,6 +77,9 @@ func main() {
 		case "build-dsn":
 			runBuildDSN(os.Args[2:])
 			return
+		case "healthcheck":
+			runHealthcheck(os.Args[2:])
+			return
 		}
 	}
 
@@ -93,6 +96,7 @@ func main() {
 	wafRules := fs.String("waf-rules", "", "extra WAF rules directory (empty = OWASP CRS only)")
 	geoDBPath := fs.String("geo-db", "", "GeoIP2 database path (empty = bundled)")
 	retention := fs.Int("retention", 30, "request log retention in days (0 = keep forever)")
+	pruneInterval := fs.Duration("prune-interval", 0, "prune request logs older than --retention in-process at this interval, e.g. 24h (0 = off; for deployments with no external scheduler, like Docker)")
 	tlsCert := fs.String("tls-cert", "", "PEM certificate file for HTTPS fallback (self-signed)")
 	tlsKey := fs.String("tls-key", "", "PEM private key file for HTTPS fallback (self-signed)")
 	accessLogPath := fs.String("access-log", "", "nginx-style access log file path (empty = disabled)")
@@ -113,6 +117,9 @@ func main() {
 	cfg.WAF.RulesDir = *wafRules
 	cfg.Geo.DBPath = *geoDBPath
 	cfg.DB.LogRetentionDays = *retention
+	if *pruneInterval != 0 && *pruneInterval < time.Minute {
+		log.Fatalf("--prune-interval must be 0 (off) or at least 1m, got %s", *pruneInterval)
+	}
 
 	db, err := storage.OpenWithDriver(cfg.DB.Driver, cfg.DB.Path)
 	if err != nil {
@@ -293,6 +300,10 @@ func main() {
 	// loopback and serves nothing unless Varnish sends traffic.
 	go startCacheReturn(db, registry)
 
+	if *pruneInterval > 0 {
+		go runPruneLoop(db, *pruneInterval, *retention)
+	}
+
 	metrics.SetDB(db)
 	metrics.SetRegistry(registry)
 	metrics.SetLimiter(rl)
@@ -393,6 +404,11 @@ func main() {
 	e.Use(middleware.Recover())
 	e.Use(proxy.SecurityMiddleware())
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
+		// Health probes arrive every few seconds; logging them buries real traffic.
+		Skipper: func(c echo.Context) bool {
+			p := c.Request().URL.Path
+			return p == "/_cz/healthz" || p == "/_cz/readyz"
+		},
 		LogURI:    true,
 		LogStatus: true,
 		LogMethod: true,
@@ -465,6 +481,8 @@ func main() {
 		c.Response().Header().Set("Cache-Control", "public, max-age=86400")
 		return c.Blob(http.StatusOK, "image/svg+xml", data)
 	})
+
+	registerProbes(e, db)
 
 	e.Any("/*", h.Handle)
 
@@ -718,22 +736,8 @@ func runPruneOnly(args []string) {
 	}
 	defer db.Close()
 
-	if n, err := db.PruneExpiredSessions(); err != nil {
-		log.Printf("session prune failed: %v", err)
-	} else {
-		log.Printf("session prune: deleted %d expired sessions", n)
-	}
-
-	if *retention <= 0 {
-		log.Printf("log retention: disabled (retention <= 0), nothing to prune")
-	} else {
-		start := time.Now()
-		n, err := db.PruneOldRequests(*retention)
-		dur := time.Since(start)
-		if err != nil {
-			log.Fatalf("log retention: prune failed after %s: %v", dur, err)
-		}
-		log.Printf("log retention: deleted %d requests older than %d days (took %s)", n, *retention, dur)
+	if err := pruneOnce(db, *retention); err != nil {
+		log.Fatal(err)
 	}
 
 	if *vacuum {
@@ -759,6 +763,90 @@ func runPruneOnly(args []string) {
 		default:
 			log.Printf("vacuum: ran VACUUM (took %s) — Postgres/CockroachDB/Neon reclaim space in place, not via file rebuild, so no size delta is reported", time.Since(start))
 		}
+	}
+}
+
+// registerProbes adds the liveness and readiness probes used by load
+// balancers, orchestrators and the Docker HEALTHCHECK (#1). They are
+// unauthenticated and served on every host, so they answer "ok" or not and
+// nothing more. Readiness checks only the DB: one dead backend must not pull
+// the whole WAF out of a load balancer.
+func registerProbes(e *echo.Echo, db *storage.DB) {
+	probe := []string{http.MethodGet, http.MethodHead}
+	e.Match(probe, "/_cz/healthz", func(c echo.Context) error {
+		return c.String(http.StatusOK, "ok")
+	})
+	e.Match(probe, "/_cz/readyz", func(c echo.Context) error {
+		ctx, cancel := context.WithTimeout(c.Request().Context(), 2*time.Second)
+		defer cancel()
+		if err := db.Ping(ctx); err != nil {
+			log.Printf("readyz: db ping: %v", err)
+			return c.String(http.StatusServiceUnavailable, "db unavailable")
+		}
+		return c.String(http.StatusOK, "ok")
+	})
+}
+
+// pruneOnce deletes expired sessions and request logs older than retention
+// days (<= 0 keeps logs forever). Shared by the prune subcommand and the
+// in-process --prune-interval loop.
+func pruneOnce(db *storage.DB, retention int) error {
+	if n, err := db.PruneExpiredSessions(); err != nil {
+		log.Printf("session prune failed: %v", err)
+	} else {
+		log.Printf("session prune: deleted %d expired sessions", n)
+	}
+	if retention <= 0 {
+		log.Printf("log retention: disabled (retention <= 0), nothing to prune")
+		return nil
+	}
+	start := time.Now()
+	n, err := db.PruneOldRequests(retention)
+	dur := time.Since(start)
+	if err != nil {
+		return fmt.Errorf("log retention: prune failed after %s: %w", dur, err)
+	}
+	log.Printf("log retention: deleted %d requests older than %d days (took %s)", n, retention, dur)
+	return nil
+}
+
+// runPruneLoop is --prune-interval: the prune subcommand run in-process, for
+// deployments with no cron/systemd timer to call it (the Docker image). It
+// prunes once at startup, so a container restarted more often than the
+// interval still prunes, then on every tick. PruneOldRequests deletes in
+// small batches, so the live log worker is never locked out for long. No
+// VACUUM here: that single long write transaction stays in the one-shot
+// `prune --vacuum` mode.
+func runPruneLoop(db *storage.DB, every time.Duration, retention int) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		if err := pruneOnce(db, retention); err != nil {
+			log.Print(err)
+		}
+		<-t.C
+	}
+}
+
+// runHealthcheck probes a running server's readiness endpoint and exits
+// non-zero when it is not ready. The Docker image is FROM scratch, with no
+// curl or wget, so its HEALTHCHECK needs the binary itself to make the request.
+// Invoked as: coraza-waf-mod healthcheck [--url http://127.0.0.1:8080/_cz/readyz]
+func runHealthcheck(args []string) {
+	fs := flag.NewFlagSet("healthcheck", flag.ExitOnError)
+	url := fs.String("url", "http://127.0.0.1:8080/_cz/readyz", "readiness URL to probe")
+	fs.Parse(args) //nolint // ExitOnError: never returns an error to check
+
+	client := http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(*url)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "healthcheck:", err)
+		os.Exit(1)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintln(os.Stderr, "healthcheck: not ready:", resp.Status)
+		os.Exit(1)
 	}
 }
 

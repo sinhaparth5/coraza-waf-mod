@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"coraza-waf-mod/internal/config"
@@ -334,5 +335,31 @@ func TestAPIBansAreFilteredGlobalBlocks(t *testing.T) {
 	}
 	if len(bans) != 0 {
 		t.Fatalf("bans after delete = %+v, want empty", bans)
+	}
+}
+
+// TestAPIMetricsBearerAuth checks Prometheus can scrape with a read-only key
+// and that the route still demands one (#88).
+func TestAPIMetricsBearerAuth(t *testing.T) {
+	h, e := newTestAPIHandler(t)
+	key := createTestKey(t, h, true)
+	cases := []struct {
+		name, key string
+		status    int
+	}{
+		{"read-only key", key, http.StatusOK},
+		{"no key", "", http.StatusUnauthorized},
+		{"bad key", "cwaf_nope", http.StatusUnauthorized},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := apiRequest(e, http.MethodGet, "/admin/api/v1/metrics", tc.key, nil)
+			if rec.Code != tc.status {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.status)
+			}
+			if tc.status == http.StatusOK && !strings.Contains(rec.Body.String(), "go_goroutines") {
+				t.Error("body is not Prometheus exposition")
+			}
+		})
 	}
 }
