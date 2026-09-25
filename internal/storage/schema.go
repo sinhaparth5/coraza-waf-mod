@@ -69,7 +69,8 @@ func (db *DB) schemaStatements() []string {
 			ja3_hash     TEXT NOT NULL DEFAULT '',
 			ja4          TEXT NOT NULL DEFAULT '',
 			visitor_id   TEXT NOT NULL DEFAULT '',
-			bot_score    INTEGER NOT NULL DEFAULT 0
+			bot_score    INTEGER NOT NULL DEFAULT 0,
+			cache_status TEXT NOT NULL DEFAULT ''
 		)`, pk, ts),
 		d.createIndexIfNotExists("idx_requests_ts", "requests", "ts"),
 		d.createIndexOnText("idx_requests_ip", "requests", "real_ip", 45),

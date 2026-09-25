@@ -471,6 +471,14 @@ func (h *Handler) Handle(c echo.Context) error {
 	rp.ServeHTTP(rw, r)
 	mark("proxy")
 	r.URL.Path = originalPath
+	if h.registry.Cached(app.Name) {
+		// Set by the VCL's vcl_deliver; only trusted on the Varnish path,
+		// where it always overwrites anything the backend sent.
+		meta.CacheStatus = w.Header().Get("X-Cache")
+		if meta.CacheStatus != "" {
+			metrics.CacheResultsTotal.WithLabelValues(appName, strings.ToLower(meta.CacheStatus)).Inc()
+		}
+	}
 	h.logRequest(r, appName, clientIP, country, rw.status, result, time.Since(start), meta)
 	return nil
 }
@@ -480,18 +488,19 @@ func (h *Handler) Handle(c echo.Context) error {
 // reqMeta holds per-request enrichment fields computed once at the top of
 // Handle() and reused by all logging call-sites.
 type reqMeta struct {
-	RequestID  string
-	Proto      string
-	TLSVersion string
-	TLSCipher  string
-	TLSSNI     string
-	ASN        uint
-	Org        string
-	Query      string
-	JA3Hash    string
-	JA4        string
-	VisitorID  string
-	BotScore   int
+	RequestID   string
+	Proto       string
+	TLSVersion  string
+	TLSCipher   string
+	TLSSNI      string
+	ASN         uint
+	Org         string
+	Query       string
+	JA3Hash     string
+	JA4         string
+	VisitorID   string
+	BotScore    int
+	CacheStatus string
 }
 
 func (h *Handler) logRequest(r *http.Request, appName, clientIP, country string, status int, wafResult *waf.Result, dur time.Duration, m reqMeta) {
@@ -523,6 +532,7 @@ func (h *Handler) logRequest(r *http.Request, appName, clientIP, country string,
 		JA4:         m.JA4,
 		VisitorID:   m.VisitorID,
 		BotScore:    m.BotScore,
+		CacheStatus: m.CacheStatus,
 	})
 }
 

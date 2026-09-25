@@ -48,6 +48,11 @@ var (
 		Help: "Requests denied by the per-IP rate limiter, labeled by app.",
 	}, []string{"app"})
 
+	CacheResultsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "coraza_cache_results_total",
+		Help: "Proxied requests to Varnish-cached services, labeled by app and cache result (hit, miss, pass).",
+	}, []string{"app", "result"})
+
 	BotChallengedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "coraza_bot_challenged_total",
 		Help: "Requests redirected to the JS PoW challenge because their bot anomaly score exceeded the threshold.",

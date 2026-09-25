@@ -102,6 +102,14 @@
     </div>
   </div>
 
+  <!-- ── Cache performance (lazy: varnishstat is an exec, kept off page render) ── -->
+  <div class="card overflow-hidden">
+    {{template "card-header" (map "Cat" "Varnish" "Title" "Cache performance" "Badge" "last 24h")}}
+    <div id="cache-stats" hx-get="{{.AdminPath}}/services/cache-stats" hx-trigger="load, every 30s" hx-swap="innerHTML">
+      <p class="px-5 py-4 text-[13px] text-slate-400 sm:px-6">Loading…</p>
+    </div>
+  </div>
+
 </div>
 
 <!-- ── Edit Service Modal (all per-service settings in one place) ── -->
@@ -289,8 +297,10 @@
       </div>
 
       <div class="border-t border-canvas mt-5 pt-4">
-        <p class="text-[12px] text-slate-500 mb-3 leading-[1.5]">Immediately evict everything Varnish has cached for this service. Useful right after deploying new content to its backend.</p>
+        <p class="text-[12px] text-slate-500 mb-3 leading-[1.5]">Immediately evict what Varnish has cached for this service — everything, or only URLs under a path prefix. Useful right after deploying new content to its backend.</p>
         <form id="svc-cache-purge-form" hx-post="{{.AdminPath}}/services/cache-purge/0" hx-target="#svc-cache-purge-status" hx-swap="innerHTML" data-admin-path="{{.AdminPath}}">
+          <input name="path" type="text" placeholder="/blog/ — leave blank to purge everything" autocomplete="off"
+            class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white mb-3 font-mono"/>
           <button type="submit" class="w-full py-[10px] rounded-md border border-line bg-white text-slate-700 text-[13px] font-medium cursor-pointer font-sans hover:border-slate-400 transition-colors duration-150">
             Purge cached content
           </button>
@@ -398,6 +408,64 @@
   </div>
 </div>
 
+{{end}}
+
+{{define "cache-stats"}}
+{{if not .Enabled}}
+<p class="px-5 py-4 text-[13px] text-slate-500 sm:px-6">The Varnish integration is off. Enable it on the <a href="{{.AdminPath}}/settings" class="text-brand underline">Settings</a> page, then turn on caching per service.</p>
+{{else}}
+{{if .StatsErr}}
+<p class="border-b border-line px-5 py-3 text-[12px] leading-[1.5] text-amber-700 sm:px-6">Varnish counters unavailable: <span class="font-mono">{{.StatsErr}}</span>. The WAF's service user needs read access to varnishd's shared memory (membership in the <span class="font-mono">varnish</span> group).</p>
+{{else}}
+<div class="grid grid-cols-2 gap-4 border-b border-line px-5 py-4 sm:grid-cols-4 sm:px-6">
+  <div>
+    <p class="text-[11px] font-medium uppercase tracking-[0.06em] text-slate-500">Hit ratio</p>
+    <p class="text-[18px] font-bold text-slate-900">{{.Stats.Ratio}}</p>
+  </div>
+  <div>
+    <p class="text-[11px] font-medium uppercase tracking-[0.06em] text-slate-500">Objects</p>
+    <p class="text-[18px] font-bold text-slate-900">{{.Stats.Objects}}</p>
+  </div>
+  <div>
+    <p class="text-[11px] font-medium uppercase tracking-[0.06em] text-slate-500">Memory</p>
+    <p class="text-[18px] font-bold text-slate-900">{{.Stats.Used}} <span class="text-[12px] font-medium text-slate-500">/ {{.Stats.Total}}</span></p>
+  </div>
+  <div>
+    <p class="text-[11px] font-medium uppercase tracking-[0.06em] text-slate-500">Evicted</p>
+    <p class="text-[18px] font-bold {{if .Stats.Evicted}}text-amber-700{{else}}text-slate-900{{end}}">{{.Stats.Evicted}}</p>
+  </div>
+</div>
+{{if .Stats.Evicted}}
+<p class="border-b border-line px-5 py-3 text-[12px] leading-[1.5] text-slate-500 sm:px-6">All cached services share one storage pool, and it has filled up: Varnish is evicting objects to make room, so a busy service can push out a quiet one's cache. Raise <span class="font-mono">-s malloc</span> in the varnish systemd override if this keeps growing.</p>
+{{end}}
+{{end}}
+{{if .Services}}
+<table class="w-full text-[13px]">
+  <thead>
+    <tr class="border-b border-line text-left text-[11px] uppercase tracking-[0.06em] text-slate-500">
+      <th class="px-5 py-2 font-medium sm:px-6">Service</th>
+      <th class="px-2 py-2 text-right font-medium">Hits</th>
+      <th class="px-2 py-2 text-right font-medium">Misses</th>
+      <th class="px-2 py-2 text-right font-medium" title="Not cacheable: authenticated, session, or marked uncacheable by the backend">Pass</th>
+      <th class="px-5 py-2 text-right font-medium sm:px-6">Hit ratio</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Services}}
+    <tr class="border-b border-canvas last:border-b-0">
+      <td class="px-5 py-2 font-semibold text-slate-900 sm:px-6">{{.App}}</td>
+      <td class="px-2 py-2 text-right font-mono text-slate-700">{{.Hits}}</td>
+      <td class="px-2 py-2 text-right font-mono text-slate-700">{{.Misses}}</td>
+      <td class="px-2 py-2 text-right font-mono text-slate-500">{{.Passes}}</td>
+      <td class="px-5 py-2 text-right font-mono font-semibold text-slate-900 sm:px-6">{{.Ratio}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<p class="px-5 py-4 text-[13px] text-slate-500 sm:px-6">No cached traffic in the last 24 hours.</p>
+{{end}}
+{{end}}
 {{end}}
 
 {{define "services-rows"}}

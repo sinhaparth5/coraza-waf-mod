@@ -110,6 +110,7 @@ type RequestLog struct {
 	JA4         string // JA4 TLS fingerprint (a_b_c format); empty for plain HTTP
 	VisitorID   string // FingerprintJS browser fingerprint from the bot-challenge bypass cookie; "" when unchallenged
 	BotScore    int    // anomaly score from bot signal analysis (0 = clean)
+	CacheStatus string // Varnish X-Cache verdict (HIT/MISS/PASS); "" when the request didn't go through Varnish
 }
 
 // Open opens the default SQLite-backed store at path. It is a thin wrapper
@@ -275,6 +276,7 @@ var schemaMigrations = []struct{ table, columnDef string }{
 	{"requests", "ja4 TEXT NOT NULL DEFAULT ''"},
 	{"requests", "visitor_id TEXT NOT NULL DEFAULT ''"},
 	{"requests", "bot_score INTEGER NOT NULL DEFAULT 0"},
+	{"requests", "cache_status TEXT NOT NULL DEFAULT ''"},
 	{"services", "tls_mode TEXT NOT NULL DEFAULT 'none'"},
 	{"services", "tls_cert_path TEXT NOT NULL DEFAULT ''"},
 	{"services", "tls_key_path TEXT NOT NULL DEFAULT ''"},
@@ -1065,8 +1067,8 @@ func (db *DB) InsertRequest(r RequestLog) (int64, error) {
 			(ts, app_name, real_ip, proxy_ip, country, method, host, path, query,
 			 status, blocked, rule_id, action, user_agent, duration_ms, headers_json,
 			 request_id, proto, tls_version, tls_cipher, tls_sni, asn_num, org,
-			 ja3_hash, ja4, visitor_id, bot_score)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 ja3_hash, ja4, visitor_id, bot_score, cache_status)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.Timestamp.UTC(),
 		r.AppName,
 		r.RealIP,
@@ -1094,7 +1096,45 @@ func (db *DB) InsertRequest(r RequestLog) (int64, error) {
 		r.JA4,
 		r.VisitorID,
 		r.BotScore,
+		r.CacheStatus,
 	)
+}
+
+// CacheResult counts one service's Varnish verdicts (requests.cache_status)
+// over a time window — the per-service view varnishstat can't give, since
+// Varnish's own counters are global across every service sharing it.
+type CacheResult struct {
+	App    string
+	Hits   int
+	Misses int
+	Passes int
+}
+
+// CacheResultsSince groups cache verdicts per service for requests at or
+// after since. Rows with no verdict (not cache-routed) are excluded.
+func (db *DB) CacheResultsSince(since time.Time) ([]CacheResult, error) {
+	rows, err := db.query(`
+		SELECT app_name,
+		       SUM(CASE WHEN cache_status = 'HIT'  THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN cache_status = 'MISS' THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN cache_status = 'PASS' THEN 1 ELSE 0 END)
+		FROM requests
+		WHERE ts >= ? AND cache_status != ''
+		GROUP BY app_name
+		ORDER BY app_name`, since.UTC())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []CacheResult
+	for rows.Next() {
+		var r CacheResult
+		if err := rows.Scan(&r.App, &r.Hits, &r.Misses, &r.Passes); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // LogDetail is the full representation of one request log row, including
@@ -1128,6 +1168,7 @@ type LogDetail struct {
 	JA4         string
 	VisitorID   string
 	BotScore    int
+	CacheStatus string
 }
 
 // GetRequestByID fetches a single request log entry including all enrichment
@@ -1139,13 +1180,13 @@ func (db *DB) GetRequestByID(id int) (*LogDetail, error) {
 		SELECT id, ts, app_name, real_ip, proxy_ip, country, method, host, path, query,
 		       status, blocked, rule_id, action, user_agent, duration_ms, headers_json,
 		       request_id, proto, tls_version, tls_cipher, tls_sni, asn_num, org,
-		       ja3_hash, ja4, visitor_id, bot_score
+		       ja3_hash, ja4, visitor_id, bot_score, cache_status
 		FROM requests WHERE id = ?`, id).Scan(
 		&d.ID, &d.Timestamp, &d.AppName, &d.RealIP, &d.ProxyIP, &d.Country,
 		&d.Method, &d.Host, &d.Path, &d.Query,
 		&d.Status, &blocked, &d.RuleID, &d.Action, &d.UserAgent, &d.Duration,
 		&d.HeadersJSON, &d.RequestID, &d.Proto, &d.TLSVersion, &d.TLSCipher,
-		&d.TLSSNI, &d.ASN, &d.Org, &d.JA3Hash, &d.JA4, &d.VisitorID, &d.BotScore,
+		&d.TLSSNI, &d.ASN, &d.Org, &d.JA3Hash, &d.JA4, &d.VisitorID, &d.BotScore, &d.CacheStatus,
 	)
 	if err != nil {
 		return nil, err
