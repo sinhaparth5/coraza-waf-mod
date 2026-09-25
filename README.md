@@ -24,7 +24,8 @@ A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraz
 - **IP & country blocking:** manual IP allow/block rules plus GeoIP2-based country blocking (MaxMind GeoLite2), with Cloudflare-aware real-IP extraction and opt-in trusted proxy CIDRs for `X-Forwarded-For` / `X-Real-IP`.
 - **TLS:** plain HTTP, automatic Let's Encrypt certificates, or your own cert/key, globally or per service. Upload a cert or enable auto-issue for a backend from the dashboard.
 - **Admin dashboard:** HTMX/Tailwind UI for live traffic and threat charts, filterable request logs with live tail, IP/geo rule management, and service management. Changes apply immediately, with no restart.
-- **Prometheus metrics:** `/admin/metrics` exposes request volume, latency, and per-cause block counters (IP/geo/WAF) alongside Go runtime metrics. It sits behind the same session-cookie admin auth as the rest of the dashboard, not HTTP Basic Auth, so a scrape job needs a logged-in session cookie rather than a username/password pair.
+- **Prometheus metrics:** `/admin/metrics` exposes request volume, latency, and per-cause block counters (IP/geo/WAF) alongside Go runtime metrics. For Prometheus, scrape `/admin/api/v1/metrics` with an API key from Settings (a read-only key is enough) via `authorization: { credentials: cwaf_… }`; the `/admin/metrics` path is for a logged-in browser session.
+- **Health probes:** `/_cz/healthz` (process up) and `/_cz/readyz` (database reachable) for load balancers and orchestrators; the Docker image wires `coraza-waf-mod healthcheck` into its `HEALTHCHECK`.
 - **SQLite storage:** request logs, IP/geo rules, services, and TLS state all live in one `waf.db` file. No Postgres, Redis, or MySQL to run.
 
 ## Installing

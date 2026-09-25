@@ -14,5 +14,8 @@ COPY --from=builder /coraza-waf-mod /coraza-waf-mod
 ENV TMPDIR=/data
 VOLUME ["/data"]
 EXPOSE 8080
+# Probes 127.0.0.1:8080; pass --url to the healthcheck subcommand if --listen changes.
+HEALTHCHECK --interval=30s --timeout=6s --start-period=30s CMD ["/coraza-waf-mod", "healthcheck"]
 ENTRYPOINT ["/coraza-waf-mod"]
-CMD ["--db", "/data/waf.db", "--certs", "/data/certs"]
+# No cron in a container, so prune old request logs in-process.
+CMD ["--db", "/data/waf.db", "--certs", "/data/certs", "--prune-interval", "24h"]

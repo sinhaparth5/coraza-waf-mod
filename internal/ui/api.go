@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"coraza-waf-mod/internal/notify/metrics"
 	"coraza-waf-mod/internal/security/waf"
 	"coraza-waf-mod/internal/services"
 	"coraza-waf-mod/internal/storage"
@@ -126,6 +127,10 @@ func (h *Handler) RegisterAPI(e *echo.Echo) {
 	api.GET("/bans", h.APIListBans)
 	api.POST("/bans", h.APICreateBan, h.requireWrite)
 	api.DELETE("/bans/:id", h.APIDeleteBan, h.requireWrite)
+
+	// Same exposition as the session-authed /metrics, reachable with a bearer
+	// key so a Prometheus scrape job can authenticate (a read-only key is enough).
+	api.GET("/metrics", echo.WrapHandler(metrics.Handler()))
 }
 
 func apiError(c echo.Context, status int, msg string) error {
