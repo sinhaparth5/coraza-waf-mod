@@ -14,6 +14,8 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-09-25
+
 ### Security
 
 - **Varnish no longer caches authenticated static assets** (#85). The VCL's
@@ -69,25 +71,5 @@ rather than growing this file forever.
   its cache off, or changing its backend, host or prefix purges its objects,
   so re-adding or re-enabling it never serves the old backend's content.
 
-## [2.0.2] - 2026-09-23
-
-### Added
-
-- **AI Usage page** (`/admin/ai-usage`) showing every Jev API call the
-  TypeSafe-backed ASN/hosting classifier (Settings' "AI Classification"
-  card) has made — timestamp, ASN, organization, hosting verdict, input/
-  output token counts, duration, and any error — plus 24h/7d call and
-  token totals. The classifier previously wasn't logged anywhere and
-  didn't even parse the API's `usage` field, so there was no way to see
-  where TypeSafe token usage was going. Logged to a new capped
-  `typesafe_calls` table (newest 2000 rows).
-
-  Note: `classifyASN` still only caches a *successful* Jev judgment — an
-  erroring call (bad key, rate limit, timeout) leaves the ASN uncached, so
-  every subsequent request from that ASN re-triggers a fresh API call
-  instead of the intended once-ever-per-ASN. Not changed by this release;
-  now at least visible per-call via the AI Usage page's error column
-  instead of only a one-line stderr log.
-
-[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.0.2...main
-[2.0.2]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.0.1...v2.0.2
+[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.1.0...main
+[2.1.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.0.2...v2.1.0
