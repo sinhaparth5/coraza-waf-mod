@@ -641,11 +641,14 @@ sub vcl_recv {
         set req.url = std.querysort(req.url);
     }
 
-    # The WAF's challenge-bypass cookie (cz_bot_ok) is meaningless to the
-    # backend and would needlessly fragment or bypass the cache — drop it,
-    # keeping any application cookies intact.
+    # Drop cookies the backend never reads — the WAF's challenge-bypass
+    # cookie (cz_bot_ok), Cloudflare's (__cf_bm, cf_clearance, _cfuvid) and
+    # client-side analytics (Google, Meta, Hotjar, Clarity) — keeping any
+    # application cookies intact. Every real browser carries some of these,
+    # so without this Rule B below passed nearly every page view.
     if (req.http.Cookie) {
-        set req.http.Cookie = regsuball(req.http.Cookie, "(^|;\s*)cz_bot_ok=[^;]*", "");
+        set req.http.Cookie = regsuball(req.http.Cookie, "(^|;\s*)(cz_bot_ok|__cf_bm|cf_clearance|_cfuvid|_ga(_[A-Za-z0-9]+)?|_gid|_gat(_[A-Za-z0-9]+)?|_gcl_[a-z]+|_fbp|_fbc|_hj[A-Za-z0-9_]*|_clck|_clsk|__utm[a-z])=[^;]*", "");
+        set req.http.Cookie = regsub(req.http.Cookie, "^;\s*", "");
         if (req.http.Cookie ~ "^\s*$") {
             unset req.http.Cookie;
         }
@@ -704,6 +707,13 @@ sub vcl_hash {
 }
 
 sub vcl_backend_response {
+    # Static assets were requested cookie-less (Rule A), so any Set-Cookie on
+    # them is a framework setting a cookie on every response, not per-user
+    # content — drop it, or the check below makes every asset uncacheable.
+    if (bereq.url ~ "\.(png|jpg|jpeg|gif|webp|avif|css|js|mjs|ico|svg|woff2?|ttf|map)(\?.*)?$") {
+        unset beresp.http.Set-Cookie;
+    }
+
     # Never cache responses that set cookies — that is per-user content, and
     # caching it would leak one user's session to everyone.
     if (beresp.http.Set-Cookie) {

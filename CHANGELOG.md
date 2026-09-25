@@ -14,6 +14,10 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Fixed
+
+- Varnish passed nearly every page view: the VCL now also drops Cloudflare (`__cf_bm`, `cf_clearance`, `_cfuvid`) and analytics (`_ga`, `_gid`, `_fbp`, Hotjar, Clarity…) cookies before its cookie check, and strips `Set-Cookie` from static-asset responses so a framework cookie on every response no longer makes assets uncacheable. Re-run `install.sh` or copy `deploy/varnish/default.vcl` to `/etc/varnish/` and `systemctl reload varnish`.
+
 ## [2.2.1] - 2026-09-25
 
 ### Fixed
