@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
@@ -475,9 +476,35 @@ func (h *Handler) LoginPost(c echo.Context) error {
 // issueSession creates the session row, sets the cookie, and lands on the
 // dashboard — the final step of both the password-only and the 2FA flow.
 func (h *Handler) issueSession(c echo.Context) error {
-	token, err := h.db.CreateSession(h.clientIP(c.Request()), c.Request().UserAgent())
-	if err != nil {
+	if err := h.startSession(c, h.clientIP(c.Request())); err != nil {
 		return h.renderLogin(c, "Internal error. Please try again.")
+	}
+	return c.Redirect(http.StatusFound, h.cfg.Admin.Path)
+}
+
+// deviceCookie is a random per-browser ID that outlives sessions, so a
+// re-login from the same browser updates its "Registered devices" row
+// rather than adding a new one. It is not a credential: it only picks
+// which history row a login replaces.
+const deviceCookie = "cz_device"
+
+// startSession creates the session row and sets the session and device
+// cookies. Shared by the password/2FA and passkey login flows.
+func (h *Handler) startSession(c echo.Context, ip string) error {
+	deviceID := ""
+	if ck, err := c.Cookie(deviceCookie); err == nil && len(ck.Value) == 32 {
+		if _, err := hex.DecodeString(ck.Value); err == nil {
+			deviceID = ck.Value
+		}
+	}
+	if deviceID == "" {
+		b := make([]byte, 16)
+		rand.Read(b) //nolint — never errors on modern platforms
+		deviceID = hex.EncodeToString(b)
+	}
+	token, err := h.db.CreateSession(ip, c.Request().UserAgent(), deviceID)
+	if err != nil {
+		return err
 	}
 	c.SetCookie(&http.Cookie{
 		Name:     sessionCookie,
@@ -488,7 +515,16 @@ func (h *Handler) issueSession(c echo.Context) error {
 		SameSite: http.SameSiteLaxMode,
 		Secure:   secureCookie(c),
 	})
-	return c.Redirect(http.StatusFound, h.cfg.Admin.Path)
+	c.SetCookie(&http.Cookie{
+		Name:     deviceCookie,
+		Value:    deviceID,
+		HttpOnly: true,
+		Path:     "/",
+		MaxAge:   int((400 * 24 * time.Hour).Seconds()), // Chrome's cookie lifetime cap
+		SameSite: http.SameSiteLaxMode,
+		Secure:   secureCookie(c),
+	})
+	return nil
 }
 
 func (h *Handler) Logout(c echo.Context) error {

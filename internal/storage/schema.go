@@ -164,7 +164,8 @@ func (db *DB) schemaStatements() []string {
 			ip             TEXT NOT NULL DEFAULT '',
 			user_agent     TEXT NOT NULL DEFAULT '',
 			last_active_at TEXT NOT NULL DEFAULT '',
-			revoked_at     TEXT NOT NULL DEFAULT ''
+			revoked_at     TEXT NOT NULL DEFAULT '',
+			device_id      TEXT NOT NULL DEFAULT ''
 		)`,
 
 		// key_hash is a SHA-256 hex digest (64 chars, see ui.CreateAPIKey).

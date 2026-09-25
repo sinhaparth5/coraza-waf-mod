@@ -184,18 +184,8 @@ func (h *Handler) FinishPasskeyLogin(c echo.Context) error {
 	// JS-driven flow (fetch, not a form submit): tell the browser where to
 	// go instead of issuing an HTTP redirect, which fetch would follow
 	// internally without ever navigating the page.
-	tok, err := h.db.CreateSession(ip, c.Request().UserAgent())
-	if err != nil {
+	if err := h.startSession(c, ip); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal error. Please try again."})
 	}
-	c.SetCookie(&http.Cookie{
-		Name:     sessionCookie,
-		Value:    tok,
-		HttpOnly: true,
-		Path:     "/",
-		MaxAge:   int((24 * time.Hour).Seconds()),
-		SameSite: http.SameSiteLaxMode,
-		Secure:   secureCookie(c),
-	})
 	return c.JSON(http.StatusOK, map[string]string{"redirect": h.cfg.Admin.Path})
 }

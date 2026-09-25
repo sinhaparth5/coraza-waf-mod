@@ -305,6 +305,7 @@ var schemaMigrations = []struct{ table, columnDef string }{
 	{"sessions", "user_agent TEXT NOT NULL DEFAULT ''"},
 	{"sessions", "last_active_at TEXT NOT NULL DEFAULT ''"},
 	{"sessions", "revoked_at TEXT NOT NULL DEFAULT ''"},
+	{"sessions", "device_id TEXT NOT NULL DEFAULT ''"},
 	{"api_keys", "read_only INTEGER NOT NULL DEFAULT 0"},
 	{"services", "request_schema TEXT NOT NULL DEFAULT ''"},
 	{"services", "schema_mode TEXT NOT NULL DEFAULT 'off'"},
@@ -2117,6 +2118,11 @@ func parseSessionTime(v string) time.Time {
 // CreateSession generates a random token, stores it, and returns it for use
 // as a session cookie value.
 //
+// deviceID is the browser's long-lived device cookie (see ui.deviceCookie).
+// A login replaces that device's earlier rows instead of adding another, so
+// the "Registered devices" card lists each browser once, not once per login.
+// Rows from before device IDs existed are matched on identical IP + user agent.
+//
 // An account may only have one live session at a time, so this first
 // revokes every session that is currently live: logging in on a new device
 // immediately signs the old one out, and the old device is told why on its
@@ -2125,7 +2131,7 @@ func parseSessionTime(v string) time.Time {
 // point — the alternative (refusing the new login while an old session
 // lives) locks the owner out until the intruder's session happens to
 // expire.
-func (db *DB) CreateSession(ip, userAgent string) (string, error) {
+func (db *DB) CreateSession(ip, userAgent, deviceID string) (string, error) {
 	// Opportunistically sweep aged-out rows — logins are the only way the
 	// table grows, so pruning here keeps it bounded without a background
 	// goroutine (the prune CLI covers deployments that never log in again).
@@ -2136,13 +2142,21 @@ func (db *DB) CreateSession(ip, userAgent string) (string, error) {
 	rand.Read(b) //nolint — never errors on modern platforms
 	token := hex.EncodeToString(b)
 	now := time.Now().UTC().Format(time.RFC3339)
+	if deviceID != "" {
+		if _, err := db.exec(
+			`DELETE FROM sessions WHERE device_id = ? OR (device_id = '' AND ip = ? AND user_agent = ?)`,
+			deviceID, ip, userAgent,
+		); err != nil {
+			return "", err
+		}
+	}
 	if _, err := db.exec(`UPDATE sessions SET revoked_at = ? WHERE revoked_at = ''`, now); err != nil {
 		return "", err
 	}
 	_, err := db.exec(
-		`INSERT INTO sessions (token, created_at, ip, user_agent, last_active_at, revoked_at)
-		 VALUES (?, ?, ?, ?, ?, '')`,
-		token, now, ip, userAgent, now,
+		`INSERT INTO sessions (token, created_at, ip, user_agent, last_active_at, revoked_at, device_id)
+		 VALUES (?, ?, ?, ?, ?, '', ?)`,
+		token, now, ip, userAgent, now, deviceID,
 	)
 	return token, err
 }
