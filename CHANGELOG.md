@@ -14,6 +14,10 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Fixed
+
+- Settings → Registered devices no longer adds a new row every time the same browser logs in; a `cz_device` cookie ties logins to one row per device.
+
 ## [2.2.0] - 2026-09-25
 
 ### Added

@@ -51,7 +51,7 @@ func TestRevokeDevice(t *testing.T) {
 	}
 
 	t.Run("live device is revoked, not deleted", func(t *testing.T) {
-		target, err := db.CreateSession("10.0.0.1", "curl/8.5.0")
+		target, err := db.CreateSession("10.0.0.1", "curl/8.5.0", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -70,11 +70,11 @@ func TestRevokeDevice(t *testing.T) {
 	})
 
 	t.Run("signed-out device is dropped from the history", func(t *testing.T) {
-		stale, err := db.CreateSession("10.0.0.2", "curl/8.5.0")
+		stale, err := db.CreateSession("10.0.0.2", "curl/8.5.0", "")
 		if err != nil {
 			t.Fatal(err)
 		}
-		mine, err := db.CreateSession("10.0.0.3", "curl/8.5.0") // revokes stale
+		mine, err := db.CreateSession("10.0.0.3", "curl/8.5.0", "") // revokes stale
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -97,7 +97,7 @@ func TestRevokeDevice(t *testing.T) {
 	})
 
 	t.Run("current device is never touched", func(t *testing.T) {
-		mine, err := db.CreateSession("10.0.0.4", "curl/8.5.0")
+		mine, err := db.CreateSession("10.0.0.4", "curl/8.5.0", "")
 		if err != nil {
 			t.Fatal(err)
 		}
