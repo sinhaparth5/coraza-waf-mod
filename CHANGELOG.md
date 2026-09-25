@@ -14,6 +14,10 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Security
+
+- **Bot challenge redirect could be pointed off-site or at `javascript:`** (CodeQL `js/xss-through-dom`). The `r` parameter on `/_cz/challenge` wasn't covered by the challenge signature, and the page navigated to it after the proof-of-work was solved. An attacker could take a freshly signed challenge link, swap `r` for `javascript:…` or `//evil.com`, and send it to a victim. Solving is automatic, so the victim only had to click: the result was XSS on the protected service's own domain, or an open redirect. The page now accepts only a same-origin path (one leading `/`, no `//` or `/\`, no control characters) and falls back to `/` for anything else.
+
 ## [2.2.3] - 2026-09-25
 
 ### Added
