@@ -47,6 +47,32 @@
       </div>
   </div>
 
+  <!-- ── Dry-run candidate rules against recent traffic (issue #8) ── -->
+  <div class="card p-5">
+    {{template "panel-header" (map "Icon" "hgi-test-tube" "Title" "Dry-run Rules")}}
+    <form hx-post="/admin/waf-rules/dry-run" hx-target="#waf-dryrun-result" hx-swap="innerHTML" hx-indicator="#waf-dryrun-spinner" class="flex flex-col gap-4">
+      <div>
+        <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Candidate rules</label>
+        <textarea name="rules" rows="5" placeholder='SecRule ARGS "@contains badword" "id:1000001,phase:2,deny,status:403,msg:&apos;test&apos;"'
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[13px] font-mono outline-hidden transition-[border] duration-150 text-slate-800 bg-white"></textarea>
+      </div>
+      <div class="flex flex-wrap items-end gap-4">
+        <div>
+          <label class="block text-[12px] text-slate-500 mb-[6px] font-medium">Replay last N requests</label>
+          <input name="limit" type="number" min="1" max="2000" value="500"
+            class="focus-green w-32 border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden transition-[border] duration-150 text-slate-800 bg-white"/>
+        </div>
+        <button type="submit" class="btn-primary flex items-center justify-center gap-2">
+          <i class="hgi hgi-stroke hgi-rounded hgi-play text-sm"></i>
+          Run dry run
+        </button>
+        <span id="waf-dryrun-spinner" class="htmx-indicator text-[12px] text-slate-500">Compiling engines and replaying…</span>
+      </div>
+    </form>
+    <div id="waf-dryrun-result" class="mt-4"></div>
+    <p class="mt-4 border-t border-canvas pt-4 text-[12px] text-slate-500">Replays logged method, URL and headers through two throwaway engines — the current global rules, and the same plus your candidate — and lists every request whose verdict changes. Bodies aren't logged, so body rules can't match here. Nothing is saved and live traffic is never affected.</p>
+  </div>
+
   <!-- ── Live content spans the full page ── -->
   <div id="waf-content">
     {{template "waf-content" .}}
@@ -215,4 +241,38 @@
   </div>
 
 </div>
+{{end}}
+
+{{define "waf-dryrun-result"}}
+{{if .Error}}
+<p class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-[12px] text-red-700 break-all">{{.Error}}</p>
+{{else}}
+<p class="text-[12px] text-slate-600 mb-2">Replayed {{.Replayed}} requests · <span class="font-semibold">{{len .Hits}}</span> would change verdict.</p>
+{{if .Hits}}
+<div class="table-scroll"><table class="w-full text-[13px]">
+  <thead>
+    <tr class="text-slate-400 text-[11px] font-semibold uppercase tracking-wide bg-surface">
+      <th class="px-4 py-2 text-left">Log</th>
+      <th class="px-4 py-2 text-left">Request</th>
+      <th class="px-4 py-2 text-left">Now</th>
+      <th class="px-4 py-2 text-left">With candidate</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Hits}}
+    <tr class="border-t border-canvas">
+      <td class="px-4 py-2 font-mono text-slate-500">#{{.ID}}</td>
+      <td class="px-4 py-2 font-mono text-slate-700 break-all"><span class="font-semibold">{{.Method}}</span> {{.Host}}{{.Target}} <span class="font-sans text-[11px] text-slate-400">{{.AppName}}</span></td>
+      <td class="px-4 py-2">{{template "waf-dryrun-verdict" .Before}}</td>
+      <td class="px-4 py-2">{{template "waf-dryrun-verdict" .After}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table></div>
+{{end}}
+{{end}}
+{{end}}
+
+{{define "waf-dryrun-verdict"}}
+{{if .Blocked}}<span class="text-[11px] font-semibold px-[10px] py-1 rounded-sm bg-red-100 text-red-700">Block{{if .RuleID}} · {{.RuleID}}{{end}}</span>{{else}}<span class="text-[11px] font-semibold px-[10px] py-1 rounded-sm bg-green-100 text-green-700">Pass</span>{{end}}
 {{end}}

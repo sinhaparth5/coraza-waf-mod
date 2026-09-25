@@ -85,6 +85,13 @@ type bodyReplay struct {
 // disabledRuleIDs lists CRS rule IDs to suppress via SecRuleRemoveById — used
 // to handle false positives without editing config files or restarting.
 func New(cfg config.WAFConfig, disabledRuleIDs []int) (*Engine, error) {
+	return NewWithDirectives(cfg, disabledRuleIDs, "")
+}
+
+// NewWithDirectives is New plus extra directives loaded last, after CRS and
+// any rules dir — the WAF Rules dry-run (issue #8) uses it to compile a
+// candidate rule snippet into a throwaway engine that never sees live traffic.
+func NewWithDirectives(cfg config.WAFConfig, disabledRuleIDs []int, extra string) (*Engine, error) {
 	if !cfg.Enabled {
 		return &Engine{enabled: false}, nil
 	}
@@ -123,6 +130,9 @@ SecDebugLogLevel 0
 	// Load any extra custom rules on top of CRS.
 	if cfg.RulesDir != "" {
 		wafCfg = wafCfg.WithDirectives(fmt.Sprintf(`Include "%s/*.conf"`, cfg.RulesDir))
+	}
+	if strings.TrimSpace(extra) != "" {
+		wafCfg = wafCfg.WithDirectives(extra)
 	}
 
 	w, err := coraza.NewWAF(wafCfg)

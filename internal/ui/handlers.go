@@ -349,6 +349,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.GET("/access-log/stream", h.AccessLogStream)
 	g.GET("/logs/:id", h.LogDetail)
 	g.POST("/logs/feedback/:id", h.MarkLogFeedback)
+	g.POST("/logs/exception/:id", h.CreateLogException)
 	g.GET("/ip-rules", h.IPRulesPage)
 	g.GET("/ip-rules/rows", h.IPRulesRows)
 	g.POST("/ip-rules", h.AddIPRule)
@@ -397,6 +398,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/settings/devices/revoke-others", h.RevokeOtherDevices)
 	g.GET("/waf-rules", h.WAFRulesPage)
 	g.POST("/waf-rules/disable", h.DisableWAFRule)
+	g.POST("/waf-rules/dry-run", h.WAFDryRun)
 	g.DELETE("/waf-rules/:id", h.EnableWAFRule)
 	g.DELETE("/waf-rules/service/:id", h.EnableWAFRuleForService)
 	g.POST("/waf-rules/feedback-config", h.SaveWAFFeedbackConfig)
@@ -1185,6 +1187,33 @@ func (h *Handler) MarkLogFeedback(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// CreateLogException disables the rule that blocked a log entry for that
+// entry's service only (issue #7), reloading the WAF live. Rule and service
+// come from the stored row, never the client, so this can't be aimed at an
+// arbitrary rule/service pair.
+func (h *Handler) CreateLogException(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
+	}
+	d, err := h.db.GetRequestByID(id)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "not found"})
+	}
+	if !d.Blocked || d.RuleID == 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "log entry has no WAF rule"})
+	}
+	if _, ok := h.registry.Proxy(d.AppName); !ok {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "service " + d.AppName + " no longer exists"})
+	}
+	reason := fmt.Sprintf("From log #%d: %s %s", d.ID, d.Method, d.Path)
+	if err := h.db.DisableWAFRuleForService(d.AppName, d.RuleID, reason); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	h.reloadWAF()
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok", "service": d.AppName})
 }
 
 // ── IP Rules ───────────────────────────────────────────────────────────────────

@@ -702,6 +702,24 @@
       });
   }
 
+  // Issue #7: disable the blocking rule for this entry's service only.
+  var exceptionBtn = document.getElementById('ld-exception');
+  if (exceptionBtn) exceptionBtn.addEventListener('click', function () {
+    if (!currentLogID || !confirm('Disable this rule for this service? The WAF reloads immediately.')) return;
+    if (feedbackStatus) feedbackStatus.textContent = 'Saving…';
+    fetch(adminPath + '/logs/exception/' + currentLogID, {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': document.body.dataset.csrf || '' }
+    })
+      .then(function (r) { return r.json().then(function (j) { return r.ok ? j : Promise.reject(j.error); }); })
+      .then(function (j) {
+        if (feedbackStatus) feedbackStatus.textContent = 'Rule disabled for ' + j.service + '.';
+      })
+      .catch(function (e) {
+        if (feedbackStatus) feedbackStatus.textContent = typeof e === 'string' ? e : 'Failed to save.';
+      });
+  });
+
   if (feedbackFpBtn) feedbackFpBtn.addEventListener('click', function () { sendFeedback(true); });
   if (feedbackTpBtn) feedbackTpBtn.addEventListener('click', function () { sendFeedback(false); });
 

@@ -158,13 +158,13 @@ func (r *Registry) Reload(db *storage.DB) error {
 			// X-Cache-Service keys both the cache-hash partition in the VCL
 			// and the return listener's backend lookup; X-Waf-Backend is
 			// diagnostic (varnishlog shows where the miss will land).
-			stock := rp.Director
+			stock := rp.Director //nolint:staticcheck // SA1019: NewSingleHostReverseProxy is Director-based; moving to Rewrite changes X-Forwarded-* handling, separate change
 			varnishAddr := vcfg.Addr
 			backendHost := target.Host
 			cacheBySession := s.CacheBySession
 			sessionCookieName := s.SessionCookieName
 			ttlFloor, ttlCeiling, grace, keep := s.CacheTTLFloor, s.CacheTTLCeiling, s.CacheGrace, s.CacheKeep
-			rp.Director = func(req *http.Request) {
+			rp.Director = func(req *http.Request) { //nolint:staticcheck // SA1019: see above
 				stock(req)
 				for _, hn := range spoofableHostHeaders {
 					req.Header.Del(hn)

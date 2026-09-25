@@ -64,7 +64,7 @@ func TestVarnishRouting(t *testing.T) {
 		req.Header.Set("X-Original-URL", "/admin")
 		req.Header.Set("X-Cache-Service", "spoofed")
 		req.Header.Set("X-Waf-Backend", "6.6.6.6:666")
-		rp.Director(req)
+		rp.Director(req) //nolint:staticcheck // SA1019: exercises the Director under test
 		return req
 	}
 
