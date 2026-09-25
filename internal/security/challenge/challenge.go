@@ -148,11 +148,28 @@ func (c *Challenger) ChallengeURL(originalPath string) string {
 		nonce, url.QueryEscape(originalPath), expiry, sig)
 }
 
+// localRedirect returns s if it is a same-origin path, else "/". The r
+// parameter is not covered by the challenge signature, so without this a
+// crafted link could send a solving browser to javascript: (XSS on the
+// service's origin) or to another site (open redirect). Control characters
+// are rejected because browsers strip them: "/\t/evil" navigates as "//evil".
+func localRedirect(s string) string {
+	if len(s) == 0 || s[0] != '/' || (len(s) > 1 && (s[1] == '/' || s[1] == '\\')) {
+		return "/"
+	}
+	for _, c := range s {
+		if c < 0x20 || c == 0x7f {
+			return "/"
+		}
+	}
+	return s
+}
+
 // ServePage renders the JS PoW challenge HTML. Handles GET /_cz/challenge.
 func (c *Challenger) ServePage(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	nonce := q.Get("n")
-	redir := q.Get("r")
+	redir := localRedirect(q.Get("r"))
 	expStr := q.Get("exp")
 	sig := q.Get("sig")
 

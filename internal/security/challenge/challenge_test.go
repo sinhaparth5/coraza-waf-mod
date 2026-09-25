@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -330,5 +331,37 @@ func TestVerifyBodyCapped(t *testing.T) {
 	c.ServeVerify(rec, httptest.NewRequest(http.MethodPost, "/_cz/verify", strings.NewReader(huge)))
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("oversized verify body returned %d, want 400", rec.Code)
+	}
+}
+
+func TestLocalRedirect(t *testing.T) {
+	for in, want := range map[string]string{
+		"/":                          "/",
+		"/shop/cart?id=1&x=%2F%2F":   "/shop/cart?id=1&x=%2F%2F",
+		"":                           "/",
+		"javascript:alert(1)":        "/",
+		"https://evil.com":           "/",
+		"//evil.com":                 "/",
+		"/\\evil.com":                "/",
+		"/\t/evil.com":               "/",
+		"/\n/evil.com":               "/",
+		" /x":                        "/",
+		"JaVaScRiPt:alert(1)//\x00/": "/",
+	} {
+		if got := localRedirect(in); got != want {
+			t.Errorf("localRedirect(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A signed challenge link with a tampered r must not carry it into the page.
+func TestServePageDropsForeignRedirect(t *testing.T) {
+	c := New("secret", 3600, 5)
+	u := strings.Replace(c.ChallengeURL("/ok"), "r=%2Fok", "r="+url.QueryEscape("javascript:alert(1)"), 1)
+	rec := httptest.NewRecorder()
+	c.ServePage(rec, httptest.NewRequest(http.MethodGet, u, nil))
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK || strings.Contains(body, "javascript:") || !strings.Contains(body, `"redirect":"/"`) {
+		t.Fatalf("status %d, page still carries attacker redirect or lacks fallback", rec.Code)
 	}
 }
