@@ -14,6 +14,8 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+## [2.2.3] - 2026-09-25
+
 ### Added
 
 - **Create a WAF exception from the log view** (#7). A blocked request's detail modal now has a **Create exception** button. It disables the rule that blocked the request for that request's service only, and the WAF reloads live. The rule and service are read from the stored log row, never from the browser. The exception shows up under **Per-Service Exceptions** on the WAF Rules page, where you can re-enable the rule.
@@ -23,11 +25,5 @@ rather than growing this file forever.
 
 - CI now builds with Go 1.27 to match `go.mod`. Before this, every job failed with `go.mod requires go >= 1.27.0`. golangci-lint moved to v2.14.0, the first release built with Go 1.27.
 
-## [2.2.2] - 2026-09-25
-
-### Fixed
-
-- Varnish passed nearly every page view: the VCL now also drops Cloudflare (`__cf_bm`, `cf_clearance`, `_cfuvid`) and analytics (`_ga`, `_gid`, `_fbp`, Hotjar, Clarity…) cookies before its cookie check, and strips `Set-Cookie` from static-asset responses so a framework cookie on every response no longer makes assets uncacheable. Re-run `install.sh` or copy `deploy/varnish/default.vcl` to `/etc/varnish/` and `systemctl reload varnish`.
-
-[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.2.2...main
-[2.2.2]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.2.1...v2.2.2
+[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.2.3...main
+[2.2.3]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.2.2...v2.2.3
