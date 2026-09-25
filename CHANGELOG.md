@@ -14,15 +14,11 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+## [2.2.2] - 2026-09-25
+
 ### Fixed
 
 - Varnish passed nearly every page view: the VCL now also drops Cloudflare (`__cf_bm`, `cf_clearance`, `_cfuvid`) and analytics (`_ga`, `_gid`, `_fbp`, Hotjar, Clarity…) cookies before its cookie check, and strips `Set-Cookie` from static-asset responses so a framework cookie on every response no longer makes assets uncacheable. Re-run `install.sh` or copy `deploy/varnish/default.vcl` to `/etc/varnish/` and `systemctl reload varnish`.
 
-## [2.2.1] - 2026-09-25
-
-### Fixed
-
-- Settings → Registered devices no longer adds a new row every time the same browser logs in; a `cz_device` cookie ties logins to one row per device.
-
-[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.2.1...main
-[2.2.1]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.2.0...v2.2.1
+[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.2.2...main
+[2.2.2]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.2.1...v2.2.2
