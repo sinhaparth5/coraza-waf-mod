@@ -8,7 +8,7 @@ LDFLAGS  := -s -w -X main.version=$(VERSION)
 
 # Keep in sync with .github/workflows/ci.yml's golangci-lint-action `version:`
 # input, so a clean local `make lint` and CI never disagree on results.
-LINT_VERSION := v2.12.2
+LINT_VERSION := v2.14.0
 
 .PHONY: build generate css run test lint hooks clean dist checksums tag
 

@@ -1202,6 +1202,28 @@ func (db *DB) GetRequestByID(id int) (*LogDetail, error) {
 	return &d, nil
 }
 
+// ListReplayRequests returns the newest limit request rows with just the
+// fields the WAF dry-run (issue #8) needs to rebuild each request, newest
+// first. Bodies are never logged, so replay covers headers/URL only.
+func (db *DB) ListReplayRequests(limit int) ([]RequestLog, error) {
+	rows, err := db.query(
+		`SELECT id, ts, app_name, real_ip, method, host, path, query, headers_json
+		 FROM requests ORDER BY id DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []RequestLog
+	for rows.Next() {
+		var r RequestLog
+		if err := rows.Scan(&r.ID, &r.Timestamp, &r.AppName, &r.RealIP, &r.Method, &r.Host, &r.Path, &r.Query, &r.HeadersJSON); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // --- Query helpers (used by dashboard later) ---
 
 type Stats struct {

@@ -16,7 +16,7 @@ A single-binary Go WAF + reverse proxy: embedded Coraza v3 (OWASP CRS) for reque
 
 ## Commands
 
-Requires **Go 1.25+**.
+Requires **Go 1.27+**.
 
 ```bash
 make build       # go generate (minifies JS) + go build -> ./coraza-waf-mod

@@ -59,7 +59,7 @@ The installer detects the existing binary at `/usr/local/bin/coraza-waf-mod` and
 
 ### Option B: build from source
 
-Requires Go 1.25+.
+Requires Go 1.27+.
 
 ```bash
 git clone https://github.com/sinhaparth5/coraza-waf-mod.git
