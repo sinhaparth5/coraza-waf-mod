@@ -41,6 +41,7 @@ type DB struct {
 	autobanFn     func(RequestLog)
 	threatScoreFn func(RequestLog)
 	accessLogFn   func(RequestLog)
+	warehouseFn   func(RequestLog)
 	secretGCM     cipher.AEAD // non-nil = secrets-at-rest encryption active (see secretenc.go)
 }
 
@@ -71,6 +72,15 @@ func (db *DB) SetBroadcastFn(fn func(RequestLog)) {
 // writer without coupling storage to the accesslog package.
 func (db *DB) SetAccessLogFn(fn func(RequestLog)) {
 	db.accessLogFn = fn
+}
+
+// SetWarehouseFn registers a callback invoked (from the log worker
+// goroutine) after each successful DB insert, to copy the entry into an
+// external analytics warehouse. Like every other fan-out hook the callback
+// must be fast; warehouse.Sink.Push satisfies that by being a non-blocking
+// channel send onto its own batching goroutine.
+func (db *DB) SetWarehouseFn(fn func(RequestLog)) {
+	db.warehouseFn = fn
 }
 
 // SetThreatScoreFn registers a callback invoked (from the log worker
@@ -185,6 +195,9 @@ func (db *DB) runLogWorker() {
 			}
 			if db.accessLogFn != nil {
 				db.accessLogFn(entry)
+			}
+			if db.warehouseFn != nil {
+				db.warehouseFn(entry)
 			}
 		}
 	}
@@ -3318,6 +3331,61 @@ func (db *DB) GetIPThreatScores(ips []string) (map[string]int, error) {
 			return nil, err
 		}
 		out[ip] = score
+	}
+	return out, rows.Err()
+}
+
+// ListIPThreatScores returns every recorded per-IP composite score with its
+// full component breakdown, newest first. Unlike GetIPThreatScores (a bulk
+// total-only lookup for one page of the IP Rules table), this is a whole-
+// table read for the warehouse snapshot — the breakdown is the point there,
+// since "why did this IP score 70" is exactly the question the dashboard
+// can't answer today.
+func (db *DB) ListIPThreatScores() ([]IPThreatScore, error) {
+	rows, err := db.query(`SELECT ip, total_score, autoban_score, bot_score,
+	                              asn_score, geo_score, ja4_score, updated_at
+	                       FROM ip_threat_scores ORDER BY updated_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []IPThreatScore
+	for rows.Next() {
+		var s IPThreatScore
+		if err := rows.Scan(&s.IP, &s.Total, &s.AutobanScore, &s.BotScore,
+			&s.ASNScore, &s.GeoScore, &s.JA4Score, &s.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// JA4Reputation is one TLS fingerprint's lifetime counters, as stored by
+// BumpJA4Reputation.
+type JA4Reputation struct {
+	JA4         string
+	Hits        int
+	BlockedHits int
+	LastSeen    time.Time
+}
+
+// ListJA4Reputation returns every tracked JA4 fingerprint with its lifetime
+// hit counts, most recently seen first.
+func (db *DB) ListJA4Reputation() ([]JA4Reputation, error) {
+	rows, err := db.query(
+		`SELECT ja4, hits, blocked_hits, last_seen FROM ja4_reputation ORDER BY last_seen DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []JA4Reputation
+	for rows.Next() {
+		var r JA4Reputation
+		if err := rows.Scan(&r.JA4, &r.Hits, &r.BlockedHits, &r.LastSeen); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
 	}
 	return out, rows.Err()
 }

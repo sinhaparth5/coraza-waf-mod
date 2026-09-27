@@ -33,6 +33,7 @@ import (
 	"coraza-waf-mod/internal/notify/accesslog"
 	"coraza-waf-mod/internal/notify/mailer"
 	"coraza-waf-mod/internal/notify/metrics"
+	"coraza-waf-mod/internal/notify/warehouse"
 	"coraza-waf-mod/internal/notify/webhook"
 	"coraza-waf-mod/internal/proxy"
 	"coraza-waf-mod/internal/security/adaptive"
@@ -103,6 +104,7 @@ func main() {
 	accessLogMaxSizeMB := fs.Int("access-log-max-size-mb", 100, "rotate access log after this many MB")
 	accessLogMaxBackups := fs.Int("access-log-max-backups", 5, "number of rotated access log files to keep")
 	dbKeyFile := fs.String("db-key-file", "", "key file for AES-256-GCM encryption of stored secrets at rest (empty = plaintext)")
+	warehouseURL := fs.String("warehouse-url", "", "ClickHouse HTTP endpoint to mirror telemetry to for analytics, e.g. http://clickhouse:8123/?database=waf (empty = disabled)")
 	fs.Parse(os.Args[1:]) //nolint // ExitOnError: never returns an error to check
 
 	cfg := config.Defaults()
@@ -376,6 +378,23 @@ func main() {
 		// runLogWorker drains any queued entries during shutdown.
 		defer accessLogWriter.Close()
 		db.SetAccessLogFn(accessLogWriter.Push)
+	}
+
+	// ClickHouse analytics mirror (issue #94): opt-in second copy of
+	// telemetry for long-term analysis, so the --retention prune above
+	// stops being a data-loss event. Like the access log, disabled unless
+	// its flag is set. A failure here is fatal at startup — a silently
+	// non-reporting warehouse is worse than a refused boot — but once
+	// running, Push drops rather than blocking the log worker.
+	if *warehouseURL != "" {
+		sink, err := warehouse.New(*warehouseURL, db)
+		if err != nil {
+			log.Fatalf("warehouse: %v", err)
+		}
+		// Same LIFO reasoning as the access log writer: registered after
+		// db.Close() so it still exists while the log queue drains.
+		defer sink.Stop()
+		db.SetWarehouseFn(sink.Push)
 	}
 
 	// Bot protection settings come entirely from the DB (managed via Settings page).

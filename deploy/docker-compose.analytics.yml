@@ -1,0 +1,70 @@
+# Reference stack for the ClickHouse analytics mirror (issue #94).
+#
+#   docker compose -f deploy/docker-compose.analytics.yml up -d
+#
+# Only the WAF publishes ports. ClickHouse and Metabase stay on the internal
+# network with no host binding — the warehouse holds a full copy of request
+# telemetry, so it must not be reachable from the internet.
+#
+# To reach Metabase from outside, do not publish its port: add it as a
+# service on /admin/services (Host "analytics.example.com", backend
+# "http://metabase:3000") and it inherits this WAF's TLS, bot challenge,
+# geo rules and rate limiting. One caveat — proxying it that way means
+# every Metabase page load becomes a request row that ships to ClickHouse
+# and shows up in your own analytics. Filter it out by app_name.
+#
+# The WAF creates its database and tables on first connect; there is no
+# init script to run.
+
+services:
+  waf:
+    image: ghcr.io/sinhaparth5/coraza-waf-mod:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - waf-data:/data
+    command:
+      - --db=/data/waf.db
+      - --certs=/data/certs
+      - --prune-interval=24h
+      - --warehouse-url=http://clickhouse:8123/?database=waf
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks: [analytics]
+    restart: unless-stopped
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    environment:
+      CLICKHOUSE_DB: waf
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [analytics]
+    restart: unless-stopped
+
+  metabase:
+    image: metabase/metabase:latest
+    volumes:
+      - metabase-data:/metabase.db
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks: [analytics]
+    restart: unless-stopped
+
+networks:
+  analytics:
+
+volumes:
+  waf-data:
+  clickhouse-data:
+  metabase-data:
