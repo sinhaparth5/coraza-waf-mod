@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"coraza-waf-mod/internal/config"
-	"coraza-waf-mod/internal/notify/accesslog"
 	"coraza-waf-mod/internal/notify/mailer"
 	"coraza-waf-mod/internal/notify/metrics"
 	"coraza-waf-mod/internal/security/blocklist"
@@ -58,11 +57,14 @@ var funcs = template.FuncMap{
 		return t.Format("02 Jan 15:04:05")
 	},
 	"today": func() string { return time.Now().Format("2 January 2006") },
+	// truncate counts runes, not bytes: slicing bytes could cut a multi-byte
+	// character in half and render U+FFFD.
 	"truncate": func(s string, n int) string {
-		if len(s) <= n {
+		r := []rune(s)
+		if len(r) <= n {
 			return s
 		}
-		return s[:n] + "…"
+		return string(r[:n]) + "…"
 	},
 	"shortDate": func(s string) string {
 		if len(s) < 10 {
@@ -346,7 +348,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.GET("/logs", h.Logs)
 	g.GET("/logs/export", h.ExportLogs)
 	g.GET("/logs/stream", h.LogsStream)
-	g.GET("/access-log/stream", h.AccessLogStream)
+	g.GET("/logs/stats", h.LogStatsSeed)
 	g.GET("/logs/:id", h.LogDetail)
 	g.POST("/logs/feedback/:id", h.MarkLogFeedback)
 	g.POST("/logs/exception/:id", h.CreateLogException)
@@ -941,16 +943,6 @@ func (h *Handler) ThreatsSeries(c echo.Context) error {
 
 const logsPageSize = 50
 
-// accessLogHistoryWindow/accessLogHistoryLimit bound how much history the
-// access-log terminal panel preloads on page load; otherwise it starts
-// empty ("Waiting for requests…") until new live traffic happens to arrive.
-// Limit matches the client-side cap (accessLogMaxLines in logs.js) so the
-// initial render and the steady-state line count agree.
-const (
-	accessLogHistoryWindow = 24 * time.Hour
-	accessLogHistoryLimit  = 100
-)
-
 // Logs serves the logs page. The row data always comes from the database
 // (so it survives restarts, unlike the in-memory broadcast ring buffer).
 // In "live" mode (no filters, page 1) the page also keeps an SSE connection
@@ -991,36 +983,22 @@ func (h *Handler) Logs(c echo.Context) error {
 		return err
 	}
 
-	// Preload the access-log terminal panel with recent history. It only
-	// makes sense in live mode, same as the panel itself.
-	var accessLogRecent []string
-	if live {
-		history, err := h.db.ListRecentRequestLogs(time.Now().Add(-accessLogHistoryWindow), accessLogHistoryLimit)
-		if err != nil {
-			return err
-		}
-		accessLogRecent = make([]string, len(history))
-		for i, entry := range history {
-			accessLogRecent[i] = accesslog.FormatLine(entry)
-		}
-	}
-
 	return h.render(c, "logs", map[string]any{
-		"Apps":            h.registry.List(),
-		"History":         !live,
-		"Recent":          rows,
-		"AccessLogRecent": accessLogRecent,
-		"Total":           total,
-		"CurPage":         page,
-		"TotalPages":      max(1, (total+logsPageSize-1)/logsPageSize),
-		"FilterApp":       filter.AppName,
-		"FilterStatus":    filter.StatusClass,
-		"FilterFrom":      fromStr,
-		"FilterTo":        toStr,
+		"Apps":         h.registry.List(),
+		"History":      !live,
+		"Recent":       rows,
+		"Total":        total,
+		"CurPage":      page,
+		"TotalPages":   max(1, (total+logsPageSize-1)/logsPageSize),
+		"FilterApp":    filter.AppName,
+		"FilterStatus": filter.StatusClass,
+		"FilterFrom":   fromStr,
+		"FilterTo":     toStr,
 	})
 }
 
-// LogsStream is an SSE endpoint that pushes pre-rendered HTML log rows.
+// LogsStream is an SSE endpoint that pushes pre-rendered HTML log rows, each
+// followed by a JSON "stat" event for the Stats view.
 func (h *Handler) LogsStream(c echo.Context) error {
 	w := c.Response().Writer
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -1050,45 +1028,10 @@ func (h *Handler) LogsStream(c echo.Context) error {
 				fmt.Fprintf(w, "data: %s\n", line)
 			}
 			fmt.Fprint(w, "\n")
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
+			// The Stats view counts these; same connection, so it never lags the table.
+			if stat, err := json.Marshal(newStatEvent(entry)); err == nil {
+				fmt.Fprintf(w, "event: stat\ndata: %s\n\n", stat)
 			}
-		case <-c.Request().Context().Done():
-			return nil
-		}
-	}
-}
-
-// AccessLogStream is an SSE endpoint like LogsStream (same broadcaster
-// subscription, same connection lifecycle) but emits a single plain-text
-// nginx-combined-format line per event instead of an HTML fragment, powering
-// the dashboard's terminal-style live panel. It's independent of whether the
-// --access-log file is enabled: this reads from the in-memory broadcaster,
-// not the file, so it works even when no file is being written.
-func (h *Handler) AccessLogStream(c echo.Context) error {
-	w := c.Response().Writer
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
-	}
-
-	ch := h.broadcaster.Subscribe()
-	defer h.broadcaster.Unsubscribe(ch)
-
-	for {
-		select {
-		case entry, ok := <-ch:
-			if !ok {
-				return nil
-			}
-			// FormatLine never contains a newline, so no multi-line "data:"
-			// splitting is needed here (contrast LogsStream, which sends a
-			// multi-line HTML fragment).
-			fmt.Fprintf(w, "data: %s\n\n", accesslog.FormatLine(entry))
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}

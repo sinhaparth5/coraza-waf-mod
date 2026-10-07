@@ -5,11 +5,9 @@ import (
 	"time"
 )
 
-// TestListRecentRequestLogs exercises the access-log terminal panel's
-// history preload: window filtering (excludes anything before `since`),
-// the limit keeping the most recent N within that window (not the oldest
-// N), and the result coming back in chronological (oldest-first) order so
-// client-side appends read top-to-bottom like a real tail -f.
+// TestListRecentRequestLogs exercises the Logs page Stats seed: window
+// filtering (excludes anything before `since`), the limit keeping the most
+// recent N within that window (not the oldest N), and oldest-first order.
 func TestListRecentRequestLogs(t *testing.T) {
 	db := openTestDB(t)
 
@@ -49,8 +47,8 @@ func TestListRecentRequestLogs(t *testing.T) {
 			t.Errorf("row %d Path = %q, want %q (order must be oldest-first)", i, got[i].Path, want)
 		}
 	}
-	if got[0].Query != "q=1" || got[0].Proto != "HTTP/1.1" {
-		t.Errorf("row 0 = %+v, want Query=q=1 Proto=HTTP/1.1 (fields FormatLine needs, not in LogRow)", got[0])
+	if got[0].ID == 0 || got[0].AppName != "app" || got[0].Status != 200 {
+		t.Errorf("row 0 = %+v, want ID set, AppName=app, Status=200", got[0])
 	}
 
 	// Limit=3 within the same window must keep the 3 MOST RECENT rows

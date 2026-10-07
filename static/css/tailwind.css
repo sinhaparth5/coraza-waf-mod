@@ -60,4 +60,7 @@
   .table-scroll { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
   .table-scroll > table { min-width: 680px; }
   .mobile-safe-modal { width: calc(100% - 2rem); max-height: calc(100dvh - 2rem); }
+  /* Log-detail modal field labels and section titles. */
+  .ld-label { @apply mb-[3px] text-[10px] font-semibold uppercase tracking-[.06em] text-slate-500; }
+  .ld-section-title { @apply mb-[10px] text-[10px] font-semibold uppercase tracking-[.06em] text-slate-500; }
 }

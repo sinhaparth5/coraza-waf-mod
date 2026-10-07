@@ -1386,19 +1386,13 @@ type LogRow struct {
 }
 
 // ListRecentRequestLogs returns up to limit requests since the given time,
-// in chronological (oldest first) order — used to preload the access-log
-// terminal panel with the last 24h of history instead of starting empty on
-// every page load. Unlike LogRow (used by the table view), this returns full
-// RequestLog values because accesslog.FormatLine also needs Query and Proto,
-// which LogRow doesn't carry.
-//
-// The DB query itself is ORDER BY ts DESC (so LIMIT keeps the most recent N
-// within the window, not the oldest N), then reversed in Go — appending
-// these client-side in the returned order reads top-to-bottom like a real
-// tail -f, newest at the bottom, matching how live lines get appended.
+// oldest first. It seeds the Logs page's live Stats view, which then keeps
+// counting from the SSE stream. The query is ORDER BY ts DESC so LIMIT keeps
+// the most recent N within the window, then reversed in Go.
 func (db *DB) ListRecentRequestLogs(since time.Time, limit int) ([]RequestLog, error) {
 	rows, err := db.query(
-		`SELECT ts, real_ip, method, path, query, proto, status, user_agent
+		`SELECT id, ts, app_name, real_ip, country, method, path, status, blocked,
+		        rule_id, action, user_agent, duration_ms, cache_status
 		 FROM requests WHERE ts >= ? ORDER BY ts DESC LIMIT ?`,
 		since.UTC(), limit,
 	)
@@ -1410,7 +1404,8 @@ func (db *DB) ListRecentRequestLogs(since time.Time, limit int) ([]RequestLog, e
 	var out []RequestLog
 	for rows.Next() {
 		var r RequestLog
-		if err := rows.Scan(&r.Timestamp, &r.RealIP, &r.Method, &r.Path, &r.Query, &r.Proto, &r.Status, &r.UserAgent); err != nil {
+		if err := rows.Scan(&r.ID, &r.Timestamp, &r.AppName, &r.RealIP, &r.Country, &r.Method, &r.Path, &r.Status,
+			&r.Blocked, &r.RuleID, &r.Action, &r.UserAgent, &r.Duration, &r.CacheStatus); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
