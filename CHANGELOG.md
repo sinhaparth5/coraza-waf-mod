@@ -14,6 +14,8 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-10-07
+
 ### Added
 
 - **Live Stats view on the Logs page**, a GoAccess-style summary that replaces the Terminal tab. It shows requests, unique visitors, blocked share, 404s, 5xx and average response time; a requests-per-minute chart for the last hour (blocked in red); and top-10 panels for paths, IPs, block reasons (with rule ID), 404 paths, status codes, countries, services, browsers and operating systems. It starts from the last hour of data and updates on every request, over the same connection as the table.
@@ -43,11 +45,5 @@ rather than growing this file forever.
 
 - **Access log lines could be broken or forged by client input.** The method, URL and User-Agent were written raw, so a `"` in the User-Agent made the line unparseable for GoAccess and fail2ban, and a newline let a client write a whole fake log line — e.g. one that gets an innocent IP banned by fail2ban. These fields are now escaped the way nginx does it (`"`, `\` and non-printable bytes as `\xHH`).
 
-## [2.3.0] - 2026-09-27
-
-### Added
-
-- **ClickHouse analytics mirror** (#94, opt-in via `--warehouse-url`). The admin dashboard answers roughly fifteen questions, all hardcoded aggregates, and `--retention` deletes the underlying rows after 30 days — so anything nobody compiled in, or anything older than a month, is unanswerable. The WAF can now mirror its telemetry into a self-hosted ClickHouse for long-term analysis with a BI tool (Metabase, Grafana, Superset) on top. `waf_requests` streams live off the log-worker fan-out and reproduces every existing dashboard number over a year instead of a day; five dimension tables (`waf_ip_rules`, `waf_geo_rules`, `waf_services`, `waf_threat_scores`, `waf_ja4_reputation`) are snapshotted every 5 minutes so a join can answer "was this IP already banned when it hit us, and what was its score made of". The sink creates its own database and tables at startup, batches 1000 rows or 5 seconds per insert, and drops rather than blocking — like every other log hook it runs off the request path, so it adds no request latency. The operational store is untouched and stays the source of truth. Secret-bearing tables (`meta`, `api_keys`, `sessions`, `webauthn_credentials`, `webhook_config`, `certificates`, `threat_intel_sources`) and the `headers_json` column are never shipped, by allowlist. Reference stack in `deploy/docker-compose.analytics.yml`.
-
-[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.3.0...main
-[2.3.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.2.4...v2.3.0
+[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.4.0...main
+[2.4.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.3.0...v2.4.0
