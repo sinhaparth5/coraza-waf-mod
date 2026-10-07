@@ -54,6 +54,9 @@ CORAZA_VERSION="${CORAZA_VERSION:-}"
 BINARY_NAME="coraza-waf-mod"
 SERVICE_USER="coraza-waf-mod"
 VAR_DIR="/var/lib/coraza-waf-mod"
+# nginx-combined access log for GoAccess/fail2ban; its directory is created by
+# the unit's LogsDirectory= (owned by the service user), so the name must match.
+ACCESS_LOG_PATH="/var/log/coraza/access.log"
 INSTALL_PATH="/usr/local/bin/${BINARY_NAME}"
 UNIT_PATH="/etc/systemd/system/${BINARY_NAME}.service"
 PRUNE_SERVICE_PATH="/etc/systemd/system/${BINARY_NAME}-prune.service"
@@ -448,7 +451,8 @@ Type=simple
 User=${SERVICE_USER}
 Group=${SERVICE_USER}
 WorkingDirectory=${VAR_DIR}
-ExecStart=${INSTALL_PATH} ${TLS_FLAGS} --db-driver ${DB_DRIVER} --db '${DB_DSN}' --certs ${VAR_DIR}/certs --retention 30 --db-key-file ${DB_KEY_FILE}
+ExecStart=${INSTALL_PATH} ${TLS_FLAGS} --db-driver ${DB_DRIVER} --db '${DB_DSN}' --certs ${VAR_DIR}/certs --retention 30 --db-key-file ${DB_KEY_FILE} --access-log ${ACCESS_LOG_PATH}
+LogsDirectory=coraza
 Restart=on-failure
 RestartSec=5s
 
@@ -877,6 +881,7 @@ ROWS+=(
 	""
 	"$(row 'Service' "sudo systemctl status ${BINARY_NAME}")"
 	"$(row 'Logs' "sudo journalctl -u ${BINARY_NAME} -f")"
+	"$(row 'Access log' "${ACCESS_LOG_PATH}")"
 )
 
 CONTENT_W=${#BOX_TITLE}

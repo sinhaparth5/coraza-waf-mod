@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"coraza-waf-mod/internal/storage"
@@ -45,7 +46,24 @@ func FormatLine(e storage.RequestLog) string {
 	}
 
 	return fmt.Sprintf(`%s - - [%s] "%s %s %s" %d - "-" "%s"`,
-		ip, e.Timestamp.Format(timeLayout), e.Method, uri, proto, e.Status, ua)
+		ip, e.Timestamp.Format(timeLayout), escape(e.Method), escape(uri), proto, e.Status, escape(ua))
+}
+
+// escape writes `"`, `\` and bytes outside printable ASCII as \xHH, like
+// nginx's default log escaping. These fields are client-controlled, and a raw
+// quote would end the quoted field early, so parsers such as GoAccess and
+// fail2ban would misread or drop the line.
+func escape(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == '"' || c == '\\' || c < 0x20 || c > 0x7e {
+			fmt.Fprintf(&b, `\x%02X`, c)
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
 }
 
 // Writer owns the open access.log file and its in-house size-based

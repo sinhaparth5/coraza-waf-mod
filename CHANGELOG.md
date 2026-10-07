@@ -14,6 +14,14 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Changed
+
+- **`install.sh` now turns on the nginx-style access log** at `/var/log/coraza/access.log` (via `--access-log` and systemd's `LogsDirectory=`), on fresh installs and upgrades alike. GoAccess works against it out of the box: `goaccess /var/log/coraza/access.log --log-format=COMBINED`. The built-in rotation caps it at about 600 MB (100 MB × 5 backups + the live file).
+
+### Fixed
+
+- **Access log lines could be broken or forged by client input.** The method, URL and User-Agent were written raw, so a `"` in the User-Agent made the line unparseable for GoAccess and fail2ban, and a newline let a client write a whole fake log line — e.g. one that gets an innocent IP banned by fail2ban. These fields are now escaped the way nginx does it (`"`, `\` and non-printable bytes as `\xHH`).
+
 ## [2.3.0] - 2026-09-27
 
 ### Added

@@ -29,6 +29,25 @@ func TestFormatLine(t *testing.T) {
 	}
 }
 
+// A raw quote would end the quoted field early, and a raw newline would let a
+// client forge a whole extra log line (e.g. one that fail2ban bans an innocent
+// IP for), so client-controlled fields are escaped like nginx does.
+func TestFormatLineEscapesClientFields(t *testing.T) {
+	entry := storage.RequestLog{
+		RealIP: "203.0.113.7", Method: "GET", Path: `/a"b`, Status: 200,
+		UserAgent: "x\"\n1.2.3.4 - - [x] \"GET / HTTP/1.1\" 200 - \"-\" \"\\é",
+	}
+	got := FormatLine(entry)
+	if strings.Count(got, `"`) != 6 || strings.Contains(got, "\n") {
+		t.Fatalf("unescaped quote or newline: %q", got)
+	}
+	for _, want := range []string{`/a\x22b`, `x\x22\x0A1.2.3.4`, `\x5C\xC3\xA9"`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %q", want, got)
+		}
+	}
+}
+
 func TestFormatLineFallbacksForMissingFields(t *testing.T) {
 	// RealIP, Proto, and UserAgent can all be empty on a malformed or
 	// internally-synthesized entry — must render "-" (nginx's own convention
