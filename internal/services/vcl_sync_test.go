@@ -1,4 +1,4 @@
-package main
+package services
 
 import (
 	"os"
@@ -12,11 +12,11 @@ import (
 // silently lacked PURGE, service tagging, session partitioning and TTL tuning
 // (#85), breaking all of them on every scripted install.
 func TestInstallVCLMatchesDefault(t *testing.T) {
-	want, err := os.ReadFile("deploy/varnish/default.vcl")
+	want, err := os.ReadFile("../../deploy/varnish/default.vcl")
 	if err != nil {
 		t.Fatal(err)
 	}
-	sh, err := os.ReadFile("deploy/install.sh")
+	sh, err := os.ReadFile("../../deploy/install.sh")
 	if err != nil {
 		t.Fatal(err)
 	}

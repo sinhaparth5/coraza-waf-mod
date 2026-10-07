@@ -9,7 +9,7 @@
  */
 
 /* source(none) disables auto-detection so the scan is exactly the @source
-   list below — otherwise the whole repo (docs.md, CHANGELOG, …) would be
+   list below — otherwise the whole repo (README, CHANGELOG, …) would be
    scanned and any class-shaped token in prose would bloat the output. */
 @import "tailwindcss" source(none);
 

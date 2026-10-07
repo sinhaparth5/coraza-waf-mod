@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"net/http"
@@ -17,7 +17,7 @@ func TestProbes(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := echo.New()
-	registerProbes(e, db)
+	RegisterProbes(e, db)
 	e.Any("/*", func(c echo.Context) error { return c.String(http.StatusTeapot, "proxied") })
 
 	get := func(method, path string) int {

@@ -501,7 +501,7 @@ func main() {
 		return c.Blob(http.StatusOK, "image/svg+xml", data)
 	})
 
-	registerProbes(e, db)
+	proxy.RegisterProbes(e, db)
 
 	e.Any("/*", h.Handle)
 
@@ -783,27 +783,6 @@ func runPruneOnly(args []string) {
 			log.Printf("vacuum: ran VACUUM (took %s) — Postgres/CockroachDB/Neon reclaim space in place, not via file rebuild, so no size delta is reported", time.Since(start))
 		}
 	}
-}
-
-// registerProbes adds the liveness and readiness probes used by load
-// balancers, orchestrators and the Docker HEALTHCHECK (#1). They are
-// unauthenticated and served on every host, so they answer "ok" or not and
-// nothing more. Readiness checks only the DB: one dead backend must not pull
-// the whole WAF out of a load balancer.
-func registerProbes(e *echo.Echo, db *storage.DB) {
-	probe := []string{http.MethodGet, http.MethodHead}
-	e.Match(probe, "/_cz/healthz", func(c echo.Context) error {
-		return c.String(http.StatusOK, "ok")
-	})
-	e.Match(probe, "/_cz/readyz", func(c echo.Context) error {
-		ctx, cancel := context.WithTimeout(c.Request().Context(), 2*time.Second)
-		defer cancel()
-		if err := db.Ping(ctx); err != nil {
-			log.Printf("readyz: db ping: %v", err)
-			return c.String(http.StatusServiceUnavailable, "db unavailable")
-		}
-		return c.String(http.StatusOK, "ok")
-	})
 }
 
 // pruneOnce deletes expired sessions and request logs older than retention
