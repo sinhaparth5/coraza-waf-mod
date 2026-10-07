@@ -1,544 +1,194 @@
+// Logs page: the live table (SSE), the Table/Stats toggle, and the request
+// detail modal. Filter controls live in pickers.js; the Stats view in
+// logstats.js, which this file feeds through window.czLogStats.
 (function () {
-  // ── Shared utilities ─────────────────────────────────────────────────────
-  function dpPad(n) { return String(n).padStart(2, '0'); }
-
-  function parseDateStr(s) {
-    if (!s) return null;
-    var m = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
-    if (!m) return null;
-    return { y: +m[1], mo: +m[2] - 1, d: +m[3], h: +m[4], mi: +m[5] };
-  }
-
-  function buildDateStr(sel) {
-    if (!sel) return '';
-    return sel.y + '-' + dpPad(sel.mo + 1) + '-' + dpPad(sel.d) + 'T' + dpPad(sel.h) + ':' + dpPad(sel.mi);
-  }
-
-  var MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'];
-  var MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-  // ── DatePicker ─────────────────────────────────────────────────────────────
-  // All values are UTC — log timestamps are UTC so filtering in UTC is natural.
-  function DatePicker(hiddenEl, btnEl, displayEl) {
-    var self = this;
-    self.hidden = hiddenEl;
-    self.btn = btnEl;
-    self.display = displayEl;
-    self.sel = parseDateStr(hiddenEl.value);
-
-    var now = new Date();
-    self.viewY = self.sel ? self.sel.y : now.getUTCFullYear();
-    self.viewMo = self.sel ? self.sel.mo : now.getUTCMonth();
-    self.viewMode = 'days';
-    self.yearBase = Math.floor(self.viewY / 12) * 12;
-    self.isOpen = false;
-
-    self.pop = document.createElement('div');
-    self.pop.className = 'fixed z-[250] bg-white border border-line rounded-lg select-none overflow-hidden';
-    self.pop.style.cssText = 'display:none;box-shadow:0 4px 12px rgba(16,24,40,.10);width:272px;';
-    self.pop.__dp = self;
-    document.body.appendChild(self.pop);
-
-    // Stop popover clicks bubbling to the document close handler
-    self.pop.addEventListener('click', function (e) { e.stopPropagation(); });
-
-    self.updateDisplay();
-
-    btnEl.addEventListener('click', function (e) {
-      e.stopPropagation();
-      if (self.isOpen) { self.close(); return; }
-      closeAll();
-      self.open();
-    });
-  }
-
-  DatePicker.prototype.open = function () {
-    this.isOpen = true;
-    this.viewMode = 'days';
-    this.render();
-    this.pop.style.display = 'block';
-    this.pop.classList.add('__dpop');
-    this.reposition();
-  };
-
-  DatePicker.prototype.close = function () {
-    this.isOpen = false;
-    this.pop.classList.remove('__dpop');
-    this.pop.style.display = 'none';
-  };
-
-  DatePicker.prototype.reposition = function () {
-    var r = this.btn.getBoundingClientRect();
-    var top = r.bottom + 6;
-    var left = r.left;
-    if (left + 272 > window.innerWidth - 8) left = window.innerWidth - 272 - 8;
-    this.pop.style.top = top + 'px';
-    this.pop.style.left = left + 'px';
-  };
-
-  DatePicker.prototype.updateDisplay = function () {
-    if (this.sel) {
-      this.display.textContent = MONTH_SHORT[this.sel.mo] + ' ' + this.sel.d + ', ' + this.sel.y +
-        ' ' + dpPad(this.sel.h) + ':' + dpPad(this.sel.mi) + ' UTC';
-      this.display.classList.remove('text-slate-400');
-      this.display.classList.add('text-slate-700');
-    } else {
-      this.display.textContent = 'Any date';
-      this.display.classList.remove('text-slate-700');
-      this.display.classList.add('text-slate-400');
-    }
-  };
-
-  DatePicker.prototype.render = function () {
-    if (this.viewMode === 'days') this.renderDays();
-    else if (this.viewMode === 'months') this.renderMonths();
-    else this.renderYears();
-  };
-
-  DatePicker.prototype.renderDays = function () {
-    var self = this;
-    var y = self.viewY, m = self.viewMo;
-    var now = new Date();
-    var todY = now.getUTCFullYear(), todMo = now.getUTCMonth(), todD = now.getUTCDate();
-    var firstDOW = new Date(Date.UTC(y, m, 1)).getUTCDay();
-    var startOff = (firstDOW + 6) % 7;   // Mon=0 … Sun=6
-    var dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
-    var prevLast = new Date(Date.UTC(y, m, 0)).getUTCDate();
-    var selH = self.sel ? dpPad(self.sel.h) : '00';
-    var selMi = self.sel ? dpPad(self.sel.mi) : '00';
-
-    var html = '<div class="p-3">';
-    // ── Header ──
-    html += '<div class="flex items-center justify-between mb-2">';
-    html += btn('dp-prev', '<i class="hgi hgi-stroke hgi-rounded hgi-arrow-left-01 text-[11px]"></i>',
-      'w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface text-slate-400');
-    html += '<button type="button" class="dp-head text-[13px] font-semibold text-slate-700 hover:text-brand rounded-lg px-2 py-1 cursor-pointer">' +
-      MONTH_NAMES[m] + ' ' + y + '</button>';
-    html += btn('dp-next', '<i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-01 text-[11px]"></i>',
-      'w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface text-slate-400');
-    html += '</div>';
-    // ── Weekday headers ──
-    html += '<div class="grid grid-cols-7 mb-[3px]">';
-    ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].forEach(function (d, i) {
-      html += '<div class="h-6 flex items-center justify-center text-[10px] font-semibold ' +
-        (i >= 5 ? 'text-red-400' : 'text-slate-400') + '">' + d + '</div>';
-    });
-    html += '</div>';
-    // ── Day grid ──
-    html += '<div class="grid grid-cols-7 gap-y-px">';
-    // Prev-month trailing days
-    for (var i = startOff - 1; i >= 0; i--) {
-      var pd = prevLast - i;
-      var pm = m === 0 ? 11 : m - 1;
-      var py = m === 0 ? y - 1 : y;
-      html += dayBtn(py, pm, pd, pd, 'text-slate-300 hover:bg-surface');
-    }
-    // Current-month days
-    for (var d = 1; d <= dim; d++) {
-      var isSel = self.sel && self.sel.y === y && self.sel.mo === m && self.sel.d === d;
-      var isToday = y === todY && m === todMo && d === todD;
-      var dow = (new Date(Date.UTC(y, m, d)).getUTCDay() + 6) % 7;
-      var cls = isSel
-        ? 'bg-brand text-white font-semibold'
-        : (dow >= 5 ? 'text-red-500' : 'text-slate-700') + ' hover:bg-surface';
-      html += '<button type="button" class="dp-day h-7 text-[12px] rounded-lg relative cursor-pointer ' + cls + '" ' +
-        'data-y="' + y + '" data-m="' + m + '" data-d="' + d + '">' + d;
-      if (isToday && !isSel) html += '<span class="absolute bottom-[1px] left-1/2 -translate-x-1/2 w-[3px] h-[3px] rounded-full bg-brand block"></span>';
-      html += '</button>';
-    }
-    // Next-month leading days
-    var rem = (7 - ((startOff + dim) % 7)) % 7;
-    for (var nd = 1; nd <= rem; nd++) {
-      var nm = m === 11 ? 0 : m + 1;
-      var ny = m === 11 ? y + 1 : y;
-      html += dayBtn(ny, nm, nd, nd, 'text-slate-300 hover:bg-surface');
-    }
-    html += '</div>';
-    // ── Time ──
-    html += '<div class="flex items-center gap-2 mt-3 pt-3 border-t border-line">';
-    html += '<i class="hgi hgi-stroke hgi-rounded hgi-clock-01 text-slate-400 text-[13px] shrink-0"></i>';
-    html += '<input class="dp-hour border border-line rounded-md w-11 text-center text-[13px] py-[5px] outline-hidden text-slate-700 tabular-nums focus:border-brand" type="number" min="0" max="23" value="' + selH + '">';
-    html += '<span class="text-slate-400 text-[14px] font-semibold select-none">:</span>';
-    html += '<input class="dp-min border border-line rounded-md w-11 text-center text-[13px] py-[5px] outline-hidden text-slate-700 tabular-nums focus:border-brand" type="number" min="0" max="59" value="' + selMi + '">';
-    html += '<span class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider ml-1 select-none">UTC</span>';
-    html += '</div>';
-    // ── Actions ──
-    html += '<div class="flex items-center justify-between mt-3">';
-    html += '<button type="button" class="dp-clear text-[12px] text-slate-400 hover:text-slate-600 cursor-pointer py-1">Clear</button>';
-    html += '<button type="button" class="dp-apply text-[13px] font-semibold text-white bg-brand-dark px-4 py-[7px] rounded-md cursor-pointer">Apply</button>';
-    html += '</div></div>';
-
-    self.pop.innerHTML = html;
-
-    // Navigation
-    self.pop.querySelector('.dp-prev').addEventListener('click', function () {
-      if (self.viewMo === 0) { self.viewY--; self.viewMo = 11; } else { self.viewMo--; }
-      self.render();
-    });
-    self.pop.querySelector('.dp-next').addEventListener('click', function () {
-      if (self.viewMo === 11) { self.viewY++; self.viewMo = 0; } else { self.viewMo++; }
-      self.render();
-    });
-    self.pop.querySelector('.dp-head').addEventListener('click', function () {
-      self.yearBase = Math.floor(self.viewY / 12) * 12;
-      self.viewMode = 'years';
-      self.render();
-    });
-
-    function timeInputs() {
-      return {
-        h: Math.min(23, Math.max(0, parseInt(self.pop.querySelector('.dp-hour').value) || 0)),
-        mi: Math.min(59, Math.max(0, parseInt(self.pop.querySelector('.dp-min').value) || 0))
-      };
-    }
-
-    self.pop.querySelectorAll('.dp-day').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var t = timeInputs();
-        self.sel = { y: +b.dataset.y, mo: +b.dataset.m, d: +b.dataset.d, h: t.h, mi: t.mi };
-        self.viewY = self.sel.y; self.viewMo = self.sel.mo;
-        self.render();
-      });
-    });
-    self.pop.querySelector('.dp-clear').addEventListener('click', function () {
-      self.sel = null; self.hidden.value = ''; self.updateDisplay(); self.close();
-    });
-    self.pop.querySelector('.dp-apply').addEventListener('click', function () {
-      if (self.sel) {
-        var t = timeInputs();
-        self.sel = { y: self.sel.y, mo: self.sel.mo, d: self.sel.d, h: t.h, mi: t.mi };
-      }
-      self.hidden.value = buildDateStr(self.sel);
-      self.updateDisplay();
-      self.close();
-    });
-  };
-
-  DatePicker.prototype.renderMonths = function () {
-    var self = this;
-    var y = self.viewY;
-
-    var html = '<div class="p-3">';
-    html += '<div class="flex items-center justify-between mb-3">';
-    html += btn('dp-prev-y', '<i class="hgi hgi-stroke hgi-rounded hgi-arrow-left-01 text-[11px]"></i>',
-      'w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface text-slate-400');
-    html += '<button type="button" class="dp-to-yrs text-[13px] font-semibold text-slate-700 hover:text-brand px-2 py-1 rounded-lg cursor-pointer">' + y + '</button>';
-    html += btn('dp-next-y', '<i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-01 text-[11px]"></i>',
-      'w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface text-slate-400');
-    html += '</div><div class="grid grid-cols-3 gap-1">';
-    MONTH_SHORT.forEach(function (mn, i) {
-      var isSel = self.sel && self.sel.y === y && self.sel.mo === i;
-      html += '<button type="button" class="dp-month h-9 text-[12px] font-medium rounded-lg cursor-pointer ' +
-        (isSel ? 'bg-brand text-white' : 'text-slate-700 hover:bg-surface') +
-        '" data-m="' + i + '">' + mn + '</button>';
-    });
-    html += '</div></div>';
-    self.pop.innerHTML = html;
-
-    self.pop.querySelector('.dp-prev-y').addEventListener('click', function () { self.viewY--; self.render(); });
-    self.pop.querySelector('.dp-next-y').addEventListener('click', function () { self.viewY++; self.render(); });
-    self.pop.querySelector('.dp-to-yrs').addEventListener('click', function () {
-      self.yearBase = Math.floor(self.viewY / 12) * 12; self.viewMode = 'years'; self.render();
-    });
-    self.pop.querySelectorAll('.dp-month').forEach(function (b) {
-      b.addEventListener('click', function () { self.viewMo = +b.dataset.m; self.viewMode = 'days'; self.render(); });
-    });
-  };
-
-  DatePicker.prototype.renderYears = function () {
-    var self = this;
-    var base = self.yearBase;
-
-    var html = '<div class="p-3">';
-    html += '<div class="flex items-center justify-between mb-3">';
-    html += btn('dp-prev-yr', '<i class="hgi hgi-stroke hgi-rounded hgi-arrow-left-01 text-[11px]"></i>',
-      'w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface text-slate-400');
-    html += '<span class="text-[12px] font-semibold text-slate-500 select-none">' + base + ' – ' + (base + 11) + '</span>';
-    html += btn('dp-next-yr', '<i class="hgi hgi-stroke hgi-rounded hgi-arrow-right-01 text-[11px]"></i>',
-      'w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface text-slate-400');
-    html += '</div><div class="grid grid-cols-3 gap-1">';
-    for (var yr = base; yr < base + 12; yr++) {
-      var isSel = self.sel && self.sel.y === yr;
-      html += '<button type="button" class="dp-year h-9 text-[12px] font-medium rounded-lg cursor-pointer ' +
-        (isSel ? 'bg-brand text-white' : 'text-slate-700 hover:bg-surface') +
-        '" data-y="' + yr + '">' + yr + '</button>';
-    }
-    html += '</div></div>';
-    self.pop.innerHTML = html;
-
-    self.pop.querySelector('.dp-prev-yr').addEventListener('click', function () { self.yearBase -= 12; self.render(); });
-    self.pop.querySelector('.dp-next-yr').addEventListener('click', function () { self.yearBase += 12; self.render(); });
-    self.pop.querySelectorAll('.dp-year').forEach(function (b) {
-      b.addEventListener('click', function () { self.viewY = +b.dataset.y; self.viewMode = 'months'; self.render(); });
-    });
-  };
-
-  // HTML helpers
-  function btn(cls, inner, extra) {
-    return '<button type="button" class="' + cls + ' ' + (extra || '') + ' cursor-pointer">' + inner + '</button>';
-  }
-  function dayBtn(y, m, d, label, extra) {
-    return '<button type="button" class="dp-day h-7 text-[12px] rounded-lg cursor-pointer ' + extra + '" ' +
-      'data-y="' + y + '" data-m="' + m + '" data-d="' + d + '">' + label + '</button>';
-  }
-
-  // ── CustomSelect ───────────────────────────────────────────────────────────
-  function CustomSelect(hiddenEl, btnEl, displayEl, dropdownEl) {
-    var self = this;
-    self.hidden = hiddenEl;
-    self.btn = btnEl;
-    self.display = displayEl;
-    self.dropdown = dropdownEl;
-    self.isOpen = false;
-
-    // Init display from server-rendered value
-    var cur = hiddenEl.value;
-    var opts = dropdownEl.querySelectorAll('button[data-value]');
-    opts.forEach(function (opt) {
-      if (opt.dataset.value === cur) {
-        displayEl.textContent = opt.dataset.label;
-        opt.classList.add('text-brand', 'font-semibold');
-      }
-    });
-
-    dropdownEl.addEventListener('click', function (e) { e.stopPropagation(); });
-
-    btnEl.addEventListener('click', function (e) {
-      e.stopPropagation();
-      if (self.isOpen) { self.close(); return; }
-      closeAll();
-      self.open();
-    });
-
-    opts.forEach(function (opt) {
-      opt.addEventListener('click', function () {
-        self.hidden.value = opt.dataset.value;
-        displayEl.textContent = opt.dataset.label;
-        opts.forEach(function (o) {
-          o.classList.toggle('text-brand', o === opt);
-          o.classList.toggle('font-semibold', o === opt);
-        });
-        self.close();
-      });
-    });
-  }
-
-  CustomSelect.prototype.open = function () {
-    this.isOpen = true;
-    this.dropdown.classList.remove('hidden');
-    this.dropdown.classList.add('__csel');
-  };
-
-  CustomSelect.prototype.close = function () {
-    this.isOpen = false;
-    this.dropdown.classList.add('hidden');
-    this.dropdown.classList.remove('__csel');
-  };
-
-  // ── Close-all helper ───────────────────────────────────────────────────────
-  function closeAll() {
-    document.querySelectorAll('.__dpop').forEach(function (p) { if (p.__dp) p.__dp.close(); });
-    document.querySelectorAll('.__csel').forEach(function (d) {
-      d.classList.add('hidden'); d.classList.remove('__csel');
-    });
-  }
-
-  document.addEventListener('click', closeAll);
-  window.addEventListener('resize', function () {
-    document.querySelectorAll('.__dpop').forEach(function (p) { if (p.__dp) p.__dp.reposition(); });
-  });
-
-  // ── Initialize pickers ────────────────────────────────────────────────────
-  function initDP(hiddenId, btnId, displayId) {
-    var h = document.getElementById(hiddenId);
-    var b = document.getElementById(btnId);
-    var d = document.getElementById(displayId);
-    if (h && b && d) new DatePicker(h, b, d);
-  }
-  function initCS(hiddenId, btnId, displayId, dropId) {
-    var h = document.getElementById(hiddenId);
-    var b = document.getElementById(btnId);
-    var d = document.getElementById(displayId);
-    var dr = document.getElementById(dropId);
-    if (h && b && d && dr) new CustomSelect(h, b, d, dr);
-  }
-
-  initDP('filter-from', 'filter-from-btn', 'filter-from-display');
-  initDP('filter-to', 'filter-to-btn', 'filter-to-display');
-  initCS('filter-app', 'filter-app-btn', 'filter-app-display', 'filter-app-dropdown');
-  initCS('filter-status', 'filter-status-btn', 'filter-status-display', 'filter-status-dropdown');
-
-  // ── Live stream ───────────────────────────────────────────────────────────
+  var adminPath = document.body.dataset.adminPath || '';
+  var csrf = document.body.dataset.csrf || '';
   var wrapper = document.getElementById('log-wrapper');
   var feed = document.getElementById('log-feed');
-  var isHistory = wrapper && wrapper.dataset.history === 'true';
-  var adminPath = document.body.dataset.adminPath || '';
-  var paused = false;
-  var stream;
-  var accessLogWrapper = document.getElementById('access-log-wrapper');
-  var accessLogFeed = document.getElementById('access-log-feed');
-  var accessLogStream;
+  var notice = document.getElementById('logs-notice');
+  var live = !!(wrapper && feed && wrapper.dataset.history === 'false');
 
-  function togglePause() {
-    paused = !paused;
-    var label = document.getElementById('pause-label');
-    if (label) label.textContent = paused ? 'Resume' : 'Pause';
-    var icon = document.getElementById('pause-icon');
-    if (icon) {
-      icon.className = paused
-        ? 'hgi hgi-stroke hgi-rounded hgi-play'
-        : 'hgi hgi-stroke hgi-rounded hgi-pause';
-    }
-    var pb = document.getElementById('pause-btn');
-    if (pb) {
-      pb.classList.toggle('text-brand', paused);
-      pb.classList.toggle('text-slate-500', !paused);
-    }
+  // Short-lived message in the status bar's aria-live region.
+  var noticeTimer;
+  function say(msg) {
+    if (!notice) return;
+    notice.textContent = msg;
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(function () { notice.textContent = ''; }, 4000);
   }
+
+  // ── Live table ────────────────────────────────────────────────────────────
+  // Rows arrive as server-rendered HTML. They are queued and inserted in one
+  // batch every flushDelay ms, so a burst of traffic costs one layout instead
+  // of one per request (a timer rather than requestAnimationFrame, which
+  // stops in background tabs and would leave one huge insert for the return), and the table keeps only the newest maxRows so a page
+  // left open all day stays fast. While paused, or while the user has
+  // scrolled down to read, new rows wait in the queue instead of shifting
+  // the rows being read; a pill shows how many are waiting.
+  var maxRows = 500;
+  var flushDelay = 50;
+  var followThreshold = 48; // px from the top that still counts as "at the top"
+  var queue = [];
+  var frame = 0;
+  var paused = false;
+  var stream = null;
 
   var pauseBtn = document.getElementById('pause-btn');
-  if (pauseBtn) pauseBtn.addEventListener('click', togglePause);
+  var pauseLabel = document.getElementById('pause-label');
+  var pauseIcon = document.getElementById('pause-icon');
+  var pill = document.getElementById('new-rows-pill');
+  var pillCount = document.getElementById('new-rows-count');
+  var statusDot = document.getElementById('live-dot');
+  var statusPing = document.getElementById('live-ping');
+  var statusText = document.getElementById('live-text');
+  var stats = window.czLogStats;
 
-  if (feed && !isHistory) {
-    var obs = new MutationObserver(function () {
-      var empty = document.getElementById('empty-state');
-      if (empty) empty.remove();
-      if (!paused) wrapper.scrollTop = 0;
+  function atTop() { return wrapper.scrollTop <= followThreshold; }
+
+  function flush() {
+    frame = 0;
+    if (!queue.length || paused || !atTop()) return updatePill();
+    var empty = document.getElementById('empty-state');
+    if (empty) empty.remove();
+    // queue is oldest-first; the table is newest-first.
+    feed.insertAdjacentHTML('afterbegin', queue.reverse().join(''));
+    queue = [];
+    while (feed.childElementCount > maxRows) feed.lastElementChild.remove();
+    wrapper.scrollTop = 0;
+    updatePill();
+  }
+
+  function scheduleFlush() {
+    if (live && !frame) frame = setTimeout(flush, flushDelay);
+  }
+
+  function updatePill() {
+    if (!pill) return;
+    var n = queue.length;
+    pill.classList.toggle('hidden', n === 0);
+    if (pillCount) pillCount.textContent = n >= maxRows ? maxRows + '+' : String(n);
+  }
+
+  function setStatus(state) {
+    if (!statusText) return;
+    statusText.textContent = { live: 'Live', paused: 'Paused', reconnecting: 'Reconnecting…' }[state];
+    statusText.className = state === 'live' ? 'text-green-700' : state === 'paused' ? 'text-slate-600' : 'text-amber-700';
+    var color = state === 'live' ? 'bg-brand' : state === 'paused' ? 'bg-slate-400' : 'bg-amber-500';
+    [statusDot, statusPing].forEach(function (el) {
+      if (!el) return;
+      el.classList.remove('bg-brand', 'bg-slate-400', 'bg-amber-500');
+      el.classList.add(color);
     });
-    obs.observe(feed, { childList: true });
+    if (statusPing) statusPing.classList.toggle('hidden', state !== 'live');
+  }
 
-    function openTableStream() {
-      if (stream || !window.EventSource) return;
-      stream = new EventSource(adminPath + '/logs/stream');
-      stream.onmessage = function (e) {
-        feed.insertAdjacentHTML('afterbegin', e.data);
-      };
+  function setPaused(p) {
+    paused = p;
+    if (pauseLabel) pauseLabel.textContent = p ? 'Resume' : 'Pause';
+    if (pauseIcon) {
+      pauseIcon.classList.toggle('hgi-pause', !p);
+      pauseIcon.classList.toggle('hgi-play', p);
     }
-
-    function closeTableStream() {
-      if (!stream) return;
-      stream.close();
-      stream = null;
+    if (pauseBtn) {
+      pauseBtn.setAttribute('aria-pressed', String(p));
+      pauseBtn.classList.toggle('text-brand-dark', p);
+      pauseBtn.classList.toggle('text-slate-500', !p);
     }
-
-    var accessLogMaxLines = 100;
-    // Auto-scroll to the newest line only while the user is already at (or
-    // very near) the bottom — if they've scrolled up to read older entries,
-    // new lines must not yank the view back down. Tracked separately from
-    // the manual Pause button so either one stops auto-scroll.
-    var accessLogAutoScroll = true;
-    var accessLogScrollThreshold = 32; // px tolerance to count as "at the bottom"
-
-    function accessLogScrollToBottom() {
-      if (accessLogWrapper) accessLogWrapper.scrollTop = accessLogWrapper.scrollHeight;
+    if (stats) stats.setPaused(p);
+    setStatus(p ? 'paused' : stream && stream.readyState === 1 ? 'live' : 'reconnecting');
+    if (!p) {
+      wrapper.scrollTop = 0;
+      scheduleFlush();
     }
+  }
 
-    if (accessLogWrapper) {
-      // Note: no initial accessLogScrollToBottom() call here — the wrapper
-      // starts display:none (Table is the default view), so scrollHeight
-      // isn't meaningful yet. setView('terminal') below does it once the
-      // panel actually has a layout box.
-      accessLogWrapper.addEventListener('scroll', function () {
-        var distanceFromBottom = accessLogWrapper.scrollHeight - accessLogWrapper.scrollTop - accessLogWrapper.clientHeight;
-        accessLogAutoScroll = distanceFromBottom < accessLogScrollThreshold;
+  function openStream() {
+    if (stream || !window.EventSource) return;
+    stream = new EventSource(adminPath + '/logs/stream');
+    stream.onopen = function () { if (!paused) setStatus('live'); };
+    // EventSource reconnects on its own; this only reflects it in the UI.
+    stream.onerror = function () { if (!paused) setStatus('reconnecting'); };
+    stream.onmessage = function (e) {
+      queue.push(e.data);
+      // Bound the backlog too: past maxRows the oldest waiting rows could
+      // never be shown anyway.
+      if (queue.length > maxRows) queue.splice(0, queue.length - maxRows);
+      scheduleFlush();
+    };
+    stream.addEventListener('stat', function (e) {
+      if (!stats) return;
+      try { stats.add(JSON.parse(e.data)); } catch (_) { /* malformed event: skip */ }
+    });
+  }
+
+  if (live) {
+    if (pauseBtn) pauseBtn.addEventListener('click', function () { setPaused(!paused); });
+    if (pill) pill.addEventListener('click', function () {
+      wrapper.scrollTop = 0;
+      if (paused) setPaused(false);
+      else scheduleFlush();
+    });
+    // Scrolling back to the top shows whatever queued up meanwhile.
+    wrapper.addEventListener('scroll', function () { if (queue.length && atTop()) scheduleFlush(); }, { passive: true });
+    openStream();
+    window.addEventListener('pagehide', function () { if (stream) stream.close(); });
+  }
+
+  // ── Table / Stats toggle ──────────────────────────────────────────────────
+  var tableBtn = document.getElementById('view-table-btn');
+  var statsBtn = document.getElementById('view-stats-btn');
+  var logCard = document.getElementById('log-card');
+  var tableHint = document.getElementById('table-format-hint');
+  var statsView = document.getElementById('stats-view');
+
+  function setTabActive(btn, on) {
+    btn.classList.toggle('bg-white', on);
+    btn.classList.toggle('shadow-xs', on);
+    btn.classList.toggle('text-slate-800', on);
+    btn.classList.toggle('text-slate-500', !on);
+    btn.setAttribute('aria-selected', String(on));
+    btn.tabIndex = on ? 0 : -1;
+  }
+
+  function setView(view) {
+    var isTable = view === 'table';
+    if (logCard) logCard.classList.toggle('hidden', !isTable);
+    if (tableHint) tableHint.classList.toggle('hidden', !isTable);
+    if (statsView) statsView.classList.toggle('hidden', isTable);
+    setTabActive(tableBtn, isTable);
+    setTabActive(statsBtn, !isTable);
+    if (isTable) scheduleFlush();
+    else if (stats) stats.show();
+    try { sessionStorage.setItem('cz-logs-view', view); } catch (_) { /* storage blocked */ }
+  }
+
+  if (tableBtn && statsBtn) {
+    tableBtn.addEventListener('click', function () { setView('table'); });
+    statsBtn.addEventListener('click', function () { setView('stats'); });
+    // Arrow keys switch tabs, per the WAI-ARIA tabs pattern.
+    [tableBtn, statsBtn].forEach(function (b) {
+      b.addEventListener('keydown', function (e) {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        var next = b === tableBtn ? statsBtn : tableBtn;
+        next.focus();
+        next.click();
       });
-    }
-
-    function openAccessLogStream() {
-      if (accessLogStream || !accessLogFeed || !window.EventSource) return;
-      accessLogStream = new EventSource(adminPath + '/access-log/stream');
-      accessLogStream.onmessage = function (e) {
-        var empty = document.getElementById('access-log-empty');
-        if (empty) empty.remove();
-
-        // Build the line as a text node, never innerHTML/insertAdjacentHTML —
-        // request path and user-agent are attacker-controlled and must never
-        // be interpreted as markup.
-        var line = document.createElement('div');
-        line.textContent = e.data;
-        accessLogFeed.appendChild(line);
-        if (!paused && accessLogAutoScroll) accessLogScrollToBottom();
-
-        while (accessLogFeed.children.length > accessLogMaxLines) {
-          accessLogFeed.removeChild(accessLogFeed.firstChild);
-        }
-      };
-    }
-
-    function closeAccessLogStream() {
-      if (!accessLogStream) return;
-      accessLogStream.close();
-      accessLogStream = null;
-    }
-
-    openTableStream();
-
-    // ── Table / Terminal view toggle ─────────────────────────────────────
-    // Only one SSE connection is kept open at a time — both endpoints
-    // subscribe to the same server-side broadcaster, so there's no reason
-    // to pay for two live connections when only one view is visible.
-    var tableBtn = document.getElementById('view-table-btn');
-    var terminalBtn = document.getElementById('view-terminal-btn');
-    var logColumns = document.getElementById('log-columns');
-    var tableHint = document.getElementById('table-format-hint');
-
-    function setView(view) {
-      var isTable = view === 'table';
-      wrapper.classList.toggle('hidden', !isTable);
-      if (logColumns) logColumns.classList.toggle('hidden', !isTable);
-      if (tableHint) tableHint.classList.toggle('hidden', !isTable);
-      if (accessLogWrapper) accessLogWrapper.classList.toggle('hidden', isTable);
-
-      if (tableBtn) {
-        tableBtn.classList.toggle('bg-white', isTable);
-        tableBtn.classList.toggle('shadow-xs', isTable);
-        tableBtn.classList.toggle('text-slate-800', isTable);
-        tableBtn.classList.toggle('text-slate-500', !isTable);
-        tableBtn.setAttribute('aria-selected', String(isTable));
-      }
-      if (terminalBtn) {
-        terminalBtn.classList.toggle('bg-white', !isTable);
-        terminalBtn.classList.toggle('shadow-xs', !isTable);
-        terminalBtn.classList.toggle('text-slate-800', !isTable);
-        terminalBtn.classList.toggle('text-slate-500', isTable);
-        terminalBtn.setAttribute('aria-selected', String(!isTable));
-      }
-
-      if (isTable) {
-        closeAccessLogStream();
-        openTableStream();
-      } else {
-        closeTableStream();
-        openAccessLogStream();
-        // The wrapper was display:none until the toggle above ran, so its
-        // scrollHeight only became meaningful just now — scroll to the
-        // newest (bottom) entry now that it has a real layout box.
-        accessLogAutoScroll = true;
-        accessLogScrollToBottom();
-      }
-    }
-
-    if (tableBtn) tableBtn.addEventListener('click', function () { setView('table'); });
-    if (terminalBtn) terminalBtn.addEventListener('click', function () { setView('terminal'); });
+    });
+    var saved = null;
+    try { saved = sessionStorage.getItem('cz-logs-view'); } catch (_) { /* storage blocked */ }
+    if (saved === 'stats') setView('stats');
   }
 
-  function closeStream() {
-    if (stream) { stream.close(); stream = null; }
-    if (accessLogStream) { accessLogStream.close(); accessLogStream = null; }
-  }
-  window.addEventListener('pagehide', closeStream);
-  window.addEventListener('beforeunload', closeStream);
-
-  // ── Request Detail Modal ──────────────────────────────────────────────────
+  // ── Request detail modal ──────────────────────────────────────────────────
   var backdrop = document.getElementById('log-detail-backdrop');
+  var modal = document.getElementById('log-detail-modal');
   var closeBtn = document.getElementById('log-detail-close');
   var feedbackRow = document.getElementById('ld-feedback-row');
-  var feedbackFpBtn = document.getElementById('ld-feedback-fp');
-  var feedbackTpBtn = document.getElementById('ld-feedback-tp');
   var feedbackStatus = document.getElementById('ld-feedback-status');
   var currentLogID = null;
+  var returnFocus = null;
+  var loadingID = null;
 
   function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -546,10 +196,10 @@
   }
 
   function statusColor(code) {
-    if (code >= 500) return 'text-red-500';
-    if (code >= 400) return 'text-amber-500';
-    if (code >= 300) return 'text-blue-500';
-    return 'text-brand';
+    if (code >= 500) return 'text-red-600';
+    if (code >= 400) return 'text-amber-600';
+    if (code >= 300) return 'text-blue-600';
+    return 'text-brand-dark';
   }
 
   function setText(id, val) {
@@ -557,22 +207,29 @@
     if (el) el.textContent = val || '—';
   }
 
+  function show(id, on) {
+    var el = document.getElementById(id);
+    if (el) el.classList.toggle('hidden', !on);
+  }
+
   function populateModal(d) {
     setText('ld-method', d.method);
     var fullPath = (d.host || '') + d.path + (d.query ? '?' + d.query : '');
     setText('ld-path', fullPath);
+    var pathEl = document.getElementById('ld-path');
+    if (pathEl) pathEl.title = fullPath; // the header truncates long paths
     var statusEl = document.getElementById('ld-status');
     if (statusEl) {
       statusEl.textContent = d.status;
       statusEl.className = 'font-bold text-[15px] shrink-0 tabular-nums ' + statusColor(d.status);
     }
-    setText('ld-ts', d.timestamp ? new Date(d.timestamp).toUTCString() : '—');
+    setText('ld-ts', d.timestamp ? new Date(d.timestamp).toUTCString() : '');
     setText('ld-dur', d.duration_ms + 'ms' + (d.cache_status ? ' · cache ' + d.cache_status : ''));
-    setText('ld-app', d.app_name || '—');
-    setText('ld-host', d.host || '—');
-    setText('ld-ua', d.user_agent || '—');
+    setText('ld-app', d.app_name);
+    setText('ld-host', d.host);
+    setText('ld-ua', d.user_agent);
     setText('ld-query', d.query || '(none)');
-    setText('ld-reqid', d.request_id || '—');
+    setText('ld-reqid', d.request_id);
 
     var countryEl = document.getElementById('ld-country');
     if (countryEl) {
@@ -586,161 +243,164 @@
       }
     }
 
-    setText('ld-real-ip', d.real_ip || '—');
-    setText('ld-proxy-ip', d.proxy_ip || '—');
-    setText('ld-asn', d.asn ? 'AS' + d.asn : '—');
-    setText('ld-org', d.org || '—');
-    setText('ld-proto', d.proto || '—');
+    setText('ld-real-ip', d.real_ip);
+    setText('ld-proxy-ip', d.proxy_ip);
+    setText('ld-asn', d.asn ? 'AS' + d.asn : '');
+    setText('ld-org', d.org);
+    setText('ld-proto', d.proto);
 
-    var tlsRow = document.getElementById('ld-tls-row');
-    var sniRow = document.getElementById('ld-sni-row');
-    if (d.tls_version) {
-      var tlsText = d.tls_version;
-      if (d.tls_cipher) tlsText += ' · ' + d.tls_cipher;
-      setText('ld-tls', tlsText);
-      if (tlsRow) tlsRow.classList.remove('hidden');
-      setText('ld-sni', d.tls_sni || '—');
-      if (sniRow) sniRow.classList.remove('hidden');
-    } else {
-      setText('ld-tls', 'Plaintext / terminated upstream');
-      if (tlsRow) tlsRow.classList.remove('hidden');
-      if (sniRow) sniRow.classList.add('hidden');
+    setText('ld-tls', d.tls_version
+      ? d.tls_version + (d.tls_cipher ? ' · ' + d.tls_cipher : '')
+      : 'Plaintext / terminated upstream');
+    setText('ld-sni', d.tls_sni);
+    show('ld-sni-row', !!d.tls_version);
+
+    var hasBot = !!(d.bot_score || d.ja3_hash || d.ja4 || d.visitor_id);
+    show('ld-bot-section', hasBot);
+    if (hasBot) {
+      setText('ld-bot-score', String(d.bot_score || 0));
+      setText('ld-ja4', d.ja4);
+      setText('ld-ja3', d.ja3_hash);
+      setText('ld-visitor', d.visitor_id);
     }
 
-    var botSection = document.getElementById('ld-bot-section');
-    if (botSection) {
-      if (d.bot_score || d.ja3_hash || d.ja4 || d.visitor_id) {
-        botSection.classList.remove('hidden');
-        setText('ld-bot-score', d.bot_score != null ? String(d.bot_score) : '0');
-        setText('ld-ja4', d.ja4 || '—');
-        setText('ld-ja3', d.ja3_hash || '—');
-        setText('ld-visitor', d.visitor_id || '—');
-      } else {
-        botSection.classList.add('hidden');
-      }
+    show('ld-threat-section', !!d.has_threat_score);
+    if (d.has_threat_score) {
+      setText('ld-threat-score', d.threat_score + ' / 100');
+      setText('ld-threat-breakdown',
+        'autoban ' + d.threat_autoban + ' · bot ' + d.threat_bot + ' · asn ' + d.threat_asn +
+        ' · geo ' + d.threat_geo + ' · ja4 ' + d.threat_ja4);
     }
 
-    var threatSection = document.getElementById('ld-threat-section');
-    if (threatSection) {
-      if (d.has_threat_score) {
-        threatSection.classList.remove('hidden');
-        setText('ld-threat-score', String(d.threat_score) + ' / 100');
-        setText('ld-threat-breakdown',
-          'autoban ' + d.threat_autoban +
-          ' · bot ' + d.threat_bot +
-          ' · asn ' + d.threat_asn +
-          ' · geo ' + d.threat_geo +
-          ' · ja4 ' + d.threat_ja4);
-      } else {
-        threatSection.classList.add('hidden');
-      }
-    }
-
-    var secEl = document.getElementById('ld-security');
-    if (secEl) {
-      if (d.blocked) {
-        secEl.classList.remove('hidden');
-        var reason = d.rule_id ? 'Rule #' + d.rule_id + ' · ' : '';
-        reason += d.action || 'blocked';
-        setText('ld-block-reason', reason);
-      } else {
-        secEl.classList.add('hidden');
-      }
-    }
+    show('ld-security', !!d.blocked);
+    if (d.blocked) setText('ld-block-reason', (d.rule_id ? 'Rule #' + d.rule_id + ' · ' : '') + (d.action || 'blocked'));
 
     if (feedbackStatus) feedbackStatus.textContent = '';
-    if (feedbackRow) {
-      feedbackRow.classList.toggle('hidden', !(d.blocked && d.rule_id));
-    }
+    if (feedbackRow) feedbackRow.classList.toggle('hidden', !(d.blocked && d.rule_id));
 
     var hdrsEl = document.getElementById('ld-headers');
     if (hdrsEl) {
-      var h = d.headers;
-      if (h && Object.keys(h).length) {
-        var keys = Object.keys(h).sort();
-        hdrsEl.innerHTML = keys.map(function (k, i) {
-          var border = i < keys.length - 1 ? ' border-b border-line' : '';
-          return '<div class="flex items-start gap-3 px-4 py-[9px]' + border + '">' +
-            '<span class="font-mono text-slate-500 shrink-0 w-[190px] pt-[1px] break-all">' + esc(k) + '</span>' +
-            '<span class="font-mono text-slate-700 flex-1 break-all">' + esc(h[k]) + '</span>' +
-            '</div>';
-        }).join('');
-      } else {
-        hdrsEl.innerHTML = '<p class="text-slate-400 p-4">No headers captured.</p>';
-      }
+      var h = d.headers || {};
+      var keys = Object.keys(h).sort();
+      // Header names and values are client-controlled: escaped before use.
+      hdrsEl.innerHTML = keys.length ? keys.map(function (k, i) {
+        var border = i < keys.length - 1 ? ' border-b border-line' : '';
+        return '<div class="flex flex-col gap-1 px-4 py-[9px] sm:flex-row sm:items-start sm:gap-3' + border + '">' +
+          '<span class="font-mono text-slate-500 shrink-0 sm:w-[190px] pt-[1px] break-all">' + esc(k) + '</span>' +
+          '<span class="font-mono text-slate-700 flex-1 break-all">' + esc(h[k]) + '</span>' +
+          '</div>';
+      }).join('') : '<p class="text-slate-500 p-4">No headers captured.</p>';
     }
   }
 
-  function openDetail(id) {
-    currentLogID = id;
-    fetch(adminPath + '/logs/' + id)
+  function openDetail(row) {
+    var id = row.dataset.logId;
+    if (!backdrop || loadingID === id) return; // ignore a double click while loading
+    loadingID = id;
+    row.setAttribute('aria-busy', 'true');
+    fetch(adminPath + '/logs/' + id, { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function (d) {
+        currentLogID = id;
+        returnFocus = row;
         populateModal(d);
-        if (backdrop) backdrop.classList.remove('hidden');
+        backdrop.classList.remove('hidden');
+        document.body.classList.add('overflow-hidden');
+        var body = modal && modal.querySelector('[data-modal-body]');
+        if (body) body.scrollTop = 0;
+        if (closeBtn) closeBtn.focus();
       })
-      .catch(function () { });
+      .catch(function () { say('Could not load that request. It may have been pruned; try again.'); })
+      .finally(function () {
+        loadingID = null;
+        row.removeAttribute('aria-busy');
+      });
   }
 
-  function sendFeedback(falsePositive) {
-    if (!currentLogID) return;
-    if (feedbackStatus) feedbackStatus.textContent = 'Saving…';
-    fetch(adminPath + '/logs/feedback/' + currentLogID, {
+  function closeDetail() {
+    if (!backdrop || backdrop.classList.contains('hidden')) return;
+    backdrop.classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
+    if (returnFocus && document.contains(returnFocus)) returnFocus.focus();
+    returnFocus = null;
+  }
+
+  function post(url, body) {
+    return fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'X-CSRF-Token': document.body.dataset.csrf || ''
-      },
-      body: 'false_positive=' + (falsePositive ? '1' : '0')
-    })
-      .then(function (r) { return r.ok ? null : Promise.reject(r.status); })
-      .then(function () {
-        if (feedbackStatus) feedbackStatus.textContent = 'Marked ' + (falsePositive ? 'false positive' : 'correct') + '.';
-      })
-      .catch(function () {
-        if (feedbackStatus) feedbackStatus.textContent = 'Failed to save.';
-      });
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+      body: body || ''
+    });
+  }
+
+  function busy(btn, on) {
+    btn.disabled = on;
+    btn.classList.toggle('opacity-50', on);
+  }
+
+  function feedbackText(msg) {
+    if (feedbackStatus) feedbackStatus.textContent = msg;
+  }
+
+  function sendFeedback(btn, falsePositive) {
+    if (!currentLogID) return;
+    busy(btn, true);
+    feedbackText('Saving…');
+    post(adminPath + '/logs/feedback/' + currentLogID, 'false_positive=' + (falsePositive ? '1' : '0'))
+      .then(function (r) { if (!r.ok) throw r.status; })
+      .then(function () { feedbackText('Marked ' + (falsePositive ? 'false positive' : 'correct') + '.'); })
+      .catch(function () { feedbackText('Failed to save. Try again.'); })
+      .finally(function () { busy(btn, false); });
   }
 
   // Issue #7: disable the blocking rule for this entry's service only.
-  var exceptionBtn = document.getElementById('ld-exception');
-  if (exceptionBtn) exceptionBtn.addEventListener('click', function () {
+  function createException(btn) {
     if (!currentLogID || !confirm('Disable this rule for this service? The WAF reloads immediately.')) return;
-    if (feedbackStatus) feedbackStatus.textContent = 'Saving…';
-    fetch(adminPath + '/logs/exception/' + currentLogID, {
-      method: 'POST',
-      headers: { 'X-CSRF-Token': document.body.dataset.csrf || '' }
-    })
-      .then(function (r) { return r.json().then(function (j) { return r.ok ? j : Promise.reject(j.error); }); })
-      .then(function (j) {
-        if (feedbackStatus) feedbackStatus.textContent = 'Rule disabled for ' + j.service + '.';
-      })
-      .catch(function (e) {
-        if (feedbackStatus) feedbackStatus.textContent = typeof e === 'string' ? e : 'Failed to save.';
-      });
-  });
-
-  if (feedbackFpBtn) feedbackFpBtn.addEventListener('click', function () { sendFeedback(true); });
-  if (feedbackTpBtn) feedbackTpBtn.addEventListener('click', function () { sendFeedback(false); });
-
-  function closeDetail() {
-    if (backdrop) backdrop.classList.add('hidden');
+    busy(btn, true);
+    feedbackText('Saving…');
+    post(adminPath + '/logs/exception/' + currentLogID)
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw j.error; return j; }); })
+      .then(function (j) { feedbackText('Rule disabled for ' + j.service + '.'); })
+      .catch(function (e) { feedbackText(typeof e === 'string' ? e : 'Failed to save. Try again.'); })
+      .finally(function () { busy(btn, false); });
   }
 
+  [['ld-feedback-fp', function (b) { sendFeedback(b, true); }],
+   ['ld-feedback-tp', function (b) { sendFeedback(b, false); }],
+   ['ld-exception', createException]].forEach(function (pair) {
+    var b = document.getElementById(pair[0]);
+    if (b) b.addEventListener('click', function () { pair[1](b); });
+  });
+
   if (backdrop) {
-    backdrop.addEventListener('click', function (e) {
-      if (e.target === backdrop) closeDetail();
+    backdrop.addEventListener('click', function (e) { if (e.target === backdrop) closeDetail(); });
+    // Keep Tab inside the dialog while it is open.
+    backdrop.addEventListener('keydown', function (e) {
+      if (e.key !== 'Tab') return;
+      var vis = Array.prototype.filter.call(
+        modal.querySelectorAll('button:not([disabled]), [href], [tabindex="0"]'),
+        function (el) { return el.offsetParent !== null; });
+      if (!vis.length) return;
+      var first = vis[0], last = vis[vis.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     });
   }
   if (closeBtn) closeBtn.addEventListener('click', closeDetail);
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') closeDetail();
-  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDetail(); });
 
   if (feed) {
     feed.addEventListener('click', function (e) {
       var row = e.target.closest('[data-log-id]');
-      if (row) openDetail(row.dataset.logId);
+      if (row) openDetail(row);
+    });
+    feed.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      var row = e.target.closest('[data-log-id]');
+      if (!row) return;
+      e.preventDefault();
+      openDetail(row);
     });
   }
 })();

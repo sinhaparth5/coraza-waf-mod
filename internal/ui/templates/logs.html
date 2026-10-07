@@ -1,9 +1,9 @@
 {{define "actions"}}
 {{if not .History}}
-<button id="pause-btn"
+<button id="pause-btn" type="button" aria-pressed="false"
   class="flex items-center gap-[6px] border border-line bg-white rounded-md px-4 py-2 text-[14px] font-medium text-slate-500 cursor-pointer font-sans">
   <i id="pause-icon" class="hgi hgi-stroke hgi-rounded hgi-pause text-[13px]"></i>
-  <span id="pause-label">Pause</span>
+  <span id="pause-label" class="min-w-[3.25rem] text-left">Pause</span>
 </button>
 {{else}}
 <a href="{{$.AdminPath}}/logs"
@@ -23,14 +23,14 @@
 {{define "content"}}
 
 <!-- Filter bar -->
-<form method="get" action="/admin/logs" id="logs-filter-form" class="grid grid-cols-1 sm:grid-cols-2 xl:flex xl:items-end gap-3 mb-4">
+<form method="get" action="{{.AdminPath}}/logs" id="logs-filter-form" class="grid grid-cols-1 sm:grid-cols-2 xl:flex xl:items-end gap-3 mb-4">
 
   <!-- From date picker -->
   <div class="min-w-0">
-    <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">From</label>
+    <span id="filter-from-label" class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">From</span>
     <input type="hidden" name="from" id="filter-from" value="{{.FilterFrom}}">
-    <button type="button" id="filter-from-btn"
-      class="flex min-h-11 w-full items-center gap-2 border-[1.5px] border-line rounded-lg px-3 py-2 text-[13px] bg-white cursor-pointer xl:min-w-[210px] hover:border-slate-300 focus:outline-hidden transition-colors">
+    <button type="button" id="filter-from-btn" aria-labelledby="filter-from-label filter-from-display"
+      class="flex min-h-11 w-full items-center gap-2 border-[1.5px] border-line rounded-lg px-3 py-2 text-[13px] bg-white cursor-pointer xl:min-w-[210px] hover:border-slate-300 transition-colors">
       <i class="hgi hgi-stroke hgi-rounded hgi-calendar-02 text-[14px] text-slate-400 shrink-0"></i>
       <span id="filter-from-display" class="flex-1 text-left text-slate-400">Any date</span>
     </button>
@@ -38,10 +38,10 @@
 
   <!-- To date picker -->
   <div class="min-w-0">
-    <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">To</label>
+    <span id="filter-to-label" class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">To</span>
     <input type="hidden" name="to" id="filter-to" value="{{.FilterTo}}">
-    <button type="button" id="filter-to-btn"
-      class="flex min-h-11 w-full items-center gap-2 border-[1.5px] border-line rounded-lg px-3 py-2 text-[13px] bg-white cursor-pointer xl:min-w-[210px] hover:border-slate-300 focus:outline-hidden transition-colors">
+    <button type="button" id="filter-to-btn" aria-labelledby="filter-to-label filter-to-display"
+      class="flex min-h-11 w-full items-center gap-2 border-[1.5px] border-line rounded-lg px-3 py-2 text-[13px] bg-white cursor-pointer xl:min-w-[210px] hover:border-slate-300 transition-colors">
       <i class="hgi hgi-stroke hgi-rounded hgi-calendar-02 text-[14px] text-slate-400 shrink-0"></i>
       <span id="filter-to-display" class="flex-1 text-left text-slate-400">Any date</span>
     </button>
@@ -49,41 +49,39 @@
 
   <!-- App dropdown -->
   <div class="relative min-w-0">
-    <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">App</label>
+    <span id="filter-app-label" class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">App</span>
     <input type="hidden" name="app" id="filter-app" value="{{.FilterApp}}">
-    <button type="button" id="filter-app-btn"
-      class="flex min-h-11 w-full items-center gap-2 border-[1.5px] border-line rounded-lg px-3 py-2 text-[13px] bg-white cursor-pointer xl:min-w-[145px] hover:border-slate-300 focus:outline-hidden transition-colors">
+    <button type="button" id="filter-app-btn" aria-labelledby="filter-app-label filter-app-display"
+      class="flex min-h-11 w-full items-center gap-2 border-[1.5px] border-line rounded-lg px-3 py-2 text-[13px] bg-white cursor-pointer xl:min-w-[145px] hover:border-slate-300 transition-colors">
       <span id="filter-app-display" class="flex-1 text-left text-slate-700">All apps</span>
       <i class="hgi hgi-stroke hgi-rounded hgi-arrow-down-01 text-[11px] text-slate-400 shrink-0"></i>
     </button>
     <div id="filter-app-dropdown"
-      class="hidden absolute top-full left-0 mt-1 z-50 bg-white border border-line rounded-md py-1 min-w-full"
-      style="box-shadow:0 8px 28px rgba(0,0,0,.10);">
-      <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="" data-label="All apps">All apps</button>
+      class="hidden absolute top-full left-0 mt-1 z-50 max-h-72 overflow-y-auto bg-white border border-line rounded-md py-1 min-w-full shadow-[0_8px_28px_rgba(0,0,0,.10)]">
+      <button type="button" class="w-full text-left px-3 py-[9px] text-[13px] text-slate-700 hover:bg-surface focus-visible:bg-surface cursor-pointer" data-value="" data-label="All apps">All apps</button>
       {{range .Apps}}
-      <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="{{.Name}}" data-label="{{.Name}}">{{.Name}}</button>
+      <button type="button" class="w-full text-left px-3 py-[9px] text-[13px] text-slate-700 hover:bg-surface focus-visible:bg-surface cursor-pointer" data-value="{{.Name}}" data-label="{{.Name}}">{{.Name}}</button>
       {{end}}
     </div>
   </div>
 
   <!-- Status dropdown -->
   <div class="relative min-w-0">
-    <label class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">Status</label>
+    <span id="filter-status-label" class="block text-[11px] text-slate-500 mb-[6px] font-semibold uppercase tracking-[.04em]">Status</span>
     <input type="hidden" name="status" id="filter-status" value="{{.FilterStatus}}">
-    <button type="button" id="filter-status-btn"
-      class="flex min-h-11 w-full items-center gap-2 border-[1.5px] border-line rounded-lg px-3 py-2 text-[13px] bg-white cursor-pointer xl:min-w-[155px] hover:border-slate-300 focus:outline-hidden transition-colors">
+    <button type="button" id="filter-status-btn" aria-labelledby="filter-status-label filter-status-display"
+      class="flex min-h-11 w-full items-center gap-2 border-[1.5px] border-line rounded-lg px-3 py-2 text-[13px] bg-white cursor-pointer xl:min-w-[155px] hover:border-slate-300 transition-colors">
       <span id="filter-status-display" class="flex-1 text-left text-slate-700">All statuses</span>
       <i class="hgi hgi-stroke hgi-rounded hgi-arrow-down-01 text-[11px] text-slate-400 shrink-0"></i>
     </button>
     <div id="filter-status-dropdown"
-      class="hidden absolute top-full left-0 mt-1 z-50 bg-white border border-line rounded-md py-1 min-w-[170px]"
-      style="box-shadow:0 8px 28px rgba(0,0,0,.10);">
-      <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="" data-label="All statuses">All statuses</button>
-      <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="blocked" data-label="Blocked only">Blocked only</button>
-      <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="2xx" data-label="2xx success">2xx success</button>
-      <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="3xx" data-label="3xx redirect">3xx redirect</button>
-      <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="4xx" data-label="4xx client error">4xx client error</button>
-      <button type="button" class="w-full text-left px-3 py-[7px] text-[13px] text-slate-700 hover:bg-surface cursor-pointer" data-value="5xx" data-label="5xx server error">5xx server error</button>
+      class="hidden absolute top-full left-0 mt-1 z-50 bg-white border border-line rounded-md py-1 min-w-[170px] shadow-[0_8px_28px_rgba(0,0,0,.10)]">
+      <button type="button" class="w-full text-left px-3 py-[9px] text-[13px] text-slate-700 hover:bg-surface focus-visible:bg-surface cursor-pointer" data-value="" data-label="All statuses">All statuses</button>
+      <button type="button" class="w-full text-left px-3 py-[9px] text-[13px] text-slate-700 hover:bg-surface focus-visible:bg-surface cursor-pointer" data-value="blocked" data-label="Blocked only">Blocked only</button>
+      <button type="button" class="w-full text-left px-3 py-[9px] text-[13px] text-slate-700 hover:bg-surface focus-visible:bg-surface cursor-pointer" data-value="2xx" data-label="2xx success">2xx success</button>
+      <button type="button" class="w-full text-left px-3 py-[9px] text-[13px] text-slate-700 hover:bg-surface focus-visible:bg-surface cursor-pointer" data-value="3xx" data-label="3xx redirect">3xx redirect</button>
+      <button type="button" class="w-full text-left px-3 py-[9px] text-[13px] text-slate-700 hover:bg-surface focus-visible:bg-surface cursor-pointer" data-value="4xx" data-label="4xx client error">4xx client error</button>
+      <button type="button" class="w-full text-left px-3 py-[9px] text-[13px] text-slate-700 hover:bg-surface focus-visible:bg-surface cursor-pointer" data-value="5xx" data-label="5xx server error">5xx server error</button>
     </div>
   </div>
 
@@ -92,7 +90,7 @@
     Filter
   </button>
   {{if .History}}
-  <a href="/admin/logs" class="text-[13px] text-slate-500 px-1 py-2 no-underline">Clear</a>
+  <a href="{{.AdminPath}}/logs" class="flex min-h-11 items-center px-2 text-[13px] text-slate-500 no-underline hover:text-slate-700">Clear filters</a>
   {{end}}
 </form>
 
@@ -104,33 +102,40 @@
     Showing {{len .Recent}} of {{.Total}} matching requests
   </div>
   {{else}}
-  <div class="flex items-center gap-2 text-[14px] font-medium text-green-600">
+  <div class="flex items-center gap-2 text-[14px] font-medium" role="status">
     <span class="relative flex w-2 h-2">
-      <span class="absolute inset-0 rounded-full bg-brand animate-ping opacity-75"></span>
-      <span class="w-2 h-2 rounded-full bg-brand block"></span>
+      <span id="live-ping" class="absolute inset-0 rounded-full bg-amber-500 motion-safe:animate-ping opacity-75 hidden"></span>
+      <span id="live-dot" class="w-2 h-2 rounded-full bg-amber-500 block"></span>
     </span>
-    Live stream active
+    <span id="live-text" class="text-amber-700">Connecting…</span>
   </div>
   <span class="hidden sm:block w-px h-4 bg-line"></span>
-  <span class="hidden sm:inline text-[12px] text-slate-500">New entries appear at the top</span>
+  <span class="hidden sm:inline text-[12px] text-slate-500">Newest first · last 500 rows · click a row for details</span>
+  <!-- Shown while new rows wait (paused, or scrolled away from the top). -->
+  <button type="button" id="new-rows-pill"
+    class="hidden flex min-h-8 items-center gap-1.5 rounded-full bg-navy px-3 py-1 text-[12px] font-semibold text-white hover:bg-slate-800 transition-colors">
+    <i class="hgi hgi-stroke hgi-rounded hgi-arrow-up-01 text-[12px]"></i>
+    <span><span id="new-rows-count">0</span> new · show</span>
+  </button>
+  <span id="logs-notice" class="text-[12px] text-red-600" aria-live="polite"></span>
   <span class="flex-1"></span>
   <div class="inline-flex items-center rounded-md border border-line p-1 bg-surface" role="tablist" aria-label="Log view">
-    <button type="button" id="view-table-btn" role="tab" aria-selected="true"
-      class="flex items-center gap-[6px] px-3 py-[6px] text-[12px] font-medium rounded-sm bg-white text-slate-800 shadow-xs cursor-pointer transition-colors duration-150">
+    <button type="button" id="view-table-btn" role="tab" aria-selected="true" aria-controls="log-card" tabindex="0"
+      class="flex min-h-9 items-center gap-[6px] px-3 py-[6px] text-[12px] font-medium rounded-sm bg-white text-slate-800 shadow-xs cursor-pointer transition-colors duration-150">
       <i class="hgi hgi-stroke hgi-rounded hgi-menu-square text-[12px]"></i>
       Table
     </button>
-    <button type="button" id="view-terminal-btn" role="tab" aria-selected="false"
-      class="flex items-center gap-[6px] px-3 py-[6px] text-[12px] font-medium rounded-sm text-slate-500 cursor-pointer transition-colors duration-150">
-      <i class="hgi hgi-stroke hgi-rounded hgi-code text-[12px]"></i>
-      Terminal
+    <button type="button" id="view-stats-btn" role="tab" aria-selected="false" aria-controls="stats-view" tabindex="-1"
+      class="flex min-h-9 items-center gap-[6px] px-3 py-[6px] text-[12px] font-medium rounded-sm text-slate-500 cursor-pointer transition-colors duration-150">
+      <i class="hgi hgi-stroke hgi-rounded hgi-analytics-01 text-[12px]"></i>
+      Stats
     </button>
   </div>
   {{end}}
 </div>
 
-<!-- Log terminal card -->
-<div class="card overflow-x-auto">
+<!-- Log table card. role=tabpanel pairs it with the Table tab. -->
+<div id="log-card" class="card overflow-x-auto" role="tabpanel" aria-labelledby="view-table-btn">
 
   <!-- Column headers (table view only) -->
   <div id="log-columns" class="flex min-w-[920px] items-center gap-[22px] px-6 py-3 bg-surface border-b border-line text-[11px] font-semibold text-slate-500 uppercase tracking-[.06em]">
@@ -174,15 +179,6 @@
     {{end}}
   </div>
 
-  <!-- SSE live feed: Terminal (access log) view, hidden until selected.
-       Lines don't wrap (whitespace-pre); overflow-auto gives a horizontal
-       scrollbar for long lines instead, like a real terminal. -->
-  <div id="access-log-wrapper" class="hidden min-w-[920px] overflow-auto h-[calc(100dvh-280px)] min-h-[360px] bg-slate-900">
-    <div id="access-log-feed" class="text-white text-[12px] font-mono px-4 py-3 whitespace-pre">
-      {{range .AccessLogRecent}}<div>{{.}}</div>{{end}}
-      {{if not .AccessLogRecent}}<p id="access-log-empty" class="text-slate-400">Waiting for requests…</p>{{end}}
-    </div>
-  </div>
   {{end}}
 
 </div>
@@ -201,7 +197,43 @@
   {{end}}
 </div>
 {{else}}
-<p id="table-format-hint" class="font-mono text-[12px] text-slate-300 mt-3">
+<!-- GoAccess-style live summary. Filled and kept current by logs.js from the
+     same SSE stream as the table (plus a one-off seed of the last hour). -->
+<div id="stats-view" class="hidden" role="tabpanel" aria-labelledby="view-stats-btn">
+  <p id="st-since" class="mb-3 text-[12px] text-slate-500">Loading the last hour…</p>
+  <div class="mb-3 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+    {{range $t := (splitComma "Requests,Unique visitors,Blocked,Not found (404),Server errors (5xx),Avg response")}}
+    <div class="card p-4">
+      <p class="text-[11px] uppercase tracking-[0.08em] font-medium text-slate-500 mb-1">{{$t}}</p>
+      <p class="st-tile text-[24px] font-extrabold leading-none text-slate-900 tabular-nums">—</p>
+    </div>
+    {{end}}
+  </div>
+  <div class="card mb-3 p-5">
+    <div class="mb-3 flex items-baseline justify-between gap-4">
+      <div>
+        <p class="text-[11px] uppercase tracking-[0.08em] font-medium text-slate-500 mb-[2px]">Last 60 minutes</p>
+        <h3 class="text-[16px] font-bold text-slate-900">Requests per minute</h3>
+      </div>
+      <p class="whitespace-nowrap text-[12px] text-slate-500"><span class="inline-block h-2 w-2 rounded-xs bg-brand"></span> allowed
+        <span class="ml-3 inline-block h-2 w-2 rounded-xs bg-red-500"></span> blocked</p>
+    </div>
+    <svg id="st-timeline" viewBox="0 0 60 40" preserveAspectRatio="none" class="h-32 w-full" role="img" aria-label="Requests per minute over the last 60 minutes; hover a bar for exact counts"></svg>
+  </div>
+  <div class="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+    {{template "stat-panel" (map "ID" "path" "Cat" "Requests" "Title" "Top paths")}}
+    {{template "stat-panel" (map "ID" "ip" "Cat" "Visitors" "Title" "Top IPs")}}
+    {{template "stat-panel" (map "ID" "why" "Cat" "Security" "Title" "Block reasons")}}
+    {{template "stat-panel" (map "ID" "nf" "Cat" "Requests" "Title" "Not found (404)")}}
+    {{template "stat-panel" (map "ID" "status" "Cat" "Responses" "Title" "Status codes")}}
+    {{template "stat-panel" (map "ID" "cc" "Cat" "Visitors" "Title" "Countries")}}
+    {{template "stat-panel" (map "ID" "app" "Cat" "Routing" "Title" "Services")}}
+    {{template "stat-panel" (map "ID" "br" "Cat" "Clients" "Title" "Browsers")}}
+    {{template "stat-panel" (map "ID" "os" "Cat" "Clients" "Title" "Operating systems")}}
+  </div>
+</div>
+
+<p id="table-format-hint" class="font-mono text-[12px] text-slate-500 mt-3">
   Format: time · app · ip · method · path · status · duration · [action]
 </p>
 {{end}}
@@ -209,15 +241,15 @@
 {{end}}
 
 {{define "scripts"}}
-<script src="{{.AdminPath}}/static/js/logs.min.js" defer></script>
+<script src="{{.AdminPath}}/static/js/pickers.min.js?v={{.Asset}}" defer></script>
+<script src="{{.AdminPath}}/static/js/logstats.min.js?v={{.Asset}}" defer></script>
+<script src="{{.AdminPath}}/static/js/logs.min.js?v={{.Asset}}" defer></script>
 
 <!-- ── Request Detail Modal ──────────────────────────────────── -->
 <div id="log-detail-backdrop"
-     class="hidden fixed inset-0 z-[300] flex items-center justify-center p-4"
-     style="background:rgba(15,23,42,.45);backdrop-filter:blur(4px);">
-  <div id="log-detail-modal"
-       class="bg-white rounded-lg border border-line w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden"
-       style="box-shadow:0 24px 80px rgba(0,0,0,.18);">
+     class="hidden fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/45 backdrop-blur-xs">
+  <div id="log-detail-modal" role="dialog" aria-modal="true" aria-labelledby="ld-path"
+       class="bg-white rounded-lg border border-line w-full max-w-2xl max-h-[88dvh] flex flex-col overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,.18)] motion-safe:starting:scale-[.98] motion-safe:starting:opacity-0 transition-[opacity,scale] duration-200 ease-out">
 
     <!-- Modal header bar -->
     <div class="flex items-center gap-3 px-6 py-4 border-b border-canvas shrink-0">
@@ -231,7 +263,7 @@
     </div>
 
     <!-- Scrollable body -->
-    <div class="overflow-y-auto p-6 flex flex-col gap-6">
+    <div data-modal-body class="overflow-y-auto overscroll-contain p-4 sm:p-6 flex flex-col gap-6">
 
       <!-- ① Overview -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
@@ -245,7 +277,7 @@
         </div>
         <div>
           <p class="ld-label">App / Service</p>
-          <p id="ld-app" class="text-[13px] text-brand font-semibold"></p>
+          <p id="ld-app" class="text-[13px] text-brand-dark font-semibold"></p>
         </div>
         <div>
           <p class="ld-label">Country</p>
@@ -259,11 +291,11 @@
           <p class="ld-label">Query String</p>
           <p id="ld-query" class="font-mono text-[12px] text-slate-500 break-all"></p>
         </div>
-        <div class="col-span-2">
+        <div class="sm:col-span-2">
           <p class="ld-label">User Agent</p>
           <p id="ld-ua" class="text-[12px] text-slate-600 break-all"></p>
         </div>
-        <div class="col-span-2">
+        <div class="sm:col-span-2">
           <p class="ld-label">Request ID</p>
           <p id="ld-reqid" class="font-mono text-[12px] text-slate-500 select-all"></p>
         </div>
@@ -272,11 +304,11 @@
       <!-- ② IP Addresses -->
       <div>
         <p class="ld-section-title">IP Addresses</p>
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div class="bg-amber-50 border border-amber-100 rounded-lg p-4">
             <p class="text-[10px] text-amber-600 font-semibold uppercase tracking-[.06em] mb-2">Real Client IP</p>
             <p id="ld-real-ip" class="font-mono text-[15px] font-bold text-amber-700 break-all"></p>
-            <p class="text-[11px] text-amber-400 mt-1">CF-Connecting-IP / X-Forwarded-For</p>
+            <p class="text-[11px] text-amber-700/80 mt-1">CF-Connecting-IP / X-Forwarded-For</p>
           </div>
           <div class="bg-slate-50 border border-line rounded-lg p-4">
             <p class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.06em] mb-2">Proxy / CDN IP</p>
@@ -401,21 +433,21 @@
             <p id="ld-block-reason" class="text-[12px] text-red-500 mt-[3px]"></p>
           </div>
         </div>
-        <div id="ld-feedback-row" class="hidden mt-2 flex items-center gap-2">
+        <div id="ld-feedback-row" class="hidden mt-2 flex flex-wrap items-center gap-2">
           <span class="text-[11px] text-slate-500">Was this rule correct?</span>
           <button id="ld-feedback-fp" type="button" data-fp="1"
-            class="text-[12px] font-medium text-slate-600 hover:text-amber-700 border border-line hover:border-amber-300 rounded-lg px-3 py-1 transition-colors cursor-pointer bg-white">
+            class="text-[12px] font-medium text-slate-600 hover:text-amber-700 border border-line hover:border-amber-300 rounded-lg px-3 py-2 transition-colors cursor-pointer bg-white">
             False positive
           </button>
           <button id="ld-feedback-tp" type="button" data-fp="0"
-            class="text-[12px] font-medium text-slate-600 hover:text-green-700 border border-line hover:border-green-300 rounded-lg px-3 py-1 transition-colors cursor-pointer bg-white">
+            class="text-[12px] font-medium text-slate-600 hover:text-green-700 border border-line hover:border-green-300 rounded-lg px-3 py-2 transition-colors cursor-pointer bg-white">
             Correct block
           </button>
           <button id="ld-exception" type="button"
-            class="text-[12px] font-medium text-slate-600 hover:text-brand border border-line hover:border-brand rounded-lg px-3 py-1 transition-colors cursor-pointer bg-white">
+            class="text-[12px] font-medium text-slate-600 hover:text-brand border border-line hover:border-brand rounded-lg px-3 py-2 transition-colors cursor-pointer bg-white">
             Create exception
           </button>
-          <span id="ld-feedback-status" class="text-[11px] text-slate-400"></span>
+          <span id="ld-feedback-status" class="text-[11px] text-slate-500" aria-live="polite"></span>
         </div>
       </div>
 
@@ -429,11 +461,12 @@
   </div><!-- /modal -->
 </div><!-- /backdrop -->
 
-<style>
-  /* @layer components so utilities keep overriding these (see base.html). */
-  @layer components {
-  .ld-label { font-size:10px; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
-  .ld-section-title { font-size:10px; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:.06em; margin-bottom:10px; }
-  }
-</style>
+{{end}}
+
+{{define "stat-panel"}}
+<div class="card p-5">
+  <p class="text-[11px] uppercase tracking-[0.08em] font-medium text-slate-500 mb-[2px]">{{.Cat}}</p>
+  <h3 class="mb-3 text-[16px] font-bold text-slate-900">{{.Title}}</h3>
+  <ol id="st-{{.ID}}" class="space-y-2"><li class="text-[13px] text-slate-400">No requests yet</li></ol>
+</div>
 {{end}}

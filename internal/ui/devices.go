@@ -29,7 +29,14 @@ func browserOS(ua string) string {
 	if strings.TrimSpace(ua) == "" {
 		return "Unknown device"
 	}
-	browser := "Unknown browser"
+	browser, os := uaBrowserOS(ua)
+	return browser + " on " + os
+}
+
+// uaBrowserOS is browserOS's two halves, kept separate for the Logs page
+// Stats view, which counts browsers and operating systems in their own panels.
+func uaBrowserOS(ua string) (browser, os string) {
+	browser = "Unknown browser"
 	for _, c := range []struct{ needle, name string }{
 		{"Edg/", "Edge"},
 		{"OPR/", "Opera"},
@@ -47,7 +54,7 @@ func browserOS(ua string) string {
 			break
 		}
 	}
-	os := "Unknown OS"
+	os = "Unknown OS"
 	for _, c := range []struct{ needle, name string }{
 		{"iPhone", "iPhone"},
 		{"iPad", "iPad"},
@@ -63,7 +70,7 @@ func browserOS(ua string) string {
 			break
 		}
 	}
-	return browser + " on " + os
+	return browser, os
 }
 
 // deviceRows renders the session history for the template, marking the row

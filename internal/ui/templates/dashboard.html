@@ -314,7 +314,8 @@
 {{end}}
 
 {{define "scripts"}}
-<script src="{{.AdminPath}}/static/js/dashboard.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt" crossorigin="anonymous" defer></script>
+<script src="{{.AdminPath}}/static/js/dashboard.min.js?v={{.Asset}}" defer></script>
 {{end}}
 
 <!-- ── Right panel ── -->
