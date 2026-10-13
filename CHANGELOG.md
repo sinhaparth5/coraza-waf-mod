@@ -14,6 +14,8 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-10-13
+
 ### Changed
 
 - The product is now named **Palisade** (was "Coraza WAF Mod"): admin UI, login and challenge pages, emails, webhook footers, TOTP/passkey display names, the `Server` response header, TLS self-signed CN and systemd unit descriptions. Built on OWASP Coraza.
@@ -21,11 +23,5 @@ rather than growing this file forever.
 - Prometheus metrics are renamed from `coraza_*` to `palisade_*` (update dashboards and alerts), the `X-WAF-Engine` header now reads `Palisade`, the Go module is `palisade`, the cluster blocklist channel is `palisade:ipblocklist:reload` (mixed-version clusters won't sync blocklist reloads during a rolling upgrade), backups download as `palisade-YYYY-MM-DD.db`, and the threat-intel User-Agent is `palisade/threat-intel`.
 - Admin UI redesigned as a field-notes notebook: warm paper and ink palette (with a dark mode), Calistoga/DM Sans/JetBrains Mono/Caveat type, green = allowed, red = blocked, lime = highlight.
 
-## [2.4.1] - 2026-10-13
-
-### Fixed
-
-- `install.sh` hung (or exited silently) right after the database prompt when run as `curl | bash`: `exec < /dev/tty` replaced the pipe bash was reading the script from. Stdin is now saved and restored around the prompts.
-
-[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.4.1...main
-[2.4.1]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.4.0...v2.4.1
+[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.5.0...main
+[2.5.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.4.1...v2.5.0
