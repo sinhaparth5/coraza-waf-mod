@@ -14,6 +14,10 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Fixed
+
+- `install.sh` hung (or exited silently) right after the database prompt when run as `curl | bash`: `exec < /dev/tty` replaced the pipe bash was reading the script from. Stdin is now saved and restored around the prompts.
+
 ## [2.4.0] - 2026-10-07
 
 ### Added

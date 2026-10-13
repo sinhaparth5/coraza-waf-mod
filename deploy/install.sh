@@ -210,6 +210,10 @@ DB_SSLMODE=""
 
 if [ "$IS_UPGRADE" = "0" ] && [ "$DRY_RUN" != "1" ]; then
 	# When piped from curl, stdin is the pipe — reconnect to the terminal.
+	# Save the original stdin and restore it after the prompts: under
+	# `curl | bash`, bash reads the script itself from this pipe, so leaving
+	# stdin on the tty makes it read the rest of the script from the keyboard.
+	exec 3<&0
 	if [ ! -t 0 ]; then
 		exec < /dev/tty
 	fi
@@ -285,6 +289,7 @@ if [ "$IS_UPGRADE" = "0" ] && [ "$DRY_RUN" != "1" ]; then
 		DB_DRIVER="sqlite"
 	fi
 	echo
+	exec 0<&3 3<&-
 elif [ "$DRY_RUN" = "1" ]; then
 	ADMIN_EMAIL="admin@example.com"
 	ADMIN_PASSWORD="<prompted-at-runtime>"
