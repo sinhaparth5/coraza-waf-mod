@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 const timeLayout = "02/Jan/2006:15:04:05 -0700"

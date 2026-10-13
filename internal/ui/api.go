@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"coraza-waf-mod/internal/notify/metrics"
-	"coraza-waf-mod/internal/security/waf"
-	"coraza-waf-mod/internal/services"
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/notify/metrics"
+	"palisade/internal/security/waf"
+	"palisade/internal/services"
+	"palisade/internal/storage"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"

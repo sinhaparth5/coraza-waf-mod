@@ -70,9 +70,9 @@
       <p class="relative text-[12px] text-white/60 mb-1">Rules overview</p>
 
       <div class="relative flex flex-col gap-2">
-        {{template "rule-ring-row" (map "Color" "#FF8B8B" "Pct" .BlockPct "Title" "Block rules" "Sub" "deny matching traffic" "Count" .BlockCount)}}
+        {{template "rule-ring-row" (map "Color" "#D6584F" "Pct" .BlockPct "Title" "Block rules" "Sub" "deny matching traffic" "Count" .BlockCount)}}
 
-        {{template "rule-ring-row" (map "Color" "#4ADE80" "Pct" .AllowPct "Title" "Allow rules" "Sub" "whitelist, bypasses other blocks" "Count" .AllowCount)}}
+        {{template "rule-ring-row" (map "Color" "#3E9B55" "Pct" .AllowPct "Title" "Allow rules" "Sub" "whitelist, bypasses other blocks" "Count" .AllowCount)}}
       </div>
     </div>
 

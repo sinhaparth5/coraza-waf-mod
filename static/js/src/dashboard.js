@@ -37,7 +37,7 @@
             {
               label: 'Allowed',
               data: traffic.allowed,
-              borderColor: '#4ADE80',
+              borderColor: '#3E9B55',
               borderWidth: 2,
               tension: 0.4,
               fill: 'origin',
@@ -53,8 +53,8 @@
               pointHoverRadius: 5,
               pointBackgroundColor: '#FFFFFF',
               pointHoverBackgroundColor: '#FFFFFF',
-              pointBorderColor: '#4ADE80',
-              pointHoverBorderColor: '#4ADE80',
+              pointBorderColor: '#3E9B55',
+              pointHoverBorderColor: '#3E9B55',
               pointBorderWidth: 2,
             },
             {

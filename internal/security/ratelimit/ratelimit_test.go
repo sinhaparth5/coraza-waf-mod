@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"coraza-waf-mod/internal/config"
+	"palisade/internal/config"
 )
 
 func cfg(rps float64, burst int) config.RateLimitConfig {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"coraza-waf-mod/internal/config"
+	"palisade/internal/config"
 )
 
 // countingReader tracks how many bytes Check actually pulls off the wire, so

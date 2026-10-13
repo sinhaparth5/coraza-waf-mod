@@ -29,28 +29,28 @@ import (
 	"syscall"
 	"time"
 
-	"coraza-waf-mod/internal/config"
-	"coraza-waf-mod/internal/notify/accesslog"
-	"coraza-waf-mod/internal/notify/mailer"
-	"coraza-waf-mod/internal/notify/metrics"
-	"coraza-waf-mod/internal/notify/warehouse"
-	"coraza-waf-mod/internal/notify/webhook"
-	"coraza-waf-mod/internal/proxy"
-	"coraza-waf-mod/internal/security/adaptive"
-	"coraza-waf-mod/internal/security/asn"
-	"coraza-waf-mod/internal/security/autoban"
-	"coraza-waf-mod/internal/security/blocklist"
-	"coraza-waf-mod/internal/security/challenge"
-	"coraza-waf-mod/internal/security/geo"
-	ja3pkg "coraza-waf-mod/internal/security/ja3"
-	ja4pkg "coraza-waf-mod/internal/security/ja4"
-	"coraza-waf-mod/internal/security/ratelimit"
-	"coraza-waf-mod/internal/security/threatintel"
-	"coraza-waf-mod/internal/security/threatscore"
-	"coraza-waf-mod/internal/security/waf"
-	"coraza-waf-mod/internal/services"
-	"coraza-waf-mod/internal/storage"
-	"coraza-waf-mod/internal/ui"
+	"palisade/internal/config"
+	"palisade/internal/notify/accesslog"
+	"palisade/internal/notify/mailer"
+	"palisade/internal/notify/metrics"
+	"palisade/internal/notify/warehouse"
+	"palisade/internal/notify/webhook"
+	"palisade/internal/proxy"
+	"palisade/internal/security/adaptive"
+	"palisade/internal/security/asn"
+	"palisade/internal/security/autoban"
+	"palisade/internal/security/blocklist"
+	"palisade/internal/security/challenge"
+	"palisade/internal/security/geo"
+	ja3pkg "palisade/internal/security/ja3"
+	ja4pkg "palisade/internal/security/ja4"
+	"palisade/internal/security/ratelimit"
+	"palisade/internal/security/threatintel"
+	"palisade/internal/security/threatscore"
+	"palisade/internal/security/waf"
+	"palisade/internal/services"
+	"palisade/internal/storage"
+	"palisade/internal/ui"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -64,7 +64,7 @@ func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "--version", "version":
-			fmt.Println("coraza-waf-mod", version)
+			fmt.Println("palisade", version)
 			return
 		case "prune":
 			runPruneOnly(os.Args[2:])
@@ -87,7 +87,7 @@ func main() {
 	// CLI flags for bootstrap settings. All runtime knobs (WAF rules, bot
 	// protection, Redis, ACME email, per-service overrides) live in the SQLite
 	// meta table and are managed from the admin UI — no config file needed.
-	fs := flag.NewFlagSet("coraza-waf-mod", flag.ExitOnError)
+	fs := flag.NewFlagSet("palisade", flag.ExitOnError)
 	listen := fs.String("listen", ":8080", "HTTP listen address")
 	listenTLS := fs.String("listen-tls", "", "HTTPS listen address (empty = HTTP only)")
 	trustedProxies := fs.String("trusted-proxies", "", "comma-separated trusted proxy CIDRs for X-Forwarded-For/X-Real-IP")
@@ -231,7 +231,7 @@ func main() {
 	// only the dashboard is unusable until credentials are created.
 	if email, _ := db.GetAdminEmail(); email == "" {
 		log.Printf("no admin credentials configured — admin UI logins will be rejected until you run:")
-		log.Printf("  coraza-waf-mod setup --db %s --admin-email you@example.com  (password read from stdin)", cfg.DB.Path)
+		log.Printf("  palisade setup --db %s --admin-email you@example.com  (password read from stdin)", cfg.DB.Path)
 	}
 
 	ipbl, err := blocklist.NewIPBlocklist(db)
@@ -532,7 +532,7 @@ func main() {
 		}
 		return
 	}
-	log.Printf("coraza-waf listening on %s (plain HTTP, waf=%v, apps=%d)",
+	log.Printf("palisade listening on %s (plain HTTP, waf=%v, apps=%d)",
 		cfg.ListenAddr, cfg.WAF.Enabled, appCount)
 	shutdownOnSignal(e)
 	if err := e.Start(cfg.ListenAddr); err != nil && err != http.ErrServerClosed {
@@ -590,7 +590,7 @@ func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db 
 	}
 	redirectServer := &http.Server{Addr: cfg.ListenAddr, Handler: httpHandler}
 	go func() {
-		log.Printf("coraza-waf HTTP (ACME/redirect) on %s", cfg.ListenAddr)
+		log.Printf("palisade HTTP (ACME/redirect) on %s", cfg.ListenAddr)
 		if err := redirectServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("http server: %v", err)
 		}
@@ -649,7 +649,7 @@ func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db 
 		},
 	}
 
-	log.Printf("coraza-waf TLS on %s (waf=%v, apps=%d)", cfg.ListenAddrTLS, cfg.WAF.Enabled, appCount)
+	log.Printf("palisade TLS on %s (waf=%v, apps=%d)", cfg.ListenAddrTLS, cfg.WAF.Enabled, appCount)
 	shutdownOnSignal(e, redirectServer)
 	return e.StartServer(s)
 }
@@ -740,7 +740,7 @@ func splitCSV(s string) []string {
 // VACUUM is a single long write transaction: here the live server's writers
 // just wait their busy_timeout turn, instead of the rebuild monopolizing the
 // serving process's own connection pool.
-// Invoked as: coraza-waf-mod prune [--db path] [--retention days] [--vacuum]
+// Invoked as: palisade prune [--db path] [--retention days] [--vacuum]
 func runPruneOnly(args []string) {
 	fs := flag.NewFlagSet("prune", flag.ExitOnError)
 	dbPath := fs.String("db", "waf.db", "database path (sqlite) or DSN (mysql/postgres)")
@@ -829,7 +829,7 @@ func runPruneLoop(db *storage.DB, every time.Duration, retention int) {
 // runHealthcheck probes a running server's readiness endpoint and exits
 // non-zero when it is not ready. The Docker image is FROM scratch, with no
 // curl or wget, so its HEALTHCHECK needs the binary itself to make the request.
-// Invoked as: coraza-waf-mod healthcheck [--url http://127.0.0.1:8080/_cz/readyz]
+// Invoked as: palisade healthcheck [--url http://127.0.0.1:8080/_cz/readyz]
 func runHealthcheck(args []string) {
 	fs := flag.NewFlagSet("healthcheck", flag.ExitOnError)
 	url := fs.String("url", "http://127.0.0.1:8080/_cz/readyz", "readiness URL to probe")
@@ -899,7 +899,7 @@ func formatBytes(n int64) string {
 // exist) it skips that step, so re-running the installer never overwrites a
 // changed password. Domain and ACME email are always overwritten (safe to
 // update during upgrades).
-// Invoked as: coraza-waf-mod setup --db path --admin-email email [--domain d] [--acme-email e]
+// Invoked as: palisade setup --db path --admin-email email [--domain d] [--acme-email e]
 // Password is read from stdin (one line).
 func runSetup(args []string) {
 	fs := flag.NewFlagSet("setup", flag.ExitOnError)
@@ -951,7 +951,7 @@ func runSetup(args []string) {
 // runGencert generates a self-signed ECDSA P-256 certificate and writes PEM
 // files. The certificate includes the provided hostnames/IPs as SANs so
 // browsers don't get a hostname-mismatch error on IP-based access.
-// Invoked as: coraza-waf-mod gencert --cert path --key path --hosts ip1,ip2,...
+// Invoked as: palisade gencert --cert path --key path --hosts ip1,ip2,...
 func runGencert(args []string) {
 	fs := flag.NewFlagSet("gencert", flag.ExitOnError)
 	certFile := fs.String("cert", "cert.pem", "output PEM certificate file")
@@ -967,7 +967,7 @@ func runGencert(args []string) {
 
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{CommonName: "Coraza WAF Mod"},
+		Subject:      pkix.Name{CommonName: "Palisade"},
 		NotBefore:    time.Now().Add(-time.Minute),
 		NotAfter:     time.Now().Add(time.Duration(*days) * 24 * time.Hour),
 		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
@@ -1024,7 +1024,7 @@ func runGencert(args []string) {
 // /proc/<pid>/cmdline for as long as the command runs, and lands in shell
 // history when typed interactively. The prompt goes to stderr so it never
 // contaminates the captured stdout the DSN itself is printed to.
-// Invoked as: printf '%s\n' "$PASSWORD" | coraza-waf-mod build-dsn --driver ...
+// Invoked as: printf '%s\n' "$PASSWORD" | palisade build-dsn --driver ...
 func runBuildDSN(args []string) {
 	fs := flag.NewFlagSet("build-dsn", flag.ExitOnError)
 	driver := fs.String("driver", "", "database driver: mysql (or mariadb), postgres (or postgresql/cockroachdb/neon)")

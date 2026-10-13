@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 func TestDashboardTemplateRendersAtAGlanceCards(t *testing.T) {

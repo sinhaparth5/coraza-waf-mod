@@ -1,12 +1,12 @@
 vcl 4.1;
 
-# Varnish sits BEHIND the Coraza WAF proxy, never in front of it, and this
+# Varnish sits BEHIND the Palisade proxy, never in front of it, and this
 # file is install-once — it does NOT change when services are added, edited,
 # or removed in the admin UI:
 #
-#   client -> coraza-waf-mod (:80/:443, WAF-inspected)
+#   client -> palisade (:80/:443, WAF-inspected)
 #          -> varnishd (127.0.0.1:6081, this config)
-#          -> coraza-waf-mod cache-return (127.0.0.1:6082, the ONLY backend here)
+#          -> palisade cache-return (127.0.0.1:6082, the ONLY backend here)
 #          -> the service's real backend (routed by the WAF from its DB)
 #
 # The WAF only forwards a request here after the full pipeline (challenge
@@ -247,7 +247,7 @@ sub vcl_backend_response {
 sub vcl_deliver {
     # Surface cache effectiveness to the WAF logs / curl -I debugging.
     # PASS = never looked up (auth/session/non-GET) or hit-for-miss — the
-    # WAF logs this per request and exports coraza_cache_results_total.
+    # WAF logs this per request and exports palisade_cache_results_total.
     if (obj.uncacheable) {
         set resp.http.X-Cache = "PASS";
     } elsif (obj.hits > 0) {

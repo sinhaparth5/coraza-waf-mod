@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 func TestNewStatEvent(t *testing.T) {

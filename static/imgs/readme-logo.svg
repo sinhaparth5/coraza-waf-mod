@@ -1,5 +1,5 @@
-<svg width="600" height="150" viewBox="0 0 600 150" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Coraza WAF Mod">
-  <title>Coraza WAF Mod</title>
+<svg width="600" height="150" viewBox="0 0 600 150" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Palisade">
+  <title>Palisade</title>
   <defs>
     <linearGradient id="badgeGrad" x1="10" y1="10" x2="130" y2="130" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#2B5C74"/>
@@ -60,12 +60,10 @@
   <!-- Wordmark -->
   <g font-family="'Plus Jakarta Sans','Segoe UI',Helvetica,Arial,sans-serif">
     <text x="153" y="80" font-size="42" font-weight="800" letter-spacing="-0.5">
-      <tspan class="cwm-title">Coraza</tspan>
-      <tspan class="cwm-accent" dx="11">WAF</tspan>
-      <tspan class="cwm-mod" dx="11" font-weight="600">Mod</tspan>
+      <tspan class="cwm-title">Palisade</tspan>
     </text>
     <text x="154" y="108" font-size="12" font-weight="600" letter-spacing="1.6" class="cwm-tagline" font-family="'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace">
-      WAF &#183; REVERSE PROXY &#183; ADMIN DASHBOARD
+      WAF AND REVERSE PROXY IN A SINGLE GO BINARY
     </text>
   </g>
 </svg>

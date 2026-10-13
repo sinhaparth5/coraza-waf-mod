@@ -43,7 +43,7 @@ import (
 	"sync"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 const (

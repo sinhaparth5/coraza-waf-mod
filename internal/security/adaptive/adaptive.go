@@ -21,7 +21,7 @@ import (
 	"log"
 	"sync"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // store is the subset of *storage.DB the policy needs — an interface so

@@ -3,7 +3,7 @@
 ## Supported Versions
 
 Security fixes are provided for the latest released minor version of
-Coraza WAF Mod. Older minor versions are not normally backported unless a
+Palisade. Older minor versions are not normally backported unless a
 maintainer explicitly announces an exception in a release note.
 
 | Version | Supported |

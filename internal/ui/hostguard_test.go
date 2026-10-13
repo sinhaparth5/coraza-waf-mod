@@ -7,9 +7,9 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"coraza-waf-mod/internal/config"
-	"coraza-waf-mod/internal/services"
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/config"
+	"palisade/internal/services"
+	"palisade/internal/storage"
 
 	"github.com/labstack/echo/v4"
 )

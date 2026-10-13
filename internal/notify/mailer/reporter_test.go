@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // fakeStore satisfies the store interface without a database.
@@ -205,7 +205,7 @@ func TestUntilNextMidnight(t *testing.T) {
 
 func TestFromHeaderCarriesDisplayName(t *testing.T) {
 	msg := string(buildMessage(fromHeader(), []string{"b@y.com"}, "Subj", "text", "<p>html</p>"))
-	want := "From: Coraza WAF Mod <alert@astrareconslabs.com>\r\n"
+	want := "From: Palisade <alert@astrareconslabs.com>\r\n"
 	if !strings.Contains(msg, want) {
 		t.Errorf("message missing %q — Gmail would show the bare address", want)
 	}

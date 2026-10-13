@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 func sampleEntry(blocked bool, action string) storage.RequestLog {

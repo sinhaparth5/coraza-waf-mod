@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"coraza-waf-mod/internal/security/passkey"
+	"palisade/internal/security/passkey"
 
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/labstack/echo/v4"

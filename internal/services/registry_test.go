@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 func openTestDB(t *testing.T) *storage.DB {

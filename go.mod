@@ -1,4 +1,4 @@
-module coraza-waf-mod
+module palisade
 
 go 1.27.0
 

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 
 	"github.com/oschwald/geoip2-golang"
 )

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"coraza-waf-mod/internal/security/waf"
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/security/waf"
+	"palisade/internal/storage"
 
 	"github.com/labstack/echo/v4"
 )

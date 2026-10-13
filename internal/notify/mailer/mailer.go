@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // Cloudflare Email Service is the only supported provider: the submission
@@ -31,8 +31,8 @@ const (
 	// Email Sending on the Cloudflare account that owns the API token.
 	Sender = "alert@astrareconslabs.com"
 	// SenderName is the display name mail clients show instead of the bare
-	// address ("Coraza WAF Mod" in the Gmail sender column, not alert@…).
-	SenderName = "Coraza WAF Mod"
+	// address ("Palisade" in the Gmail sender column, not alert@…).
+	SenderName = "Palisade"
 )
 
 // fromHeader is the RFC 5322 From value; the envelope MAIL FROM stays the

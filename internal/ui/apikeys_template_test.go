@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // TestAPIKeysCardRenders executes the Settings-page API Keys card standalone

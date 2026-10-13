@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // recorder stands in for ClickHouse: it records every query + body it was

@@ -3,9 +3,9 @@ package ui
 import (
 	"testing"
 
-	"coraza-waf-mod/internal/config"
-	"coraza-waf-mod/internal/security/waf"
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/config"
+	"palisade/internal/security/waf"
+	"palisade/internal/storage"
 )
 
 func TestDryRunDiffReportsOnlyChangedVerdicts(t *testing.T) {

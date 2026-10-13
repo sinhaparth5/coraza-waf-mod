@@ -8,9 +8,9 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"coraza-waf-mod/internal/config"
-	"coraza-waf-mod/internal/security/geo"
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/config"
+	"palisade/internal/security/geo"
+	"palisade/internal/storage"
 )
 
 // TestRevokeDevice covers the three outcomes of the single row button: a

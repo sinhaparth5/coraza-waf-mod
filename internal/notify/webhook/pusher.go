@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // Pusher receives security events from the log worker and delivers them to a
@@ -122,7 +122,7 @@ func (p *Pusher) post(cfg storage.WebhookConfig, entry storage.RequestLog) error
 		return fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "coraza-waf-mod/internal/notify/webhook")
+	req.Header.Set("User-Agent", "palisade/internal/notify/webhook")
 	if cfg.Secret != "" {
 		req.Header.Set("X-WAF-Signature-256", signPayload(cfg.Secret, body))
 	}

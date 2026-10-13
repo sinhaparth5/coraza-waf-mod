@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // newTestBlocker returns a Blocker backed by the bundled GeoLite2 DB with no

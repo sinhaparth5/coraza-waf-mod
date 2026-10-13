@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 func TestFormatLine(t *testing.T) {

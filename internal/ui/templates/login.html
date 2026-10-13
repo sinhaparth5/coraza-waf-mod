@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Sign in · Coraza WAF</title>
+  <title>Sign in · Palisade</title>
   <link rel="icon" type="image/svg+xml" href="{{.AdminPath}}/static/imgs/logo.svg"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Calistoga&family=DM+Sans:wght@400;500;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet"/>
   <!-- Compiled Tailwind (make css), shared with base.html; .page-login on
        <body> keeps this page's slate-200 default borders. -->
   <link rel="stylesheet" href="{{.AdminPath}}/static/css/tailwind.min.css?v={{.Asset}}"/>
@@ -14,7 +14,7 @@
     /* @layer components so Tailwind utilities still win over these custom
        rules; no manual `*` reset — preflight covers it (see base.html). */
     @layer components {
-    body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+    body { font-family: 'DM Sans', system-ui, sans-serif; }
     @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
     .rise-in { animation: rise .35s cubic-bezier(.16, 1, .3, 1) both; }
     @media (prefers-reduced-motion: reduce) { .rise-in { animation: none; } }
@@ -42,7 +42,7 @@
         <div class="absolute inset-0 bg-linear-to-t from-black/35 via-transparent to-transparent"></div>
         <span class="absolute left-5 bottom-4 flex items-center gap-2">
           <img src="{{.AdminPath}}/static/imgs/logo.svg" alt="" class="w-6 h-6 drop-shadow-sm"/>
-          <span class="text-white text-sm font-semibold tracking-wide drop-shadow-sm">Coraza WAF</span>
+          <span class="text-white text-sm font-semibold tracking-wide drop-shadow-sm">Palisade</span>
         </span>
       </div>
 
@@ -52,7 +52,7 @@
           <!-- Brand (desktop only; mobile shows it on the art banner instead) -->
           <span class="hidden lg:flex items-center gap-2 mb-3">
             <img src="{{.AdminPath}}/static/imgs/logo.svg" alt="" class="w-6 h-6"/>
-            <span class="text-brand-dark text-sm font-bold tracking-wide">Coraza WAF</span>
+            <span class="text-brand-dark text-sm font-bold tracking-wide">Palisade</span>
           </span>
 
           {{if .TOTPStage}}
@@ -146,7 +146,7 @@
             <div class="mb-2">
               <div class="flex items-center justify-between mb-2">
                 <label class="block text-slate-700 text-sm font-semibold" for="login-password">Password</label>
-                <span class="text-slate-400 text-xs cursor-default" title="Password resets aren't available yet. Contact whoever ran coraza-waf-mod setup.">Forgot password?</span>
+                <span class="text-slate-400 text-xs cursor-default" title="Password resets aren't available yet. Contact whoever ran palisade setup.">Forgot password?</span>
               </div>
               <div class="relative">
                 <input

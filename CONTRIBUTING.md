@@ -1,6 +1,6 @@
-# Contributing to Coraza WAF Mod
+# Contributing to Palisade
 
-Thanks for your interest in improving Coraza WAF Mod — a single-binary Go WAF +
+Thanks for your interest in improving Palisade — a single-binary Go WAF +
 reverse proxy with an embedded HTMX/Tailwind admin dashboard. This guide covers
 how to build, test, and submit changes.
 
@@ -21,7 +21,7 @@ project's [Apache License 2.0](LICENSE), and to abide by the project's
 ```bash
 git clone https://github.com/sinhaparth5/coraza-waf-mod.git
 cd coraza-waf-mod
-make build      # go generate (minifies JS) + go build -> ./coraza-waf-mod
+make build      # go generate (minifies JS) + go build -> ./palisade
 make test       # go test ./...
 make lint       # golangci-lint run ./... (config: .golangci.yml)
 ```
@@ -83,7 +83,7 @@ signal/mitigation packages, `internal/notify/` for outbound reporting) — see
   rendered — keep modal/partial markup inside the right block.
 - **Config direction:** there is no config file. Bootstrap settings (listen
   addresses, TLS binding, WAF rules dir, DB path, retention) are CLI flags —
-  see `coraza-waf-mod --help`-equivalent flag list in `main.go`'s `main()`. All
+  see `palisade --help`-equivalent flag list in `main.go`'s `main()`. All
   runtime knobs (bot protection, Redis, ACME email, per-service overrides,
   etc.) are stored in the SQLite `meta` table / per-service columns and
   managed from the admin UI.
@@ -100,7 +100,7 @@ Never commit any of the following:
 - A production `waf.db`, or bundled GeoIP/ASN databases beyond what the repo
   already ships.
 
-Admin credentials are seeded via `coraza-waf-mod setup` (password read from
+Admin credentials are seeded via `palisade setup` (password read from
 stdin, never a flag or file — see `--help`). When adding a new configurable
 secret, follow the existing pattern: store it in the `meta` table, enter it
 from the Settings page, and never echo it back to the UI or ship it in the

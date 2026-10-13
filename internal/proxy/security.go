@@ -3,7 +3,7 @@ package proxy
 import "github.com/labstack/echo/v4"
 
 // SecurityMiddleware sets hardening HTTP headers on every response:
-// standard browser security directives plus Coraza WAF identification headers.
+// standard browser security directives plus Palisade identification headers.
 // Applied globally so blocked responses, admin UI pages, and proxied responses
 // all carry the same baseline security posture.
 func SecurityMiddleware() echo.MiddlewareFunc {
@@ -26,8 +26,8 @@ func SecurityMiddleware() echo.MiddlewareFunc {
 				h.Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
 			}
 
-			// ── Coraza WAF identification ─────────────────────────────────────────
-			h.Set("X-WAF-Engine", "Coraza v3 / OWASP CRS")
+			// ── Palisade identification ─────────────────────────────────────────
+			h.Set("X-WAF-Engine", "Palisade")
 
 			return next(c)
 		}

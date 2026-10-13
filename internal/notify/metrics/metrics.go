@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -18,43 +18,43 @@ import (
 
 var (
 	RequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "coraza_http_requests_total",
+		Name: "palisade_http_requests_total",
 		Help: "Total requests handled, labeled by app and final HTTP status code.",
 	}, []string{"app", "status"})
 
 	RequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "coraza_http_request_duration_seconds",
+		Name:    "palisade_http_request_duration_seconds",
 		Help:    "Request handling latency in seconds, including WAF inspection and proxying.",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"app"})
 
 	IPBlockedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "coraza_ip_blocked_total",
+		Name: "palisade_ip_blocked_total",
 		Help: "Requests denied by the IP blocklist, labeled by app.",
 	}, []string{"app"})
 
 	GeoBlockedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "coraza_geo_blocked_total",
+		Name: "palisade_geo_blocked_total",
 		Help: "Requests denied by country/geo rules, labeled by app and country code.",
 	}, []string{"app", "country"})
 
 	WAFBlockedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "coraza_waf_blocked_total",
+		Name: "palisade_waf_blocked_total",
 		Help: "Requests denied by the Coraza WAF, labeled by app and the matched rule's action.",
 	}, []string{"app", "action"})
 
 	RateLimitedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "coraza_rate_limited_total",
+		Name: "palisade_rate_limited_total",
 		Help: "Requests denied by the per-IP rate limiter, labeled by app.",
 	}, []string{"app"})
 
 	CacheResultsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "coraza_cache_results_total",
+		Name: "palisade_cache_results_total",
 		Help: "Proxied requests to Varnish-cached services, labeled by app and cache result (hit, miss, pass).",
 	}, []string{"app", "result"})
 
 	BotChallengedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "coraza_bot_challenged_total",
+		Name: "palisade_bot_challenged_total",
 		Help: "Requests redirected to the JS PoW challenge because their bot anomaly score exceeded the threshold.",
 	}, []string{"app"})
 
@@ -70,7 +70,7 @@ var (
 	// multiply cardinality for a breakdown that's meant to answer "which
 	// stage is slow", not "which stage is slow for which app".
 	StageDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "coraza_stage_duration_seconds",
+		Name:    "palisade_stage_duration_seconds",
 		Help:    "Time spent per request-pipeline stage, labeled by stage.",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"stage"})
@@ -96,7 +96,7 @@ func SetRegistry(r interface{ List() []storage.Service }) { currentRegistry = r 
 func SetLimiter(l interface{ TrackedIPs() int }) { currentLimiter = l }
 
 var _ = promauto.NewGaugeFunc(prometheus.GaugeOpts{
-	Name: "coraza_log_queue_depth",
+	Name: "palisade_log_queue_depth",
 	Help: "Current number of request-log entries buffered waiting to be written to SQLite.",
 }, func() float64 {
 	if currentDB == nil {
@@ -106,7 +106,7 @@ var _ = promauto.NewGaugeFunc(prometheus.GaugeOpts{
 })
 
 var _ = promauto.NewGaugeFunc(prometheus.GaugeOpts{
-	Name: "coraza_services_total",
+	Name: "palisade_services_total",
 	Help: "Number of backend services currently configured.",
 }, func() float64 {
 	if currentRegistry == nil {
@@ -116,7 +116,7 @@ var _ = promauto.NewGaugeFunc(prometheus.GaugeOpts{
 })
 
 var _ = promauto.NewGaugeFunc(prometheus.GaugeOpts{
-	Name: "coraza_rate_limit_tracked_ips",
+	Name: "palisade_rate_limit_tracked_ips",
 	Help: "Number of per-IP token buckets currently held in memory by the rate limiter.",
 }, func() float64 {
 	if currentLimiter == nil {

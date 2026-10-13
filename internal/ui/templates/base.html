@@ -4,11 +4,11 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Coraza WAF Mod · {{.Heading}}</title>
+  <title>Palisade · {{.Heading}}</title>
   <link rel="icon" type="image/svg+xml" href="{{.AdminPath}}/static/imgs/logo.svg"/>
 
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Calistoga&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500&family=Caveat:wght@500;600&display=swap" rel="stylesheet"/>
   <!-- Compiled Tailwind (make css), embedded in the binary — theme tokens and
        v3-preflight compat live in static/css/tailwind.css, not here. -->
   <link rel="stylesheet" href="{{.AdminPath}}/static/css/tailwind.min.css?v={{.Asset}}"/>
@@ -29,12 +29,12 @@
        preflight covers it in @layer base). */
     @layer components {
     :root { --ease-out: cubic-bezier(.16, 1, .3, 1); --dur-fast: 150ms; --dur-base: 220ms; }
-    .btn-primary { min-height: 44px; background: #166534; color: #fff; border: none; cursor: pointer; border-radius: 9px; padding: 9px 18px; font-size: 14px; font-weight: 700; font-family: inherit; box-shadow: 0 6px 16px rgba(22,101,52,.16); transition: background-color var(--dur-fast) ease, transform 100ms ease, box-shadow var(--dur-fast) ease; }
-    .btn-primary:hover { background: #14532D; box-shadow: 0 8px 20px rgba(22,101,52,.22); }
+    .btn-primary { min-height: 44px; background: var(--fn-ink); color: var(--fn-paper); border: none; cursor: pointer; border-radius: 6px; padding: 9px 18px; font-size: 14px; font-weight: 500; font-family: inherit; transition: background-color var(--dur-fast) ease, transform 100ms ease, box-shadow var(--dur-fast) ease; }
+    .btn-primary:hover { background: var(--fn-ink-soft); }
     .btn-primary:active { transform: scale(.97); }
     input, select { font-family: inherit; }
     .focus-green { transition: border-color .15s; }
-    .focus-green:focus { border-color: #166534 !important; box-shadow: 0 0 0 3px rgba(22,101,52,.12); }
+    .focus-green:focus { border-color: var(--fn-accent) !important; box-shadow: 0 0 0 3px color-mix(in oklab, var(--fn-accent) 18%, transparent); }
     @keyframes rise-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
     .anim-in { animation: rise-in var(--dur-base) var(--ease-out) both; }
     @keyframes modal-pop { from { opacity: 0; transform: scale(.96) translateY(4px); } to { opacity: 1; transform: none; } }
@@ -50,15 +50,15 @@
     @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
     .bot-icon:hover svg { animation: bob .5s ease-in-out; }
     .nudge { animation: shield-nudge .45s var(--ease-out); }
-    @keyframes row-flash { from { background-color: #E2E8F0; } }
+    @keyframes row-flash { from { background-color: var(--fn-highlight); } }
     @media (prefers-reduced-motion: no-preference) { #log-feed[data-live-stream] > :first-child { animation: row-flash 1.1s ease-out; } }
-    @keyframes dot-pulse { 0% { box-shadow: 0 0 0 0 rgba(118,200,147,.5); } 70% { box-shadow: 0 0 0 6px rgba(118,200,147,0); } 100% { box-shadow: 0 0 0 0 rgba(118,200,147,0); } }
+    @keyframes dot-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--fn-accent) 50%, transparent); } 70% { box-shadow: 0 0 0 6px color-mix(in oklab, var(--fn-accent) 0%, transparent); } 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--fn-accent) 0%, transparent); } }
     .live-dot { animation: dot-pulse 2.4s ease-out infinite; }
     @keyframes shield-nudge { 0%,100% { transform: rotate(0); } 30% { transform: rotate(-7deg); } 60% { transform: rotate(5deg); } }
     #brand-logo:hover img { animation: shield-nudge .45s var(--ease-out); }
     @keyframes shield-guard { 0% { transform: scale(1); } 35% { transform: scale(1.18); } 100% { transform: scale(1); } }
     #brand-logo.guard { animation: shield-guard .5s var(--ease-out); }
-    #brand-logo.guard::after { content: ""; position: absolute; inset: -4px; border-radius: 10px; border: 2px solid #4ADE80; opacity: 0; animation: guard-ring .5s var(--ease-out); }
+    #brand-logo.guard::after { content: ""; position: absolute; inset: -4px; border-radius: 10px; border: 2px solid var(--fn-highlight); opacity: 0; animation: guard-ring .5s var(--ease-out); }
     @keyframes guard-ring { 0% { opacity: .8; transform: scale(.8); } 100% { opacity: 0; transform: scale(1.35); } }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0ms !important; }
@@ -76,9 +76,9 @@
   <!-- Brand -->
   <div class="flex items-center gap-[10px] px-5 py-5 shrink-0 border-b border-white/10">
     <div id="brand-logo" class="relative w-10 h-10 shrink-0 cursor-pointer select-none rounded-xl bg-white/10 p-1">
-      <img src="{{.AdminPath}}/static/imgs/logo.svg" alt="Coraza WAF logo" class="w-full h-full block"/>
+      <img src="{{.AdminPath}}/static/imgs/logo.svg" alt="Palisade logo" class="w-full h-full block"/>
     </div>
-    <div class="min-w-0"><span class="block font-bold text-[15px] text-white truncate">Coraza WAF</span><span class="block text-[10px] uppercase tracking-[.14em] text-slate-400">Security console</span></div>
+    <div class="min-w-0"><span class="block font-bold text-[15px] text-white truncate">Palisade</span><span class="block text-[10px] uppercase tracking-[.14em] text-slate-400">Security console</span></div>
     <button id="mobile-nav-close" type="button" aria-label="Close navigation" class="ml-auto flex h-11 w-11 items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 lg:hidden"><i class="hgi hgi-stroke hgi-rounded hgi-cancel-01 text-lg"></i></button>
   </div>
 
@@ -158,7 +158,7 @@
 <header class="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-white/95 px-4 backdrop-blur-lg lg:hidden">
   <button id="mobile-nav-open" type="button" aria-label="Open navigation" aria-controls="primary-nav" aria-expanded="false" class="flex h-11 w-11 items-center justify-center rounded-xl border border-line bg-surface text-slate-700"><i class="hgi hgi-stroke hgi-rounded hgi-menu-01 text-xl"></i></button>
   <img src="{{.AdminPath}}/static/imgs/logo.svg" alt="" class="h-8 w-8"/>
-  <div class="min-w-0"><span class="block text-[11px] uppercase tracking-[.12em] text-slate-500">Coraza WAF</span><span class="block truncate text-[15px] font-bold text-slate-900">{{.Heading}}</span></div>
+  <div class="min-w-0"><span class="block text-[11px] uppercase tracking-[.12em] text-slate-500">Palisade</span><span class="block truncate text-[15px] font-bold text-slate-900">{{.Heading}}</span></div>
 </header>
 
 <div class="flex min-h-[calc(100dvh-4rem)] flex-col lg:ml-[264px] xl:flex-row">

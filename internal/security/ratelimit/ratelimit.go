@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"coraza-waf-mod/internal/config"
+	"palisade/internal/config"
 )
 
 // Backend is the common interface for the global rate limiter. Both the

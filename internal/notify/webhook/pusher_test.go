@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // captureServer records every POSTed body and its Content-Type, returning a

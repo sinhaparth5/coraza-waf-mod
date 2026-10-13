@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="static/imgs/readme-logo.svg" alt="Coraza WAF Mod" width="480">
+  <img src="static/imgs/readme-logo.svg" alt="Palisade" width="480">
 
   <br><br>
 
@@ -11,10 +11,10 @@
   [![Go Report Card](https://goreportcard.com/badge/github.com/sinhaparth5/coraza-waf-mod)](https://goreportcard.com/report/github.com/sinhaparth5/coraza-waf-mod)
 </div>
 
-A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraza](https://github.com/corazawaf/coraza) and the OWASP Core Rule Set, with a built-in admin dashboard. It uses one binary, one SQLite file, CLI flags for bootstrap settings, and dashboard-managed runtime settings. There is no config file, external database, or Node toolchain. Docker is available for local development but is not required.
+**Palisade** is a web application firewall you can `scp` to a server: a WAF and reverse proxy in a single Go binary, built on [OWASP Coraza](https://github.com/corazawaf/coraza) and the OWASP Core Rule Set, with a built-in admin dashboard. It uses one binary, one SQLite file, CLI flags for bootstrap settings, and dashboard-managed runtime settings. There is no config file, external database, or Node toolchain. Docker is available for local development but is not required.
 
 <div align="center">
-  <img src="static/waf-flow-diagram.png" alt="Request flow: Client to Coraza WAF + Proxy to Backend App(s), with SQLite and the Admin Dashboard attached" width="760">
+  <img src="static/waf-flow-diagram.png" alt="Request flow: Client to Palisade WAF + Proxy to Backend App(s), with SQLite and the Admin Dashboard attached" width="760">
 </div>
 
 ## Features
@@ -25,7 +25,7 @@ A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraz
 - **TLS:** plain HTTP, automatic Let's Encrypt certificates, or your own cert/key, globally or per service. Upload a cert or enable auto-issue for a backend from the dashboard.
 - **Admin dashboard:** HTMX/Tailwind UI for live traffic and threat charts, filterable request logs with live tail, IP/geo rule management, and service management. Changes apply immediately, with no restart.
 - **Prometheus metrics:** `/admin/metrics` exposes request volume, latency, and per-cause block counters (IP/geo/WAF) alongside Go runtime metrics. For Prometheus, scrape `/admin/api/v1/metrics` with an API key from Settings (a read-only key is enough) via `authorization: { credentials: cwaf_… }`; the `/admin/metrics` path is for a logged-in browser session.
-- **Health probes:** `/_cz/healthz` (process up) and `/_cz/readyz` (database reachable) for load balancers and orchestrators; the Docker image wires `coraza-waf-mod healthcheck` into its `HEALTHCHECK`.
+- **Health probes:** `/_cz/healthz` (process up) and `/_cz/readyz` (database reachable) for load balancers and orchestrators; the Docker image wires `palisade healthcheck` into its `HEALTHCHECK`.
 - **SQLite storage:** request logs, IP/geo rules, services, and TLS state all live in one `waf.db` file. No Postgres, Redis, or MySQL to run.
 
 ## Installing
@@ -36,16 +36,16 @@ A single-binary Web Application Firewall + reverse proxy for Go, built on [Coraz
 curl -fsSL https://waf-install.astrareconslabs.com/coraza-waf-mod/install.sh | sudo bash
 ```
 
-This downloads the release binary for your architecture (amd64/arm64), verifies its SHA256 checksum, creates a dedicated non-root system user, installs a systemd unit, and starts the service. The user is named `coraza-waf-mod` and is granted only `CAP_NET_BIND_SERVICE`, so it can bind ports 80/443 without running as root. The installer prompts for an admin email and password, or generates credentials, then seeds them into the database with `coraza-waf-mod setup`.
+This downloads the release binary for your architecture (amd64/arm64), verifies its SHA256 checksum, creates a dedicated non-root system user, installs a systemd unit, and starts the service. The user is named `palisade` and is granted only `CAP_NET_BIND_SERVICE`, so it can bind ports 80/443 without running as root. The installer prompts for an admin email and password, or generates credentials, then seeds them into the database with `palisade setup`.
 
 Check it's running:
 
 ```bash
-sudo systemctl status coraza-waf-mod
-sudo journalctl -u coraza-waf-mod -f
+sudo systemctl status palisade
+sudo journalctl -u palisade -f
 ```
 
-There is no config file to edit. Installer settings are either flags in the systemd unit (`sudo systemctl cat coraza-waf-mod`) or database values managed from the dashboard. Data, certs, and `waf.db` live under `/var/lib/coraza-waf-mod/`.
+There is no config file to edit. Installer settings are either flags in the systemd unit (`sudo systemctl cat palisade`) or database values managed from the dashboard. Data, certs, and `waf.db` live under `/var/lib/palisade/`.
 
 #### Upgrading
 
@@ -55,7 +55,9 @@ Re-run the same command:
 curl -fsSL https://waf-install.astrareconslabs.com/coraza-waf-mod/install.sh | sudo bash
 ```
 
-The installer detects the existing binary at `/usr/local/bin/coraza-waf-mod` and switches to upgrade mode. It downloads and verifies the latest release, replaces the binary, rewrites the systemd units, and restarts the service. It skips the interactive prompts. Admin credentials and TLS certificates are never touched on upgrade. Pin a specific version with `curl -fsSL ... | sudo CORAZA_VERSION=v1.2.3 bash`.
+The installer detects the existing binary at `/usr/local/bin/palisade` and switches to upgrade mode. It downloads and verifies the latest release, replaces the binary, rewrites the systemd units, and restarts the service. It skips the interactive prompts. Admin credentials and TLS certificates are never touched on upgrade. Pin a specific version with `curl -fsSL ... | sudo CORAZA_VERSION=v1.2.3 bash`.
+
+**Upgrading from 2.4.x or earlier (Coraza WAF Mod):** the same command migrates automatically. It stops the old `coraza-waf-mod` service, moves `/var/lib/coraza-waf-mod`, `/etc/coraza-waf-mod` and `/var/log/coraza` to `/var/lib/palisade`, `/etc/palisade` and `/var/log/palisade`, renames the service user, and installs the `palisade` binary and `palisade` systemd units. Your database, admin account, certificates and encryption key carry over unchanged. Update anything that references the old access-log path (fail2ban, log shippers).
 
 ### Option B: build from source
 
@@ -64,12 +66,12 @@ Requires Go 1.27+.
 ```bash
 git clone https://github.com/sinhaparth5/coraza-waf-mod.git
 cd coraza-waf-mod
-make build      # go generate (minifies JS) + go build -> ./coraza-waf-mod
+make build      # go generate (minifies JS) + go build -> ./palisade
 
 # Seed an admin account (password is read from stdin, not a flag):
-echo "your-password" | ./coraza-waf-mod setup --admin-email you@example.com
+echo "your-password" | ./palisade setup --admin-email you@example.com
 
-./coraza-waf-mod   # defaults: --listen :8080 --db waf.db --certs ./certs
+./palisade   # defaults: --listen :8080 --db waf.db --certs ./certs
 ```
 
 `make run` builds and runs in one step. Run `setup` first, at least once, so you can log in. The project uses Go only; the SQLite driver is `modernc.org/sqlite`, with no CGO. See the flags in `main.go`, or the flag table in `CLAUDE.md`, for every bootstrap option (`--listen-tls`, `--waf-rules`, `--geo-db`, `--retention`, `--tls-cert`/`--tls-key`, `--trusted-proxies`).
@@ -93,11 +95,11 @@ docker compose up --build
 ## Usage
 
 1. Start the server. There is no config file, only CLI flags for bootstrap settings.
-2. Before first login, seed an admin account with `coraza-waf-mod setup --admin-email you@example.com` (password read from stdin). `install.sh` does this for you interactively.
+2. Before first login, seed an admin account with `palisade setup --admin-email you@example.com` (password read from stdin). `install.sh` does this for you interactively.
 3. Open the admin dashboard at `http://<host>:<port>/admin` (the path is currently fixed at `/admin`) and log in with that email and password.
 4. Add backend apps from **Services**: give each service a name, a match rule (Host or path Prefix), and a backend URL. The wizard checks that the backend is reachable before saving. Services live in the database, with no config-file seeding step.
 5. Manage IP rules, country blocking, and request logs from their dashboard pages. Changes take effect immediately.
-6. Optionally enable TLS per service from the **Manage** button on its row. Upload a cert, or turn on auto-issue after setting an ACME contact email from the Settings page or passing `--domain`/`--acme-email` to `coraza-waf-mod setup`.
+6. Optionally enable TLS per service from the **Manage** button on its row. Upload a cert, or turn on auto-issue after setting an ACME contact email from the Settings page or passing `--domain`/`--acme-email` to `palisade setup`.
 
 ### GeoIP setup (optional)
 
@@ -111,17 +113,17 @@ To override the bundled database with a newer external copy:
 4. Put the file somewhere readable by the service, for example:
 
 ```bash
-sudo mkdir -p /var/lib/coraza-waf-mod
-sudo cp GeoLite2-Country.mmdb /var/lib/coraza-waf-mod/
+sudo mkdir -p /var/lib/palisade
+sudo cp GeoLite2-Country.mmdb /var/lib/palisade/
 ```
 
 5. Point the binary at it with `--geo-db`:
 
 ```bash
-./coraza-waf-mod --geo-db /var/lib/coraza-waf-mod/GeoLite2-Country.mmdb
+./palisade --geo-db /var/lib/palisade/GeoLite2-Country.mmdb
 ```
 
-(For a systemd install, add `--geo-db ...` to the `ExecStart=` line in the unit and `sudo systemctl daemon-reload && sudo systemctl restart coraza-waf-mod`.)
+(For a systemd install, add `--geo-db ...` to the `ExecStart=` line in the unit and `sudo systemctl daemon-reload && sudo systemctl restart palisade`.)
 
 Leave `--geo-db` unset to use the bundled database. GeoLite users must keep the database updated; MaxMind requires old database versions to be replaced or destroyed within 30 days of a new release, so release builds should refresh the bundled `.mmdb` regularly.
 

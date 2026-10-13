@@ -21,18 +21,18 @@ import (
 	"strings"
 	"time"
 
-	"coraza-waf-mod/internal/config"
-	"coraza-waf-mod/internal/notify/mailer"
-	"coraza-waf-mod/internal/notify/metrics"
-	"coraza-waf-mod/internal/security/blocklist"
-	"coraza-waf-mod/internal/security/challenge"
-	"coraza-waf-mod/internal/security/geo"
-	"coraza-waf-mod/internal/security/passkey"
-	"coraza-waf-mod/internal/security/ratelimit"
-	"coraza-waf-mod/internal/security/threatscore"
-	"coraza-waf-mod/internal/security/waf"
-	"coraza-waf-mod/internal/services"
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/config"
+	"palisade/internal/notify/mailer"
+	"palisade/internal/notify/metrics"
+	"palisade/internal/security/blocklist"
+	"palisade/internal/security/challenge"
+	"palisade/internal/security/geo"
+	"palisade/internal/security/passkey"
+	"palisade/internal/security/ratelimit"
+	"palisade/internal/security/threatscore"
+	"palisade/internal/security/waf"
+	"palisade/internal/services"
+	"palisade/internal/storage"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -674,7 +674,7 @@ func dashboardAtAGlance(s storage.AtAGlanceStats, serviceCount int) []atAGlanceC
 			Trend:      trendLabel(s.RequestsLastMinute, s.RequestsPrevMinute),
 			Value:      fmt.Sprintf("%.1f", float64(s.RequestsLastMinute)/60),
 			SparkID:    "spark-req",
-			SparkColor: "#76C893",
+			SparkColor: "#3E9B55",
 			AreaPath:   "M0,26 18,23 36,25 54,16 72,19 90,9 108,13 126,5 144,8 170,3 170,36 0,36 Z",
 			LinePath:   "M0,26 18,23 36,25 54,16 72,19 90,9 108,13 126,5 144,8 170,3",
 		},
@@ -739,7 +739,7 @@ func dashboardAtAGlance(s storage.AtAGlanceStats, serviceCount int) []atAGlanceC
 			Trend:      trendLabel(s.WAFRuleHitsToday, s.WAFRuleHitsPreviousDay),
 			Value:      strconv.Itoa(s.WAFRuleHitsToday),
 			SparkID:    "spark-rul",
-			SparkColor: "#EF4444",
+			SparkColor: "#C8453C",
 			AreaPath:   "M0,28 18,25 36,26 54,20 72,22 90,14 108,17 126,9 144,12 170,6 170,36 0,36 Z",
 			LinePath:   "M0,28 18,25 36,26 54,20 72,22 90,14 108,17 126,9 144,12 170,6",
 		},
@@ -3185,12 +3185,12 @@ func (h *Handler) ChangeCredentials(c echo.Context) error {
 }
 
 func (h *Handler) BackupDB(c echo.Context) error {
-	tmp := fmt.Sprintf("%s/coraza-backup-%d.db", os.TempDir(), time.Now().UnixNano())
+	tmp := fmt.Sprintf("%s/palisade-backup-%d.db", os.TempDir(), time.Now().UnixNano())
 	if err := h.db.BackupTo(tmp); err != nil {
 		return fmt.Errorf("backup: %w", err)
 	}
 	defer os.Remove(tmp)
-	filename := fmt.Sprintf("coraza-waf-%s.db", time.Now().Format("2006-01-02"))
+	filename := fmt.Sprintf("palisade-%s.db", time.Now().Format("2006-01-02"))
 	return c.Attachment(tmp, filename)
 }
 

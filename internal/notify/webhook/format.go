@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // eventCategory classifies entry the same way shouldSend filters on it:
@@ -103,7 +103,7 @@ func buildSlackPayload(entry storage.RequestLog) ([]byte, error) {
 					{
 						"type": "context",
 						"elements": []map[string]any{
-							{"type": "mrkdwn", "text": fmt.Sprintf("Coraza WAF Mod · %s", entry.Timestamp.Format("2006-01-02 15:04:05 MST"))},
+							{"type": "mrkdwn", "text": fmt.Sprintf("Palisade · %s", entry.Timestamp.Format("2006-01-02 15:04:05 MST"))},
 						},
 					},
 				},
@@ -136,7 +136,7 @@ func buildDiscordPayload(entry storage.RequestLog) ([]byte, error) {
 				"title":     categoryTitle(category),
 				"color":     discordColor(category),
 				"fields":    fields,
-				"footer":    map[string]any{"text": "Coraza WAF Mod"},
+				"footer":    map[string]any{"text": "Palisade"},
 				"timestamp": entry.Timestamp.Format("2006-01-02T15:04:05Z07:00"),
 			},
 		},

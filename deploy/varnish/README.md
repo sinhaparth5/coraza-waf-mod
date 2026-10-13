@@ -6,10 +6,10 @@ WAF's own routing, so the VCL is **install-once** — it never changes when
 services are added, edited, or removed:
 
 ```
-client → coraza-waf-mod (:80/:443) → varnishd (127.0.0.1:6081)
+client → palisade (:80/:443) → varnishd (127.0.0.1:6081)
                                           │ hit: served from memory
                                           ▼ miss:
-                          coraza-waf-mod cache-return (127.0.0.1:6082)
+                          palisade cache-return (127.0.0.1:6082)
                                           │ routes by service, from the DB
                                           ▼
                                    the real backend

@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"coraza-waf-mod/internal/security/passkey"
-	"coraza-waf-mod/internal/security/totp"
+	"palisade/internal/security/passkey"
+	"palisade/internal/security/totp"
 
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/labstack/echo/v4"
@@ -38,7 +38,7 @@ const (
 	// backupCodeCount is how many one-time recovery codes enrollment hands out.
 	backupCodeCount = 10
 	// totpIssuer names this system in authenticator apps.
-	totpIssuer = "Coraza WAF Mod"
+	totpIssuer = "Palisade"
 )
 
 // twoFAEntry is one password-verified login waiting for its second factor.

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // TestVarnishCardRenders executes the Settings-page Varnish card standalone

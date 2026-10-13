@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // TestIPRulesTemplateRendersAutobanAndNotes renders the IP Rules page with an

@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"coraza-waf-mod/internal/config"
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/config"
+	"palisade/internal/storage"
 )
 
 // TestIPRulesRowsDataClamping exercises ipRulesRowsData's page-clamping,

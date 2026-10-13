@@ -6,7 +6,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // clusterChannel is the Redis pub/sub channel every node in a cluster
@@ -15,7 +15,7 @@ import (
 // SIGHUP, or autoban's own ban on that same process) — so a ban written by
 // one node's autoban left every other node still proxying that IP until an
 // operator manually restarted or SIGHUP'd it.
-const clusterChannel = "coraza:ipblocklist:reload"
+const clusterChannel = "palisade:ipblocklist:reload"
 
 // EnableClusterSync connects to Redis and makes every future Reload/
 // ReloadIntel call broadcast to, and every broadcast from, every other node

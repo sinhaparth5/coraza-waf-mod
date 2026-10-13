@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // Worker periodically fetches external IP block lists and stores the parsed IPs
@@ -123,7 +123,7 @@ func fetchIPs(client *http.Client, url string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "coraza-waf-mod/threat-intel")
+	req.Header.Set("User-Agent", "palisade/threat-intel")
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

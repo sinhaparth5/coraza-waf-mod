@@ -214,7 +214,7 @@ jobs:
           ## Docker
 
           \`\`\`bash
-          docker run -d --name coraza-waf-mod -p 8080:8080 -v coraza-waf-data:/data ghcr.io/${{ github.repository }}:${GITHUB_REF_NAME#v}
+          docker run -d --name palisade -p 8080:8080 -v coraza-waf-data:/data ghcr.io/${{ github.repository }}:${GITHUB_REF_NAME#v}
           \`\`\`
 
           Multi-arch (linux/amd64, linux/arm64). Persistent state (\`waf.db\`, \`certs/\`) lives under \`/data\` — mount a volume there. Also published to Docker Hub.
@@ -240,7 +240,7 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v3
         with:
-          name: Coraza WAF Mod ${{ github.ref_name }}
+          name: Palisade ${{ github.ref_name }}
           body_path: release-notes.md
           files: |
             dist/${{ env.PACKAGE_NAME }}-linux-amd64

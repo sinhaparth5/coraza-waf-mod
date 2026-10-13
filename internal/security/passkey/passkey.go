@@ -16,7 +16,7 @@ import (
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // Manager builds a per-request *webauthn.WebAuthn and adapts storage rows
@@ -114,7 +114,7 @@ func (m *Manager) config(r *http.Request) (*webauthn.WebAuthn, error) {
 		scheme = "http"
 	}
 	return webauthn.New(&webauthn.Config{
-		RPDisplayName: "Coraza WAF Mod",
+		RPDisplayName: "Palisade",
 		RPID:          host,
 		RPOrigins:     []string{scheme + "://" + r.Host},
 	})

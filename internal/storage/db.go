@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"coraza-waf-mod/internal/security/ratelimit"
+	"palisade/internal/security/ratelimit"
 
 	"github.com/jmoiron/sqlx"
 	"golang.org/x/crypto/bcrypt"

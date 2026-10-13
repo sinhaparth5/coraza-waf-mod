@@ -32,7 +32,7 @@ import (
 	"sync"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // Points per event class. The default threshold (10) means ~2 critical WAF

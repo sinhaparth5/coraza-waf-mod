@@ -12,10 +12,10 @@ import (
 	"testing/fstest"
 	"time"
 
-	"coraza-waf-mod/internal/config"
-	"coraza-waf-mod/internal/security/passkey"
-	"coraza-waf-mod/internal/security/totp"
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/config"
+	"palisade/internal/security/passkey"
+	"palisade/internal/security/totp"
+	"palisade/internal/storage"
 
 	"github.com/labstack/echo/v4"
 )

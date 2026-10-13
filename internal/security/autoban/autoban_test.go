@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // fakeStore satisfies the store interface without a database.

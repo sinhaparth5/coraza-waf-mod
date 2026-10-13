@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"coraza-waf-mod/internal/config"
+	"palisade/internal/config"
 
 	"github.com/corazawaf/coraza-coreruleset"
 	"github.com/corazawaf/coraza/v3"

@@ -20,18 +20,97 @@
 /* Runtime-toggled classes in frontend JS (classList.add/toggle). */
 @source "../js/src";
 
+/* "Field notes" theme. Only the --fn-* variables change between light and
+   dark (system preference); every other token is derived from them, so the
+   existing slate/red/green/brand utilities in the templates re-theme
+   without touching markup. Three pen colours, one meaning each: accent
+   green = allowed/passed, stamp red = blocked/error, highlight lime =
+   "look here". Keep it that way. */
+:root {
+  --fn-paper: oklch(97.2% .013 85);
+  --fn-paper-2: oklch(94.6% .018 85);
+  --fn-card: oklch(98.6% .009 85);
+  --fn-ink: oklch(24% .025 160);
+  --fn-ink-soft: oklch(41% .022 160);
+  --fn-highlight: oklch(89% .12 135);
+  --fn-accent: oklch(46% .1 150);
+  --fn-stamp: oklch(51% .18 28);
+  --fn-side: oklch(24% .025 160);
+  --fn-rule: color-mix(in oklab, var(--fn-ink) 16%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fn-paper: oklch(19.5% .012 160);
+    --fn-paper-2: oklch(23.5% .014 160);
+    --fn-card: oklch(22% .013 160);
+    --fn-ink: oklch(93% .016 90);
+    --fn-ink-soft: oklch(76% .016 90);
+    --fn-highlight: oklch(42% .09 140);
+    --fn-accent: oklch(80% .12 145);
+    --fn-stamp: oklch(72% .16 28);
+    --fn-side: oklch(15% .012 160);
+  }
+}
+
 @theme {
-  --color-brand: #4ADE80;
-  --color-brand-dark: #166534;
-  --color-brand-light: #BBF7D0;
-  --color-brand-tint: #ECFDF3;
-  --color-navy: #102A43;
-  --color-slateblue: #486581;
-  --color-canvas: #F3F7FA;
-  --color-surface: #F7FAFC;
-  --color-line: #D9E2EC;
-  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --color-brand: var(--fn-highlight);
+  --color-brand-dark: var(--fn-accent);
+  --color-brand-light: color-mix(in oklab, var(--fn-highlight) 55%, var(--fn-paper));
+  --color-brand-tint: color-mix(in oklab, var(--fn-highlight) 22%, var(--fn-paper));
+  --color-navy: var(--fn-side);
+  --color-slateblue: var(--fn-ink-soft);
+  --color-canvas: var(--fn-paper);
+  --color-surface: var(--fn-paper-2);
+  --color-line: var(--fn-rule);
+  --color-paper: var(--fn-paper);
+  --color-paper-2: var(--fn-paper-2);
+  --color-card: var(--fn-card);
+  --color-ink: var(--fn-ink);
+  --color-ink-soft: var(--fn-ink-soft);
+  --color-rule: var(--fn-rule);
+  --color-highlight: var(--fn-highlight);
+  --color-accent: var(--fn-accent);
+  --color-stamp: var(--fn-stamp);
+
+  /* slate = ink mixed into paper; flips with the mode automatically */
+  --color-slate-50: color-mix(in oklab, var(--fn-ink) 4%, var(--fn-paper));
+  --color-slate-100: color-mix(in oklab, var(--fn-ink) 8%, var(--fn-paper));
+  --color-slate-200: color-mix(in oklab, var(--fn-ink) 14%, var(--fn-paper));
+  --color-slate-300: color-mix(in oklab, var(--fn-ink) 24%, var(--fn-paper));
+  --color-slate-400: color-mix(in oklab, var(--fn-ink) 42%, var(--fn-paper));
+  --color-slate-500: color-mix(in oklab, var(--fn-ink) 58%, var(--fn-paper));
+  --color-slate-600: color-mix(in oklab, var(--fn-ink) 70%, var(--fn-paper));
+  --color-slate-700: color-mix(in oklab, var(--fn-ink) 82%, var(--fn-paper));
+  --color-slate-800: color-mix(in oklab, var(--fn-ink) 92%, var(--fn-paper));
+  --color-slate-900: var(--fn-ink);
+  --color-slate-950: var(--fn-ink);
+
+  /* red = stamp (blocked / error), green = accent (allowed / passed) */
+  --color-red-50: color-mix(in oklab, var(--fn-stamp) 8%, var(--fn-paper));
+  --color-red-100: color-mix(in oklab, var(--fn-stamp) 14%, var(--fn-paper));
+  --color-red-200: color-mix(in oklab, var(--fn-stamp) 28%, var(--fn-paper));
+  --color-red-300: color-mix(in oklab, var(--fn-stamp) 50%, var(--fn-paper));
+  --color-red-400: color-mix(in oklab, var(--fn-stamp) 80%, var(--fn-paper));
+  --color-red-500: var(--fn-stamp);
+  --color-red-600: var(--fn-stamp);
+  --color-red-700: color-mix(in oklab, var(--fn-stamp) 85%, var(--fn-ink));
+  --color-red-800: color-mix(in oklab, var(--fn-stamp) 70%, var(--fn-ink));
+  --color-red-900: color-mix(in oklab, var(--fn-stamp) 55%, var(--fn-ink));
+  --color-green-50: color-mix(in oklab, var(--fn-accent) 8%, var(--fn-paper));
+  --color-green-100: color-mix(in oklab, var(--fn-accent) 14%, var(--fn-paper));
+  --color-green-200: color-mix(in oklab, var(--fn-accent) 28%, var(--fn-paper));
+  --color-green-300: color-mix(in oklab, var(--fn-accent) 50%, var(--fn-paper));
+  --color-green-400: color-mix(in oklab, var(--fn-accent) 80%, var(--fn-paper));
+  --color-green-500: var(--fn-accent);
+  --color-green-600: var(--fn-accent);
+  --color-green-700: color-mix(in oklab, var(--fn-accent) 85%, var(--fn-ink));
+  --color-green-800: color-mix(in oklab, var(--fn-accent) 70%, var(--fn-ink));
+  --color-green-900: color-mix(in oklab, var(--fn-accent) 55%, var(--fn-ink));
+
+  --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-display: 'Calistoga', Georgia, serif;
+  --font-hand: 'Caveat', cursive;
 }
 
 @layer base {
@@ -39,10 +118,11 @@
      default cursor; restore the v3 behavior this UI was built on. */
   *, ::before, ::after { border-color: var(--color-line); }
   button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
-  html { color-scheme: light; }
+  html { color-scheme: light dark; }
+  h1, h2 { font-family: var(--font-display); font-weight: 400; letter-spacing: -.005em; }
   body { min-width: 320px; }
   a, button, input, select, textarea { touch-action: manipulation; }
-  :focus-visible { outline: 3px solid rgba(22, 101, 52, .28); outline-offset: 2px; }
+  :focus-visible { outline: 3px solid color-mix(in oklab, var(--fn-accent) 40%, transparent); outline-offset: 2px; }
   input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]), select, textarea { min-height: 44px; }
   /* The login page predates the --color-line token and was built on
      slate-200 default borders; keep its exact look (body carries
@@ -52,11 +132,19 @@
 
 @layer components {
   .card {
-    background: rgba(255, 255, 255, .98);
-    border: 1px solid var(--color-line);
-    border-radius: 14px;
-    box-shadow: 0 1px 2px rgba(16, 42, 67, .04), 0 10px 28px rgba(16, 42, 67, .055);
+    background: var(--fn-card);
+    border: 1px solid var(--fn-rule);
+    border-radius: 6px;
   }
+  /* Hatched wall: 45deg rules, the brand mark (a palisade is a wall). */
+  .hatch { background-image: repeating-linear-gradient(-45deg, var(--fn-rule) 0 1px, transparent 1px .5rem); }
+  /* Highlighter pen behind the lower half of a word. */
+  .hl { background: linear-gradient(transparent 55%, var(--fn-highlight) 55%); }
+  /* Handwritten margin note: captions and side notes only. */
+  .hand { font-family: var(--font-hand); font-weight: 500; }
+  /* Tilted card with a strip of tape on top. */
+  .taped { position: relative; transform: rotate(-.8deg); }
+  .taped::before { content: ""; position: absolute; top: -9px; left: 50%; width: 64px; height: 18px; transform: translateX(-50%) rotate(1.5deg); background: var(--fn-highlight); opacity: .85; }
   .table-scroll { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
   .table-scroll > table { min-width: 680px; }
   .mobile-safe-modal { width: calc(100% - 2rem); max-height: calc(100dvh - 2rem); }
@@ -64,3 +152,10 @@
   .ld-label { @apply mb-[3px] text-[10px] font-semibold uppercase tracking-[.06em] text-slate-500; }
   .ld-section-title { @apply mb-[10px] text-[10px] font-semibold uppercase tracking-[.06em] text-slate-500; }
 }
+
+/* Unlayered on purpose (beats @layer utilities): plain white surfaces become
+   the notebook "card" colour so dark mode doesn't leave white panels, and
+   white text on the accent keeps contrast when the accent turns light. */
+.bg-white { background-color: var(--fn-card); }
+.bg-brand-dark { color: var(--fn-paper); }
+.bg-brand-dark.text-white, .bg-brand-dark .text-white { color: var(--fn-paper); }

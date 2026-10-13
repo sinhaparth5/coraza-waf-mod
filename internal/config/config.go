@@ -1,4 +1,4 @@
-// Package config defines the runtime configuration for coraza-waf-mod.
+// Package config defines the runtime configuration for Palisade.
 // Bootstrap settings (listen addresses, DB path, TLS cache dir) are supplied
 // via CLI flags when the binary starts. All other runtime knobs (WAF rules
 // toggles, bot protection, Redis config, per-service overrides) are stored in

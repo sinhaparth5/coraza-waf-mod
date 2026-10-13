@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 func TestStaleCacheServices(t *testing.T) {

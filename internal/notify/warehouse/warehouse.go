@@ -39,7 +39,7 @@ import (
 	"sync"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 const (
@@ -333,7 +333,7 @@ func (s *Sink) post(query string, body io.Reader, withDatabase bool) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", "coraza-waf-mod/internal/notify/warehouse")
+	req.Header.Set("User-Agent", "palisade/internal/notify/warehouse")
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return err

@@ -3,7 +3,7 @@ package ui
 import (
 	"sync"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 const recentBufSize = 200

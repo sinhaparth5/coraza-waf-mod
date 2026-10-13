@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"coraza-waf-mod/internal/config"
-	"coraza-waf-mod/internal/security/blocklist"
-	"coraza-waf-mod/internal/services"
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/config"
+	"palisade/internal/security/blocklist"
+	"palisade/internal/services"
+	"palisade/internal/storage"
 
 	"github.com/labstack/echo/v4"
 )

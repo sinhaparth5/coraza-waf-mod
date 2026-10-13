@@ -109,11 +109,11 @@ func TestGenerateSecretShape(t *testing.T) {
 }
 
 func TestProvisioningURI(t *testing.T) {
-	uri := ProvisioningURI("ABC234", "admin@example.com", "Coraza WAF Mod")
+	uri := ProvisioningURI("ABC234", "admin@example.com", "Palisade")
 	for _, want := range []string{
-		"otpauth://totp/Coraza%20WAF%20Mod:admin@example.com?",
+		"otpauth://totp/Palisade:admin@example.com?",
 		"secret=ABC234",
-		"issuer=Coraza+WAF+Mod",
+		"issuer=Palisade",
 		"digits=6",
 		"period=30",
 		"algorithm=SHA1",

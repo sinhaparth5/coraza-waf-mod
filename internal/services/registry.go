@@ -21,13 +21,13 @@ import (
 	"sync"
 	"time"
 
-	"coraza-waf-mod/internal/security/ratelimit"
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/security/ratelimit"
+	"palisade/internal/storage"
 
 	"golang.org/x/crypto/acme/autocert"
 )
 
-const serverHeader = "Coraza WAF Mod"
+const serverHeader = "Palisade"
 
 // probeTimeout bounds how long a single reachability check may take, both
 // for the one-shot check on add and for the periodic background sweep.

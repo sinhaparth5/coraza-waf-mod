@@ -84,7 +84,7 @@
   <div class="card p-5">
     <h2 class="text-[15px] font-bold text-slate-800 mb-1">WAF rules</h2>
     <p class="text-[13px] text-slate-500 mb-1">To reload custom WAF rules from <code class="font-mono text-xs bg-surface px-1 py-0.5 rounded-sm">rules_dir</code> without restarting, send SIGHUP to the process:</p>
-    <pre class="mt-3 bg-slate-900 text-green-400 text-[12px] font-mono rounded-lg px-4 py-3 overflow-x-auto">kill -HUP $(pidof coraza-waf-mod)</pre>
+    <pre class="mt-3 bg-slate-900 text-green-400 text-[12px] font-mono rounded-lg px-4 py-3 overflow-x-auto">kill -HUP $(pidof palisade)</pre>
     <p class="mt-2 text-[12px] text-slate-400">The engine swaps in place: in-flight requests finish on the old ruleset, new requests use the reloaded one.</p>
   </div>
 

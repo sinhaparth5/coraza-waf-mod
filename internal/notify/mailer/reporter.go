@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 // store is the slice of *storage.DB the reporter needs; an interface so tests
@@ -158,7 +158,7 @@ func composeLoginCode(code string, at time.Time) (subject, text, html string) {
 	when := at.Format("2006-01-02 15:04 MST")
 
 	var t strings.Builder
-	t.WriteString("Coraza WAF Mod — admin login code\n\n")
+	t.WriteString("Palisade — admin login code\n\n")
 	fmt.Fprintf(&t, "Code:       %s\n", code)
 	fmt.Fprintf(&t, "Requested:  %s\n", when)
 	t.WriteString("\nThe code expires in 10 minutes and works once.\n")
@@ -177,7 +177,7 @@ func composeLoginCode(code string, at time.Time) (subject, text, html string) {
 	h.WriteString(`<div style="width:12px;height:4px;background:#4db872;border-radius:3px;margin:0 auto"></div>`)
 	h.WriteString(`</td>`)
 	h.WriteString(`<td style="padding-left:12px;vertical-align:middle">`)
-	h.WriteString(`<p style="margin:0;font:700 16px ` + fontStack + `;color:#0f172a">Coraza WAF Mod</p>`)
+	h.WriteString(`<p style="margin:0;font:700 16px ` + fontStack + `;color:#0f172a">Palisade</p>`)
 	h.WriteString(`<p style="margin:2px 0 0;font:400 12px ` + fontStack + `;color:#64748b">Admin login code</p>`)
 	h.WriteString(`</td></tr></table>`)
 	h.WriteString(`</td></tr>`)
@@ -191,7 +191,7 @@ func composeLoginCode(code string, at time.Time) (subject, text, html string) {
 
 	// Footer.
 	h.WriteString(`<tr><td style="padding:16px 32px 28px">`)
-	h.WriteString(`<p style="margin:0;font:400 12px ` + fontStack + `;color:#94A3B8">Requested ` + when + `. The code expires in 10 minutes and works once. If you didn't request it, someone knows your admin password — change it now. Sent by Coraza WAF Mod from ` + Sender + `.</p>`)
+	h.WriteString(`<p style="margin:0;font:400 12px ` + fontStack + `;color:#94A3B8">Requested ` + when + `. The code expires in 10 minutes and works once. If you didn't request it, someone knows your admin password — change it now. Sent by Palisade from ` + Sender + `.</p>`)
 	h.WriteString(`</td></tr>`)
 
 	h.WriteString(`</table></td></tr></table>`)
@@ -199,9 +199,9 @@ func composeLoginCode(code string, at time.Time) (subject, text, html string) {
 	return subject, t.String(), h.String()
 }
 
-// fontStack mirrors the admin UI's typography (base.html); Plus Jakarta Sans
+// fontStack mirrors the admin UI's typography (base.html); DM Sans
 // is used when the recipient has it installed, otherwise the system fallback.
-const fontStack = `'Plus Jakarta Sans',-apple-system,'Segoe UI',Arial,sans-serif`
+const fontStack = `'DM Sans',-apple-system,'Segoe UI',Arial,sans-serif`
 
 // composeReport renders the plain-text and HTML bodies for one report window.
 // The HTML mirrors the admin dashboard theme (canvas background, white
@@ -230,11 +230,11 @@ func composeReport(day string, rep storage.DailyReport) (subject, text, html str
 	}
 
 	var t strings.Builder
-	fmt.Fprintf(&t, "Coraza WAF Mod — daily report for %s\n\n", day)
+	fmt.Fprintf(&t, "Palisade — daily report for %s\n\n", day)
 	for _, row := range rows {
 		fmt.Fprintf(&t, "%-24s %d\n", row.label, row.value)
 	}
-	t.WriteString("\nSent automatically by Coraza WAF Mod.\n")
+	t.WriteString("\nSent automatically by Palisade.\n")
 
 	var h strings.Builder
 	// Canvas-colored backdrop, card centered inside.
@@ -250,7 +250,7 @@ func composeReport(day string, rep storage.DailyReport) (subject, text, html str
 	h.WriteString(`<div style="width:12px;height:4px;background:#4db872;border-radius:3px;margin:0 auto"></div>`)
 	h.WriteString(`</td>`)
 	h.WriteString(`<td style="padding-left:12px;vertical-align:middle">`)
-	h.WriteString(`<p style="margin:0;font:700 16px ` + fontStack + `;color:#0f172a">Coraza WAF Mod</p>`)
+	h.WriteString(`<p style="margin:0;font:700 16px ` + fontStack + `;color:#0f172a">Palisade</p>`)
 	h.WriteString(`<p style="margin:2px 0 0;font:400 12px ` + fontStack + `;color:#64748b">Daily security report &middot; ` + day + `</p>`)
 	h.WriteString(`</td></tr></table>`)
 	h.WriteString(`</td></tr>`)
@@ -285,7 +285,7 @@ func composeReport(day string, rep storage.DailyReport) (subject, text, html str
 
 	// Footer.
 	h.WriteString(`<tr><td style="padding:8px 32px 28px">`)
-	h.WriteString(`<p style="margin:0;font:400 12px ` + fontStack + `;color:#94A3B8">Sent automatically by Coraza WAF Mod from ` + Sender + `.</p>`)
+	h.WriteString(`<p style="margin:0;font:400 12px ` + fontStack + `;color:#94A3B8">Sent automatically by Palisade from ` + Sender + `.</p>`)
 	h.WriteString(`</td></tr>`)
 
 	h.WriteString(`</table></td></tr></table>`)
@@ -301,7 +301,7 @@ func composeBanAlert(ip, reason string, at time.Time) (subject, text, html strin
 	when := at.Format("2006-01-02 15:04 MST")
 
 	var t strings.Builder
-	fmt.Fprintf(&t, "Coraza WAF Mod — automatic IP ban\n\n")
+	fmt.Fprintf(&t, "Palisade — automatic IP ban\n\n")
 	fmt.Fprintf(&t, "IP address:  %s\n", ip)
 	fmt.Fprintf(&t, "Reason:      %s\n", reason)
 	fmt.Fprintf(&t, "Banned at:   %s\n", when)
@@ -328,7 +328,7 @@ func composeBanAlert(ip, reason string, at time.Time) (subject, text, html strin
 	h.WriteString(`<div style="width:12px;height:4px;background:#4db872;border-radius:3px;margin:0 auto"></div>`)
 	h.WriteString(`</td>`)
 	h.WriteString(`<td style="padding-left:12px;vertical-align:middle">`)
-	h.WriteString(`<p style="margin:0;font:700 16px ` + fontStack + `;color:#0f172a">Coraza WAF Mod</p>`)
+	h.WriteString(`<p style="margin:0;font:700 16px ` + fontStack + `;color:#0f172a">Palisade</p>`)
 	h.WriteString(`<p style="margin:2px 0 0;font:400 12px ` + fontStack + `;color:#64748b">Automatic IP ban</p>`)
 	h.WriteString(`</td></tr></table>`)
 	h.WriteString(`</td></tr>`)
@@ -361,7 +361,7 @@ func composeBanAlert(ip, reason string, at time.Time) (subject, text, html strin
 
 	// Footer.
 	h.WriteString(`<tr><td style="padding:8px 32px 28px">`)
-	h.WriteString(`<p style="margin:0;font:400 12px ` + fontStack + `;color:#94A3B8">The ban is a global block rule on the IP Rules page — remove it there to lift it. Sent automatically by Coraza WAF Mod from ` + Sender + `.</p>`)
+	h.WriteString(`<p style="margin:0;font:400 12px ` + fontStack + `;color:#94A3B8">The ban is a global block rule on the IP Rules page — remove it there to lift it. Sent automatically by Palisade from ` + Sender + `.</p>`)
 	h.WriteString(`</td></tr>`)
 
 	h.WriteString(`</table></td></tr></table>`)

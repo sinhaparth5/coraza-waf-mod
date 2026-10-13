@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Coraza WAF Mod — single-line installer
+# Palisade — single-line installer
 #
 # Usage (always installs the latest release):
 #   curl -fsSL https://waf-install.astrareconslabs.com/coraza-waf-mod/install.sh | sudo bash
@@ -51,12 +51,16 @@ DRY_RUN="${DRY_RUN:-0}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 CORAZA_VERSION="${CORAZA_VERSION:-}"
 
-BINARY_NAME="coraza-waf-mod"
-SERVICE_USER="coraza-waf-mod"
-VAR_DIR="/var/lib/coraza-waf-mod"
+BINARY_NAME="palisade"
+SERVICE_USER="palisade"
+VAR_DIR="/var/lib/palisade"
+# Pre-2.5.0 name of this product (Coraza WAF Mod). Release assets are still
+# published under it, and an install found under it is migrated below.
+LEGACY_NAME="coraza-waf-mod"
+ASSET_NAME="coraza-waf-mod"
 # nginx-combined access log for GoAccess/fail2ban; its directory is created by
 # the unit's LogsDirectory= (owned by the service user), so the name must match.
-ACCESS_LOG_PATH="/var/log/coraza/access.log"
+ACCESS_LOG_PATH="/var/log/palisade/access.log"
 INSTALL_PATH="/usr/local/bin/${BINARY_NAME}"
 UNIT_PATH="/etc/systemd/system/${BINARY_NAME}.service"
 PRUNE_SERVICE_PATH="/etc/systemd/system/${BINARY_NAME}-prune.service"
@@ -135,8 +139,15 @@ detect_public_ip() {
 # ── Detect existing install ───────────────────────────────────────────────────
 
 IS_UPGRADE=0
+# An install under the pre-2.5.0 name counts as an upgrade too; it is
+# migrated to the new names further down, once the new binary is in place.
+LEGACY_INSTALL=0
+LEGACY_UNIT_PATH="/etc/systemd/system/${LEGACY_NAME}.service"
 if [ -f "${INSTALL_PATH}" ]; then
 	IS_UPGRADE=1
+elif [ -f "/usr/local/bin/${LEGACY_NAME}" ]; then
+	IS_UPGRADE=1
+	LEGACY_INSTALL=1
 fi
 
 # ── Detect existing database backend (upgrade only) ──────────────────────────
@@ -150,8 +161,10 @@ fi
 # upgrades further down this script.
 EXISTING_DB_DRIVER=""
 EXISTING_DB_DSN=""
-if [ "$IS_UPGRADE" = "1" ] && [ -f "${UNIT_PATH}" ]; then
-	EXISTING_EXEC_LINE="$(grep '^ExecStart=' "${UNIT_PATH}" | head -1)"
+EXISTING_UNIT_PATH="${UNIT_PATH}"
+[ "$LEGACY_INSTALL" = "1" ] && EXISTING_UNIT_PATH="${LEGACY_UNIT_PATH}"
+if [ "$IS_UPGRADE" = "1" ] && [ -f "${EXISTING_UNIT_PATH}" ]; then
+	EXISTING_EXEC_LINE="$(grep '^ExecStart=' "${EXISTING_UNIT_PATH}" | head -1)"
 	EXISTING_DB_DRIVER="$(printf '%s' "$EXISTING_EXEC_LINE" | sed -n "s/.*--db-driver  *\([^ ]*\).*/\1/p")"
 	EXISTING_DB_DSN="$(printf '%s' "$EXISTING_EXEC_LINE" | sed -n "s/.*--db  *'\([^']*\)'.*/\1/p")"
 fi
@@ -174,7 +187,7 @@ if [ -z "$CORAZA_VERSION" ]; then
 	printf '    Latest: %s%s%s\n' "$C_BOLD" "$CORAZA_VERSION" "$C_RESET"
 fi
 
-ASSET="${BINARY_NAME}-linux-${ARCH}"
+ASSET="${ASSET_NAME}-linux-${ARCH}"
 DOWNLOAD_BASE="https://github.com/${GITHUB_REPO}/releases/download/${CORAZA_VERSION}"
 
 if [ "$IS_UPGRADE" = "1" ]; then
@@ -354,6 +367,34 @@ else
 	DB_DSN="${VAR_DIR}/waf.db"
 fi
 
+# ── Migrate a pre-2.5.0 (coraza-waf-mod) install to the Palisade names ───────
+# Stops the old service, moves its data/key/log directories, renames the
+# service user and group in place (same uid, so file ownership carries over),
+# and removes the old binary and units. The database and encryption key move
+# untouched, so nothing is re-seeded and no secret is orphaned.
+if [ "$LEGACY_INSTALL" = "1" ]; then
+	step "Migrating ${LEGACY_NAME} -> ${BINARY_NAME}"
+	run systemctl disable --now "${LEGACY_NAME}.service" "${LEGACY_NAME}-prune.timer" || true
+	for pair in "/var/lib/${LEGACY_NAME}:${VAR_DIR}" "/etc/${LEGACY_NAME}:/etc/${BINARY_NAME}" "/var/log/coraza:/var/log/${BINARY_NAME}"; do
+		old="${pair%%:*}"; new="${pair#*:}"
+		if [ -d "$old" ] && [ ! -e "$new" ]; then
+			run mv "$old" "$new"
+			detail "Moved ${old} -> ${new}"
+		fi
+	done
+	if id "${LEGACY_NAME}" >/dev/null 2>&1 && ! id "${SERVICE_USER}" >/dev/null 2>&1; then
+		run usermod -l "${SERVICE_USER}" -d "${VAR_DIR}" "${LEGACY_NAME}"
+		run groupmod -n "${SERVICE_USER}" "${LEGACY_NAME}" || true
+		detail "Renamed user ${LEGACY_NAME} -> ${SERVICE_USER}"
+	fi
+	run rm -f "/usr/local/bin/${LEGACY_NAME}" "${LEGACY_UNIT_PATH}" \
+		"/etc/systemd/system/${LEGACY_NAME}-prune.service" \
+		"/etc/systemd/system/${LEGACY_NAME}-prune.timer" \
+		"/etc/systemd/system/varnish.service.d/coraza.conf"
+	run rm -f "/etc/systemd/system/multi-user.target.wants/${LEGACY_NAME}.service"
+	ok "Migrated. Anything of yours that points at /var/log/coraza/access.log (fail2ban, log shippers) now needs /var/log/${BINARY_NAME}/access.log."
+fi
+
 # ── System user ───────────────────────────────────────────────────────────────
 
 step "Creating system user '${SERVICE_USER}'"
@@ -447,7 +488,7 @@ step "Installing systemd units"
 
 write_file "${UNIT_PATH}" <<UNIT
 [Unit]
-Description=Coraza WAF Mod (WAF + reverse proxy)
+Description=Palisade (WAF + reverse proxy)
 Documentation=https://github.com/sinhaparth5/coraza-waf-mod
 After=network.target
 
@@ -457,7 +498,7 @@ User=${SERVICE_USER}
 Group=${SERVICE_USER}
 WorkingDirectory=${VAR_DIR}
 ExecStart=${INSTALL_PATH} ${TLS_FLAGS} --db-driver ${DB_DRIVER} --db '${DB_DSN}' --certs ${VAR_DIR}/certs --retention 30 --db-key-file ${DB_KEY_FILE} --access-log ${ACCESS_LOG_PATH}
-LogsDirectory=coraza
+LogsDirectory=palisade
 Restart=on-failure
 RestartSec=5s
 
@@ -475,7 +516,7 @@ UNIT
 
 write_file "${PRUNE_SERVICE_PATH}" <<UNIT
 [Unit]
-Description=Coraza WAF Mod — log retention prune (one-shot)
+Description=Palisade — log retention prune (one-shot)
 
 [Service]
 Type=oneshot
@@ -490,7 +531,7 @@ UNIT
 
 write_file "${PRUNE_TIMER_PATH}" <<UNIT
 [Unit]
-Description=Coraza WAF Mod — run log retention prune every 15 days
+Description=Palisade — run log retention prune every 15 days
 
 [Timer]
 OnBootSec=15min
@@ -545,21 +586,21 @@ if [ "$DRY_RUN" = "1" ] || command -v varnishd >/dev/null 2>&1; then
 
 	# Never clobber a hand-written VCL silently: anything not created by this
 	# installer (including the stock package example) is backed up first.
-	if [ "$DRY_RUN" != "1" ] && [ -f "$VARNISH_VCL_PATH" ] && ! grep -q "coraza-waf-mod" "$VARNISH_VCL_PATH"; then
-		detail "Backing up existing VCL to ${VARNISH_VCL_PATH}.pre-coraza"
-		run cp "$VARNISH_VCL_PATH" "${VARNISH_VCL_PATH}.pre-coraza"
+	if [ "$DRY_RUN" != "1" ] && [ -f "$VARNISH_VCL_PATH" ] && ! grep -qE "palisade|coraza-waf-mod" "$VARNISH_VCL_PATH"; then
+		detail "Backing up existing VCL to ${VARNISH_VCL_PATH}.pre-palisade"
+		run cp "$VARNISH_VCL_PATH" "${VARNISH_VCL_PATH}.pre-palisade"
 	fi
 	run mkdir -p /etc/varnish
 	write_file "$VARNISH_VCL_PATH" <<'VCL'
 vcl 4.1;
 
-# Varnish sits BEHIND the Coraza WAF proxy, never in front of it, and this
+# Varnish sits BEHIND the Palisade proxy, never in front of it, and this
 # file is install-once — it does NOT change when services are added, edited,
 # or removed in the admin UI:
 #
-#   client -> coraza-waf-mod (:80/:443, WAF-inspected)
+#   client -> palisade (:80/:443, WAF-inspected)
 #          -> varnishd (127.0.0.1:6081, this config)
-#          -> coraza-waf-mod cache-return (127.0.0.1:6082, the ONLY backend here)
+#          -> palisade cache-return (127.0.0.1:6082, the ONLY backend here)
 #          -> the service's real backend (routed by the WAF from its DB)
 #
 # The WAF only forwards a request here after the full pipeline (challenge
@@ -800,7 +841,7 @@ sub vcl_backend_response {
 sub vcl_deliver {
     # Surface cache effectiveness to the WAF logs / curl -I debugging.
     # PASS = never looked up (auth/session/non-GET) or hit-for-miss — the
-    # WAF logs this per request and exports coraza_cache_results_total.
+    # WAF logs this per request and exports palisade_cache_results_total.
     if (obj.uncacheable) {
         set resp.http.X-Cache = "PASS";
     } elsif (obj.hits > 0) {
@@ -815,8 +856,8 @@ sub vcl_deliver {
 VCL
 
 	run mkdir -p "$VARNISH_OVERRIDE_DIR"
-	write_file "${VARNISH_OVERRIDE_DIR}/coraza.conf" <<UNIT
-# Installed by coraza-waf-mod install.sh: bind loopback only — Varnish sits
+	write_file "${VARNISH_OVERRIDE_DIR}/palisade.conf" <<UNIT
+# Installed by the Palisade install.sh: bind loopback only — Varnish sits
 # behind the WAF and must never be reachable from outside this host.
 # -F keeps varnishd in the foreground: the stock unit is Type=notify, so
 # without it varnishd daemonizes, the main process exits 0, and systemd tears

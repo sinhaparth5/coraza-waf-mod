@@ -3,7 +3,7 @@ package ui
 import (
 	"testing"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 func TestUniqueCertName(t *testing.T) {

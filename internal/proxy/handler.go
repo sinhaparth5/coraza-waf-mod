@@ -15,25 +15,25 @@ import (
 	"sync"
 	"time"
 
-	"coraza-waf-mod/internal/notify/metrics"
-	"coraza-waf-mod/internal/security/adaptive"
-	"coraza-waf-mod/internal/security/asn"
-	"coraza-waf-mod/internal/security/blocklist"
-	"coraza-waf-mod/internal/security/bot"
-	"coraza-waf-mod/internal/security/challenge"
-	"coraza-waf-mod/internal/security/geo"
-	ja3pkg "coraza-waf-mod/internal/security/ja3"
-	ja4pkg "coraza-waf-mod/internal/security/ja4"
-	"coraza-waf-mod/internal/security/ratelimit"
-	"coraza-waf-mod/internal/security/threatscore"
-	"coraza-waf-mod/internal/security/waf"
-	"coraza-waf-mod/internal/services"
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/notify/metrics"
+	"palisade/internal/security/adaptive"
+	"palisade/internal/security/asn"
+	"palisade/internal/security/blocklist"
+	"palisade/internal/security/bot"
+	"palisade/internal/security/challenge"
+	"palisade/internal/security/geo"
+	ja3pkg "palisade/internal/security/ja3"
+	ja4pkg "palisade/internal/security/ja4"
+	"palisade/internal/security/ratelimit"
+	"palisade/internal/security/threatscore"
+	"palisade/internal/security/waf"
+	"palisade/internal/services"
+	"palisade/internal/storage"
 
 	"github.com/labstack/echo/v4"
 )
 
-const serverHeader = "Coraza WAF Mod"
+const serverHeader = "Palisade"
 
 // unmatchedHostAppName is logged/labeled in place of a real service name
 // when registry.Match finds no service for the request's Host — e.g. a

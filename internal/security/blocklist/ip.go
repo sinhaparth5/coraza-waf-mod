@@ -6,7 +6,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"coraza-waf-mod/internal/storage"
+	"palisade/internal/storage"
 )
 
 type cidrRule struct {
