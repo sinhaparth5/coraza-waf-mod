@@ -1,6 +1,9 @@
 package asn
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func newTestLookup(t *testing.T) *Lookup {
 	t.Helper()
@@ -73,5 +76,19 @@ func TestLookupForConnNilLookup(t *testing.T) {
 	var l *Lookup
 	if asnNum, org := l.LookupForConn("203.0.113.4:12345", "8.8.8.8"); asnNum != 0 || org != "" {
 		t.Fatalf("nil *Lookup.LookupForConn = (%d, %q), want (0, \"\")", asnNum, org)
+	}
+}
+
+func TestSweepConnCacheDropsExpired(t *testing.T) {
+	now := time.Now()
+	connCache.Store("old:1", cacheEntry{ip: "1.1.1.1", expiresAt: now.Add(-time.Second)})
+	connCache.Store("new:1", cacheEntry{ip: "2.2.2.2", expiresAt: now.Add(time.Minute)})
+	t.Cleanup(func() { DeleteConn("old:1"); DeleteConn("new:1") })
+	sweepConnCache(now)
+	if _, ok := connCache.Load("old:1"); ok {
+		t.Error("expired entry kept")
+	}
+	if _, ok := connCache.Load("new:1"); !ok {
+		t.Error("fresh entry dropped")
 	}
 }

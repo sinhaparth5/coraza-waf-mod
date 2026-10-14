@@ -388,3 +388,14 @@ func TestClassifyASNNilClassifierUsesHeuristicOnly(t *testing.T) {
 		t.Fatal("with no classifier configured, classifyASN must equal the plain heuristic")
 	}
 }
+
+func TestEvictIdleDropsStaleScores(t *testing.T) {
+	s := testScorer(newFakeStore(), nil)
+	now := s.now()
+	s.scores["old"], s.lastSeen["old"] = 50, now.Add(-2*idleTTL)
+	s.scores["new"], s.lastSeen["new"] = 10, now
+	s.evictIdle()
+	if s.CurrentScore("old") != 0 || s.CurrentScore("new") != 10 {
+		t.Errorf("after evict: old=%d new=%d", s.CurrentScore("old"), s.CurrentScore("new"))
+	}
+}

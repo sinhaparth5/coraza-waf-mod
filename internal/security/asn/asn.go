@@ -84,14 +84,18 @@ func janitor() {
 	t := time.NewTicker(connCacheTTL / 2)
 	defer t.Stop()
 	for range t.C {
-		now := time.Now()
-		connCache.Range(func(k, v any) bool {
-			if now.After(v.(cacheEntry).expiresAt) {
-				connCache.Delete(k)
-			}
-			return true
-		})
+		sweepConnCache(time.Now())
 	}
+}
+
+// sweepConnCache drops every entry that expired before now.
+func sweepConnCache(now time.Time) {
+	connCache.Range(func(k, v any) bool {
+		if now.After(v.(cacheEntry).expiresAt) {
+			connCache.Delete(k)
+		}
+		return true
+	})
 }
 
 // DeleteConn removes any cached ASN lookup for remoteAddr. Call when the

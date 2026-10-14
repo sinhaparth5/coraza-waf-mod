@@ -142,17 +142,22 @@ func (s *Scorer) janitor() {
 	for {
 		select {
 		case <-ticker.C:
-			cutoff := s.now().Add(-idleTTL)
-			s.mu.Lock()
-			for ip, t := range s.lastSeen {
-				if t.Before(cutoff) {
-					delete(s.lastSeen, ip)
-					delete(s.scores, ip)
-				}
-			}
-			s.mu.Unlock()
+			s.evictIdle()
 		case <-s.stop:
 			return
+		}
+	}
+}
+
+// evictIdle drops cached scores for IPs not seen within idleTTL.
+func (s *Scorer) evictIdle() {
+	cutoff := s.now().Add(-idleTTL)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for ip, t := range s.lastSeen {
+		if t.Before(cutoff) {
+			delete(s.lastSeen, ip)
+			delete(s.scores, ip)
 		}
 	}
 }

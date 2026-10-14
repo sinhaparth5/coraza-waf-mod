@@ -44,9 +44,7 @@ import (
 var templateFS embed.FS
 
 var funcs = template.FuncMap{
-	"flag":        countryFlag,
 	"flagClass":   func(code string) string { return "fi fi-" + strings.ToLower(code) },
-	"statusClass": statusClass,
 	"fmtTime":     func(t time.Time) string { return t.Format("02 Jan 15:04:05") },
 	"fmtTimeFull": func(t time.Time) string { return t.UTC().Format("2006-01-02 15:04:05 UTC") },
 	"fmtDur":      func(ms int64) string { return fmt.Sprintf("%dms", ms) },
@@ -2006,9 +2004,12 @@ func (h *Handler) tlsModalError(c echo.Context, msg string) error {
 
 // tlsSaved re-renders the services table after a TLS change, clears any
 // stale error in the modal, and fires a "tls-saved" event (via HX-Trigger)
-// that the modal listens for to close itself.
-func (h *Handler) tlsSaved(c echo.Context) error {
-	c.Response().Header().Set("HX-Trigger", "tls-saved")
+// that the modal listens for to close itself. extraEvents are fired
+// alongside it: the header can only be set once, so a caller that also
+// needs its own event (SaveAcmeEmail) must pass it here rather than set
+// HX-Trigger itself, or it would be silently overwritten.
+func (h *Handler) tlsSaved(c echo.Context, extraEvents ...string) error {
+	c.Response().Header().Set("HX-Trigger", strings.Join(append([]string{"tls-saved"}, extraEvents...), ", "))
 	w := c.Response().Writer
 	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprint(w, `<div id="tls-error" hx-swap-oob="true"></div>`)
@@ -2112,8 +2113,7 @@ func (h *Handler) SaveAcmeEmail(c echo.Context) error {
 	if err := h.registry.Reload(h.db); err != nil {
 		return err
 	}
-	c.Response().Header().Set("HX-Trigger", "acme-email-saved")
-	return h.tlsSaved(c)
+	return h.tlsSaved(c, "acme-email-saved")
 }
 
 // ClearServiceTLS reverts a service to plain HTTP.
@@ -3255,27 +3255,4 @@ func (h *Handler) renderPartial(c echo.Context, page, tmplName string, data any)
 	}
 	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
 	return t.ExecuteTemplate(c.Response().Writer, tmplName, data)
-}
-
-// countryFlag converts an ISO 3166-1 alpha-2 code to its emoji flag.
-func countryFlag(code string) string {
-	if len(code) != 2 {
-		return "🌐"
-	}
-	r1 := rune(0x1F1E6) + rune(code[0]-'A')
-	r2 := rune(0x1F1E6) + rune(code[1]-'A')
-	return string([]rune{r1, r2})
-}
-
-func statusClass(status int) string {
-	switch {
-	case status >= 500:
-		return "bg-red-100 text-red-800"
-	case status >= 400:
-		return "bg-yellow-100 text-yellow-800"
-	case status >= 300:
-		return "bg-blue-100 text-blue-800"
-	default:
-		return "bg-green-100 text-green-800"
-	}
 }

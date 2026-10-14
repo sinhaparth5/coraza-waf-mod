@@ -5,6 +5,7 @@
 
   [![Release](https://img.shields.io/github/v/release/sinhaparth5/coraza-waf-mod?label=release&color=2A9D8F)](https://github.com/sinhaparth5/coraza-waf-mod/releases/latest)
   [![CI](https://img.shields.io/github/actions/workflow/status/sinhaparth5/coraza-waf-mod/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white&color=2A9D8F)](https://github.com/sinhaparth5/coraza-waf-mod/actions/workflows/ci.yml)
+  [![codecov](https://codecov.io/gh/sinhaparth5/coraza-waf-mod/graph/badge.svg)](https://codecov.io/gh/sinhaparth5/coraza-waf-mod)
   [![CodeQL](https://img.shields.io/github/actions/workflow/status/sinhaparth5/coraza-waf-mod/codeql.yml?branch=main&label=CodeQL&logo=github&logoColor=white&color=2A9D8F)](https://github.com/sinhaparth5/coraza-waf-mod/actions/workflows/codeql.yml)
   [![Go Version](https://img.shields.io/github/go-mod/go-version/sinhaparth5/coraza-waf-mod?label=go&logo=go&logoColor=white&color=00ADD8)](go.mod)
   [![License](https://img.shields.io/github/license/sinhaparth5/coraza-waf-mod?label=license&color=76C893)](LICENSE)

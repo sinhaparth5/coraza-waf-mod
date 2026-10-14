@@ -3,6 +3,7 @@ package geo
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"palisade/internal/storage"
 )
@@ -94,5 +95,19 @@ func TestCheckUsesRemoteAddrCache(t *testing.T) {
 	}
 	if blocked1 != blocked2 {
 		t.Fatalf("blocked mismatch across calls: %v vs %v", blocked1, blocked2)
+	}
+}
+
+func TestSweepConnCacheDropsExpired(t *testing.T) {
+	now := time.Now()
+	connCache.Store("old:1", countryCacheEntry{ip: "1.1.1.1", country: "US", expiresAt: now.Add(-time.Second)})
+	connCache.Store("new:1", countryCacheEntry{ip: "2.2.2.2", country: "DE", expiresAt: now.Add(time.Minute)})
+	t.Cleanup(func() { DeleteConn("old:1"); DeleteConn("new:1") })
+	sweepConnCache(now)
+	if _, ok := connCache.Load("old:1"); ok {
+		t.Error("expired entry kept")
+	}
+	if _, ok := connCache.Load("new:1"); !ok {
+		t.Error("fresh entry dropped")
 	}
 }

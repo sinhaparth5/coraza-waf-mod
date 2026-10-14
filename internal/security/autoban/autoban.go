@@ -237,25 +237,30 @@ func (b *Banner) janitor() {
 	for {
 		select {
 		case <-ticker.C:
-			b.mu.Lock()
-			cutoff := b.now().Add(-time.Duration(b.cfg.WindowMinutes) * time.Minute)
-			for ip, evs := range b.hist {
-				if evs = pruneEvents(evs, cutoff); len(evs) == 0 {
-					delete(b.hist, ip)
-				} else {
-					b.hist[ip] = evs
-				}
-			}
-			// Dedupe markers only bridge the gap until the blocklist reload
-			// makes the IP log as ip_blocked; an hour is more than enough.
-			for ip, t := range b.banned {
-				if b.now().Sub(t) > time.Hour {
-					delete(b.banned, ip)
-				}
-			}
-			b.mu.Unlock()
+			b.sweep()
 		case <-b.stop:
 			return
+		}
+	}
+}
+
+// sweep drops history outside the scoring window and stale dedupe markers.
+func (b *Banner) sweep() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	cutoff := b.now().Add(-time.Duration(b.cfg.WindowMinutes) * time.Minute)
+	for ip, evs := range b.hist {
+		if evs = pruneEvents(evs, cutoff); len(evs) == 0 {
+			delete(b.hist, ip)
+		} else {
+			b.hist[ip] = evs
+		}
+	}
+	// Dedupe markers only bridge the gap until the blocklist reload
+	// makes the IP log as ip_blocked; an hour is more than enough.
+	for ip, t := range b.banned {
+		if b.now().Sub(t) > time.Hour {
+			delete(b.banned, ip)
 		}
 	}
 }

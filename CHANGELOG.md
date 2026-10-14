@@ -14,6 +14,14 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Added
+
+- Codecov coverage reporting in CI. The unit run uses `-coverpkg=./...` so code is credited wherever it executes, the MySQL/Postgres storage runs upload as separate flags and merge in, and a Redis service backs the previously untested Redis rate-limit and cluster-sync paths. README carries a coverage badge. Coverage is about 90%, up from 56%; new tests cover every admin UI route through the real middleware stack, the storage CRUD/query layer on all three database backends, and the previously untested config, bot, JA3, blocklist, threat-intel, metrics and passkey packages.
+
+### Fixed
+
+- Saving the Let's Encrypt contact email from the Services page left the email dialog open: the handler's `acme-email-saved` event was overwritten by the `tls-saved` event sent right after it, so the dialog never received it. Both events are now sent.
+
 ## [2.5.0] - 2026-10-13
 
 ### Changed

@@ -43,6 +43,18 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    services:
+      # Backs the Redis rate-limit backend and blocklist cluster-sync tests,
+      # which skip themselves when TEST_REDIS_ADDR is unset (local runs).
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -57,7 +69,18 @@ jobs:
         run: go generate ./...
 
       - name: Run tests
-        run: go test ./...
+        env:
+          TEST_REDIS_ADDR: 127.0.0.1:6379
+        # -coverpkg credits code to its own package wherever it runs, e.g.
+        # storage queries exercised by the admin UI tests.
+        run: go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.out
+          flags: unit
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   test-external-db:
     name: Test (${{ matrix.driver }})
@@ -122,7 +145,16 @@ jobs:
         env:
           TEST_DB_DRIVER: ${{ matrix.driver }}
           TEST_DB_DSN: ${{ matrix.dsn }}
-        run: go test ./internal/storage/... -v
+        run: go test -covermode=atomic -coverprofile=coverage.out ./internal/storage/... -v
+
+      # Merged with the unit upload by Codecov, so dialect branches that only
+      # run against MySQL/Postgres count toward storage coverage too.
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.out
+          flags: ${{ matrix.driver }}
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   release:
     name: Release

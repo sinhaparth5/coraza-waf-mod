@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -108,5 +109,19 @@ func TestClientIPHonorsTrustedProxy(t *testing.T) {
 
 	if got := h.clientIP(req); got != "203.0.113.7" {
 		t.Errorf("clientIP = %q, want forwarded client 203.0.113.7", got)
+	}
+}
+
+func TestLoginLimiterSweepsAtCap(t *testing.T) {
+	l := newLoginLimiter()
+	start := time.Now()
+	l.now = func() time.Time { return start }
+	for i := range loginLimiterCap {
+		l.fail(fmt.Sprintf("10.0.%d.%d", i/256, i%256))
+	}
+	l.now = func() time.Time { return start.Add(loginWindow + loginLockout + time.Second) }
+	l.fail("192.0.2.1") // at the cap: expired entries are swept first
+	if len(l.entries) != 1 {
+		t.Fatalf("entries after sweep = %d, want 1", len(l.entries))
 	}
 }

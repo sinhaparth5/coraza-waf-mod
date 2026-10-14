@@ -285,3 +285,40 @@ func TestCriticalRuleRanges(t *testing.T) {
 		}
 	}
 }
+
+func TestSweepPrunesHistoryAndDedupe(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	b, _ := testBanner(newFakeStore(), now)
+	window := time.Duration(b.cfg.WindowMinutes) * time.Minute
+	b.hist["old"] = []event{{t: now.Add(-2 * window), pts: 1}}
+	b.hist["mixed"] = []event{{t: now.Add(-2 * window), pts: 1}, {t: now, pts: 2}}
+	b.banned["stale"] = now.Add(-2 * time.Hour)
+	b.banned["recent"] = now
+	b.sweep()
+	if _, ok := b.hist["old"]; ok {
+		t.Error("fully stale history kept")
+	}
+	if len(b.hist["mixed"]) != 1 {
+		t.Errorf("mixed history = %v", b.hist["mixed"])
+	}
+	if _, ok := b.banned["stale"]; ok {
+		t.Error("stale dedupe marker kept")
+	}
+	if _, ok := b.banned["recent"]; !ok {
+		t.Error("recent dedupe marker dropped")
+	}
+}
+
+func TestNewStartsAndStops(t *testing.T) {
+	db, err := storage.Open(t.TempDir() + "/ab.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	b := New(db, func() {}, nil)
+	b.Stop()
+	b.Stop() // idempotent
+	if !b.cfg.Enabled {
+		t.Error("default config should be enabled")
+	}
+}

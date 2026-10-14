@@ -1,0 +1,21 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        target: 80%
+
+# main.go is flag parsing and process wiring (servers, signals, goroutine
+# startup) exercised only by running the binary; tools/ is the build-time
+# JS minifier, never shipped.
+ignore:
+  - "main.go"
+  - "assets.go"
+  - "tools/**"
+
+comment:
+  layout: "condensed_header, diff, flags, files"
+  require_changes: true
