@@ -261,7 +261,7 @@ func (r *Registry) Reload(db *storage.DB) error {
 		// Also strip security headers from the backend response so the WAF's
 		// globally-set versions (from SecurityMiddleware) are the only ones
 		// the client sees, avoiding duplicate headers.
-		rp.ModifyResponse = func(resp *http.Response) error {
+		modify := func(resp *http.Response) error {
 			resp.Header.Set("Server", serverHeader)
 			// Internal VCL partition/purge tags — never for clients, even if
 			// an older VCL without the vcl_deliver unset is installed.
@@ -281,6 +281,13 @@ func (r *Registry) Reload(db *storage.DB) error {
 			reg.markHealth(name, true)
 			return nil
 		}
+		rp.ModifyResponse = modify
+		if s.CompressEnabled {
+			rp.ModifyResponse = func(resp *http.Response) error {
+				compressResponse(resp)
+				return modify(resp)
+			}
+		}
 		if bypass != nil {
 			bypass.ModifyResponse = rp.ModifyResponse
 			bypass.ErrorHandler = backendErr
@@ -297,7 +304,9 @@ func (r *Registry) Reload(db *storage.DB) error {
 		drp := httputil.NewSingleHostReverseProxy(&url.URL{Scheme: target.Scheme, Host: target.Host})
 		drp.Transport = &timedTransport{rt: backendTransport, name: name}
 		drp.ErrorHandler = rp.ErrorHandler
-		drp.ModifyResponse = rp.ModifyResponse
+		// Uncompressed: this hop answers Varnish, and the outer proxy
+		// compresses per client on the way out.
+		drp.ModifyResponse = modify
 		direct[s.Name] = drp
 	}
 

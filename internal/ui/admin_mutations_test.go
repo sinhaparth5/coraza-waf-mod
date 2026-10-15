@@ -246,6 +246,8 @@ func TestServiceSettingHandlers(t *testing.T) {
 		{"/admin/services/uploads/x", nil, 400},
 		{"/admin/services/http3/" + id, []string{"enabled", "1"}, 200},
 		{"/admin/services/http3/x", nil, 400},
+		{"/admin/services/compress/" + id, []string{"enabled", "1"}, 200},
+		{"/admin/services/compress/x", nil, 400},
 		{"/admin/services/schema/" + id, []string{"mode", "enforce", "schema", `{"type":"object"}`}, 200},
 		{"/admin/services/schema/" + id, []string{"mode", "log", "schema", `{"type":`}, 400},
 		{"/admin/services/schema/x", nil, 400},
@@ -267,7 +269,7 @@ func TestServiceSettingHandlers(t *testing.T) {
 	}
 
 	got, _ := env.db.GetService(svc.ID)
-	if got.BotMode != "always" || !got.AllowLargeJSUploads || !got.HTTP3Enabled || got.SchemaMode != "enforce" || !got.CacheEnabled ||
+	if got.BotMode != "always" || !got.AllowLargeJSUploads || !got.HTTP3Enabled || !got.CompressEnabled || got.SchemaMode != "enforce" || !got.CacheEnabled ||
 		!got.CacheBySession || got.SessionCookieName != "sid" || got.CacheTTLFloor != 60 || got.CacheTTLCeiling != 600 || got.CacheGrace != 10 {
 		t.Errorf("service = %+v", got)
 	}
