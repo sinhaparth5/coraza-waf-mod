@@ -255,6 +255,7 @@ type apiUpdateServiceRequest struct {
 	Burst               *int     `json:"rate_limit_burst"`
 	BotMode             *string  `json:"bot_mode"` // "inherit" | "always" | "off"
 	AllowLargeJSUploads *bool    `json:"allow_large_js_uploads"`
+	HTTP3Enabled        *bool    `json:"http3_enabled"`
 	RequestSchema       *string  `json:"request_schema"` // JSON Schema text; "" (with SchemaMode omitted or "off") disables validation
 	SchemaMode          *string  `json:"schema_mode"`    // "off" | "log" | "enforce"
 }
@@ -320,6 +321,11 @@ func (h *Handler) APIUpdateService(c echo.Context) error {
 	}
 	if req.AllowLargeJSUploads != nil {
 		if err := h.db.SetServiceLargeJSUploads(id, *req.AllowLargeJSUploads); err != nil {
+			return apiError(c, http.StatusInternalServerError, err.Error())
+		}
+	}
+	if req.HTTP3Enabled != nil {
+		if err := h.db.SetServiceHTTP3(id, *req.HTTP3Enabled); err != nil {
 			return apiError(c, http.StatusInternalServerError, err.Error())
 		}
 	}

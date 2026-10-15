@@ -303,6 +303,53 @@ func TestRegistryIsServiceHost(t *testing.T) {
 	}
 }
 
+func TestRegistryHTTP3Host(t *testing.T) {
+	db := openTestDB(t)
+	for _, svc := range []struct{ name, host, prefix string }{
+		{"h3", "H3.example.com", ""},
+		{"h2", "h2.example.com", ""},
+		{"prefix-h3", "", "/api"},
+	} {
+		if err := db.AddService(svc.name, svc.host, svc.prefix, "http://10.0.0.5:3000", 0, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, err := db.ListServices()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range list {
+		if s.Name != "h2" {
+			if err := db.SetServiceHTTP3(s.ID, true); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	reg, err := New(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		host string
+		want bool
+	}{
+		{"h3.example.com", true},
+		{"H3.EXAMPLE.COM:443", true},
+		{"h2.example.com", false},
+		{"192.168.1.1", false}, // prefix services never enable HTTP/3: Alt-Svc covers the whole origin
+	}
+	for _, tc := range cases {
+		if got := reg.HTTP3Host(tc.host); got != tc.want {
+			t.Errorf("HTTP3Host(%q) = %v, want %v", tc.host, got, tc.want)
+		}
+	}
+	var nilReg *Registry
+	if nilReg.HTTP3Host("h3.example.com") {
+		t.Error("HTTP3Host on a nil *Registry must return false")
+	}
+}
+
 // TestValidateRejectsMetadataEndpoints checks the go/request-forgery
 // mitigation: admin-supplied backend URLs pointing at a cloud
 // instance-metadata endpoint are rejected before Probe ever contacts them,

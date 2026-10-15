@@ -73,6 +73,9 @@ func TestComputeSectionA(t *testing.T) {
 		{"non-alnum ALPN falls back to hex", func(h *tls.ClientHelloInfo) {
 			h.SupportedProtos = []string{"\x01\x02"} // hex "0102" → first '0', last '2'
 		}, "t13d030602"},
+		{"quic transport params means q", func(h *tls.ClientHelloInfo) {
+			h.Extensions = append(h.Extensions, 0x0039)
+		}, "q13d0307h2"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -367,6 +367,19 @@
 
     <div id="tls-error" class="text-[12px] text-red-500 mt-[10px]"></div>
 
+    <form id="svc-http3-form" hx-post="{{.AdminPath}}/services/http3/0" hx-target="#services-body" hx-swap="innerHTML" class="mt-4 border-t border-canvas pt-4">
+      <label class="flex items-center justify-between cursor-pointer py-2 mb-2">
+        <span class="text-[13px] font-semibold text-slate-700">HTTP/3 (QUIC)</span>
+        {{template "toggle-switch" (map "Name" "enabled" "ID" "svc-http3-enabled")}}
+      </label>
+      <p class="text-[12px] text-slate-500 mb-3 leading-[1.5]">Offers HTTP/3 to browsers on this domain. HTTP/2 stays the default and the fallback.</p>
+      {{if not .HTTP3Listener}}
+      <p class="text-[12px] text-amber-700 bg-amber-50 border border-amber-100 rounded-md p-3 mb-3 leading-[1.5]">The HTTP/3 listener is off, so this has no effect yet. Start Palisade with <code class="font-mono">--listen-h3 :443</code> and allow UDP 443 through the firewall.</p>
+      {{end}}
+      <button type="submit" class="btn-primary w-full">Save</button>
+    </form>
+    <div id="svc-http3-error" role="alert" aria-live="polite" class="text-[12px] text-red-500 mt-[10px]"></div>
+
     <form id="tls-clear-form" hx-post="/admin/services/tls/clear" hx-target="#services-body" hx-swap="innerHTML" class="mt-4 border-t border-canvas pt-4">
       <input type="hidden" name="service_id" class="tls-service-id"/>
       <button type="submit" class="w-full py-[10px] rounded-md border border-red-100 bg-white text-red-500 text-[13px] font-medium cursor-pointer font-sans">Disable TLS for this service</button>
@@ -511,6 +524,9 @@
     {{if .CacheBySession}}
     <span class="text-[11px] font-semibold bg-sky-100 text-sky-600 px-2 py-[2px] rounded-sm">Cached (session)</span>
     {{end}}
+    {{if .HTTP3Enabled}}
+    <span class="text-[11px] font-semibold bg-sky-100 text-sky-600 px-2 py-[2px] rounded-sm">HTTP/3</span>
+    {{end}}
     {{if .AllowLargeJSUploads}}
     <span class="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-[2px] rounded-sm">Large JS uploads</span>
     {{end}}
@@ -522,7 +538,7 @@
       data-id="{{.ID}}" data-name="{{.Name}}" data-has-host="{{if .Host}}1{{else}}0{{end}}"
       data-rps="{{.RateLimitRPS}}" data-burst="{{.RateLimitBurst}}" data-mode="{{.BotMode}}" data-cache="{{if .CacheEnabled}}1{{else}}0{{end}}"
       data-session-cache="{{if .CacheBySession}}1{{else}}0{{end}}" data-session-cookie="{{.SessionCookieName}}"
-      data-large-js-uploads="{{if .AllowLargeJSUploads}}1{{else}}0{{end}}"
+      data-large-js-uploads="{{if .AllowLargeJSUploads}}1{{else}}0{{end}}" data-http3="{{if .HTTP3Enabled}}1{{else}}0{{end}}"
       data-schema="{{.RequestSchema}}" data-schema-mode="{{.SchemaMode}}"
       data-ttl-floor="{{.CacheTTLFloor}}" data-ttl-ceiling="{{.CacheTTLCeiling}}" data-grace="{{.CacheGrace}}" data-keep="{{.CacheKeep}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-settings-01 text-xs"></i>

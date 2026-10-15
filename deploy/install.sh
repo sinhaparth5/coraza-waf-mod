@@ -393,7 +393,7 @@ fi
 
 # ── TLS certificate ───────────────────────────────────────────────────────────
 
-TLS_FLAGS="--listen :80 --listen-tls :443"
+TLS_FLAGS="--listen :80 --listen-tls :443 --listen-h3 :443"
 
 if [ "$IS_UPGRADE" = "0" ] && [ "$DRY_RUN" != "1" ]; then
 	if [ "$USE_ACME" = "0" ]; then
@@ -407,7 +407,7 @@ if [ "$IS_UPGRADE" = "0" ] && [ "$DRY_RUN" != "1" ]; then
 			--hosts "${SERVER_IP}" \
 			--days 3650
 		chown "${SERVICE_USER}:${SERVICE_USER}" "${CERT_FILE}" "${KEY_FILE}"
-		TLS_FLAGS="--listen :80 --listen-tls :443 --tls-cert ${CERT_FILE} --tls-key ${KEY_FILE}"
+		TLS_FLAGS="--listen :80 --listen-tls :443 --listen-h3 :443 --tls-cert ${CERT_FILE} --tls-key ${KEY_FILE}"
 	else
 		# ACME: cert is provisioned automatically on first HTTPS request.
 		# Store the domain and admin email so startTLS includes it in the host policy.
@@ -422,13 +422,13 @@ if [ "$IS_UPGRADE" = "0" ] && [ "$DRY_RUN" != "1" ]; then
 	fi
 elif [ "$DRY_RUN" = "1" ]; then
 	step "[DRY RUN] Would generate self-signed cert at ${CERT_FILE}"
-	TLS_FLAGS="--listen :80 --listen-tls :443 --tls-cert ${CERT_FILE} --tls-key ${KEY_FILE}"
+	TLS_FLAGS="--listen :80 --listen-tls :443 --listen-h3 :443 --tls-cert ${CERT_FILE} --tls-key ${KEY_FILE}"
 elif [ "$IS_UPGRADE" = "1" ] && [ -f "${CERT_FILE}" ] && [ -f "${KEY_FILE}" ]; then
 	# Upgrade of a self-signed install: the cert files only exist on the
 	# non-ACME path, so keep passing them — otherwise the rewritten unit
 	# would drop the fallback cert and break HTTPS-by-IP after restart.
 	step "Keeping existing self-signed certificate"
-	TLS_FLAGS="--listen :80 --listen-tls :443 --tls-cert ${CERT_FILE} --tls-key ${KEY_FILE}"
+	TLS_FLAGS="--listen :80 --listen-tls :443 --listen-h3 :443 --tls-cert ${CERT_FILE} --tls-key ${KEY_FILE}"
 fi
 
 # ── Seed admin credentials (non-ACME path / fresh install) ───────────────────

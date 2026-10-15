@@ -106,6 +106,12 @@ github.com/prometheus/common v0.72.0 h1:tAYsE+sPJxIncDAobm4H5aQjmox9ZxEIIqPbiffa
 github.com/prometheus/common v0.72.0/go.mod h1:77NWqAQ2tXT7BIK40qjJdw5Acrsrg1TlHAnsQi3i6mk=
 github.com/prometheus/procfs v0.22.0 h1:6q9+/JL9IKAPbCmBrv9n5O5Ty3NKnciV5X7YGw0oics=
 github.com/prometheus/procfs v0.22.0/go.mod h1:CvmFr/GVhIjIvWJZW3tgkODBQMRIf0EyWMQLHCHab58=
+github.com/quic-go/go-ossfuzz-seeds v0.1.0 h1:APacT+iIaNF6fd8AGEiN3bT/Jtkd2jz4v4TzM7MFjy0=
+github.com/quic-go/go-ossfuzz-seeds v0.1.0/go.mod h1:3IOHRbJIc+L6YKMwfDtJAM9Vj9k0YY4muhuyUYk5tbk=
+github.com/quic-go/qpack v0.6.0 h1:g7W+BMYynC1LbYLSqRt8PBg5Tgwxn214ZZR34VIOjz8=
+github.com/quic-go/qpack v0.6.0/go.mod h1:lUpLKChi8njB4ty2bFLX2x4gzDqXwUpaO1DP9qMDZII=
+github.com/quic-go/quic-go v0.63.0 h1:LIFGHI4PFUhhw2dDD1ARHdCff143ffMHwZtbnbuJ78A=
+github.com/quic-go/quic-go v0.63.0/go.mod h1:RAro2j2yN9a9EiPACLHT9IB2NXCvGQmmo/alT0yYI0w=
 github.com/redis/go-redis/v9 v9.23.0 h1:/TTVdJa8BRNsybwwGGnmiYktHNlUXtbOQxlWpHBPL3s=
 github.com/redis/go-redis/v9 v9.23.0/go.mod h1:EWP2UUk+XDaI1s5nQB5mablZN6vccXlmBQTyfnF87D0=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=

@@ -490,6 +490,19 @@ func (r *Registry) Match(host, path string) *storage.Service {
 // receiver safe, like asn.Lookup.Lookup, so a *Registry left unset (e.g. in
 // tests that don't need routing) is simply treated as claiming no hosts.
 func (r *Registry) IsServiceHost(host string) bool {
+	return r.hostMatch(host, func(*storage.Service) bool { return true })
+}
+
+// HTTP3Host reports whether host belongs to a service that opted into
+// HTTP/3. Keyed on Host alone, never Prefix, because Alt-Svc is scoped to an
+// origin: advertising it for one path would move every path on that host to
+// QUIC. The same answer gates both advertising (Alt-Svc on TCP responses)
+// and accepting (421 on the QUIC listener), so the two can't drift.
+func (r *Registry) HTTP3Host(host string) bool {
+	return r.hostMatch(host, func(s *storage.Service) bool { return s.HTTP3Enabled })
+}
+
+func (r *Registry) hostMatch(host string, ok func(*storage.Service) bool) bool {
 	if r == nil {
 		return false
 	}
@@ -500,7 +513,7 @@ func (r *Registry) IsServiceHost(host string) bool {
 
 	for i := range r.list {
 		if r.list[i].Host != "" && strings.ToLower(r.list[i].Host) == host {
-			return true
+			return ok(&r.list[i])
 		}
 	}
 	return false

@@ -373,6 +373,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/services/ratelimit", h.SetServiceRateLimit)
 	g.POST("/services/bot/:id", h.SetServiceBotMode)
 	g.POST("/services/uploads/:id", h.SetServiceLargeJSUploads)
+	g.POST("/services/http3/:id", h.SetServiceHTTP3)
 	g.POST("/services/schema/:id", h.SetServiceSchema)
 	g.POST("/services/cache/:id", h.SetServiceCache)
 	g.POST("/services/cache-session/:id", h.SetServiceCacheSession)
@@ -1728,8 +1729,9 @@ func (h *Handler) serviceViews() []ServiceView {
 func (h *Handler) ServicesPage(c echo.Context) error {
 	poolCerts, _ := h.db.ListCertificates()
 	return h.render(c, "services", map[string]any{
-		"Services":  h.serviceViews(),
-		"PoolCerts": poolCerts,
+		"Services":      h.serviceViews(),
+		"PoolCerts":     poolCerts,
+		"HTTP3Listener": h.cfg.ListenAddrH3 != "",
 	})
 }
 
@@ -2419,6 +2421,24 @@ func (h *Handler) SetServiceLargeJSUploads(c echo.Context) error {
 	}
 	if h.reloadWAF != nil {
 		h.reloadWAF()
+	}
+	w := c.Response().Writer
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return h.tmpls["services"].ExecuteTemplate(w, "services-rows", h.serviceViews())
+}
+
+// SetServiceHTTP3 opts one service's Host into HTTP/3. Takes effect on the
+// next request via the registry reload; no-op until --listen-h3 is set.
+func (h *Handler) SetServiceHTTP3(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
+	}
+	if err := h.db.SetServiceHTTP3(id, c.FormValue("enabled") == "1"); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	if err := h.registry.Reload(h.db); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	w := c.Response().Writer
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

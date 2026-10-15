@@ -12,6 +12,7 @@ package config
 type Config struct {
 	ListenAddr     string
 	ListenAddrTLS  string
+	ListenAddrH3   string   // UDP address for HTTP/3; empty = off. Per-service opt-in on top.
 	TrustedProxies []string // CIDRs allowed to supply X-Forwarded-For / X-Real-IP
 	Apps           []App    // kept for one-time migration compat; always empty after first boot
 	WAF            WAFConfig
