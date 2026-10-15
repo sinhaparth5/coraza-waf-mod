@@ -50,6 +50,9 @@ func TestMigrateConfigTo(t *testing.T) {
 	if err := source.DisableWAFRuleForService("svc1", 942200, "svc-specific"); err != nil {
 		t.Fatal(err)
 	}
+	if err := source.SaveWAFCustomRule(WAFCustomRule{ServiceName: "svc1", Rule: `SecAction "id:1000001,pass"`, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
 	if err := source.AddThreatIntelSource("Test list", "https://example.com/list.txt", 24); err != nil {
 		t.Fatal(err)
 	}

@@ -402,6 +402,9 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.GET("/waf-rules", h.WAFRulesPage)
 	g.POST("/waf-rules/disable", h.DisableWAFRule)
 	g.POST("/waf-rules/dry-run", h.WAFDryRun)
+	g.POST("/waf-rules/custom", h.SaveCustomRule)
+	g.POST("/waf-rules/custom/:id/toggle", h.ToggleCustomRule)
+	g.DELETE("/waf-rules/custom/:id", h.DeleteCustomRule)
 	g.DELETE("/waf-rules/:id", h.EnableWAFRule)
 	g.DELETE("/waf-rules/service/:id", h.EnableWAFRuleForService)
 	g.POST("/waf-rules/feedback-config", h.SaveWAFFeedbackConfig)
@@ -1476,7 +1479,12 @@ func (h *Handler) wafRulesContentData() (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	customRules, err := h.db.ListWAFCustomRules()
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
+		"CustomRules":       customRules,
 		"Disabled":          disabled,
 		"ServiceExceptions": serviceExceptions,
 		"TopRules":          topRules,

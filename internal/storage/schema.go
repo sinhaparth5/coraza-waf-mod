@@ -207,6 +207,15 @@ func (db *DB) schemaStatements() []string {
 			UNIQUE(service_name, rule_id)
 		)`, pk, ts),
 
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS waf_custom_rules (
+			id           %s,
+			service_name VARCHAR(255) NOT NULL DEFAULT '',
+			rule         TEXT NOT NULL,
+			note         TEXT NOT NULL DEFAULT '',
+			enabled      INTEGER NOT NULL DEFAULT 1,
+			created_at   %s NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`, pk, ts),
+
 		// url is VARCHAR(768) rather than the 255 used for other identifier
 		// columns above: 768 chars * 4 bytes (utf8mb4) = 3072 bytes, MySQL's
 		// InnoDB max index key length with the default DYNAMIC row format —

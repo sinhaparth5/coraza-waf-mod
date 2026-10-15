@@ -124,6 +124,11 @@ func (h *Handler) RegisterAPI(e *echo.Echo) {
 	api.POST("/ip-rules", h.APICreateIPRule, h.requireWrite)
 	api.DELETE("/ip-rules/:id", h.APIDeleteIPRule, h.requireWrite)
 
+	api.GET("/waf-rules/custom", h.APIListCustomRules)
+	api.POST("/waf-rules/custom", h.APICreateCustomRule, h.requireWrite)
+	api.PUT("/waf-rules/custom/:id", h.APIUpdateCustomRule, h.requireWrite)
+	api.DELETE("/waf-rules/custom/:id", h.APIDeleteCustomRule, h.requireWrite)
+
 	api.GET("/bans", h.APIListBans)
 	api.POST("/bans", h.APICreateBan, h.requireWrite)
 	api.DELETE("/bans/:id", h.APIDeleteBan, h.requireWrite)
