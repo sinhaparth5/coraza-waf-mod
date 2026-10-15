@@ -11,3 +11,4 @@ GeoLite2-Country_*/
 .cache/
 coverage.out
 junit.xml
+bench.txt

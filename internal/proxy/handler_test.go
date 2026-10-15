@@ -24,7 +24,7 @@ import (
 
 // newTestHandler builds a fully wired Handler backed by a temp SQLite DB and
 // a real Coraza/CRS WAF engine. backend is used as the single proxied service.
-func newTestHandler(t *testing.T, backend *httptest.Server) *proxy.Handler {
+func newTestHandler(t testing.TB, backend *httptest.Server) *proxy.Handler {
 	t.Helper()
 
 	dir := t.TempDir()
