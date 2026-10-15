@@ -19,6 +19,7 @@ rather than growing this file forever.
 - CI now runs govulncheck on every push and pull request, and weekly. It fails when Palisade's code reaches a known vulnerability in a dependency or in the Go standard library.
 - Updated the bundled OWASP Core Rule Set from 4.0.0 (February 2024) to 4.25.0, bringing in more than a year and a half of new detections and false-positive fixes. The CRS is now a versioned dependency, so Dependabot proposes each new CRS release automatically, and a new baseline test checks on every update that common attacks are still blocked and ordinary traffic still passes.
 - Builds now require Go 1.27.2 or later, which fixes 12 Go standard-library vulnerabilities reachable from Palisade (HTTP/2, `net/http`, `crypto/tls`, `html/template`, `net/textproto`).
+- Updated dependencies to their latest patch releases, including libinjection-go 0.3.5 (the WAF's SQL injection and XSS detector) and `golang.org/x/net` 0.61.0.
 
 ## [2.6.0] - 2026-10-15
 
