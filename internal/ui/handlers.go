@@ -265,11 +265,11 @@ func (h *Handler) sessionAuth(next echo.HandlerFunc) echo.HandlerFunc {
 		// a busy dashboard doesn't write on every request.
 		if time.Since(sess.LastActiveAt) > sessionTouchThrottle {
 			token := sess.Token
-			go func() {
+			h.db.Go(func() {
 				if err := h.db.TouchSession(token); err != nil {
 					log.Printf("session touch: %v", err)
 				}
-			}()
+			})
 		}
 		return next(c)
 	}

@@ -11,6 +11,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"palisade/internal/security/ratelimit"
@@ -43,7 +44,13 @@ type DB struct {
 	accessLogFn   func(RequestLog)
 	warehouseFn   func(RequestLog)
 	secretGCM     cipher.AEAD // non-nil = secrets-at-rest encryption active (see secretenc.go)
+	bg            sync.WaitGroup
 }
+
+// Go runs fn on its own goroutine for slow writes kept off the request path
+// (TouchSession, TouchAPIKey). Close waits for them, so none can hit a
+// closed connection.
+func (db *DB) Go(fn func()) { db.bg.Go(fn) }
 
 // SetAutobanFn registers a callback invoked (from the log worker goroutine)
 // after each successful DB insert. Used to feed blocked events to the
@@ -265,6 +272,7 @@ func (db *DB) insertReturningID(query string, args ...any) (int64, error) {
 func (db *DB) Close() error {
 	close(db.logQueue)
 	<-db.logDone
+	db.bg.Wait()
 	return db.conn.Close()
 }
 

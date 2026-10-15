@@ -78,11 +78,11 @@ func (h *Handler) apiKeyAuth(next echo.HandlerFunc) echo.HandlerFunc {
 
 		if key.LastUsedAt == nil || time.Since(*key.LastUsedAt) > apiKeyTouchThrottle {
 			id := key.ID
-			go func() {
+			h.db.Go(func() {
 				if err := h.db.TouchAPIKey(id); err != nil {
 					log.Printf("api key touch: %v", err)
 				}
-			}()
+			})
 		}
 
 		c.Set("api_key_id", key.ID)

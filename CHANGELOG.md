@@ -20,5 +20,9 @@ rather than growing this file forever.
 
 - The bot-challenge page now also checks its post-solve redirect in the browser and only follows same-origin `http(s)` paths, falling back to `/`. The server has filtered this value since v2.2.4, so this is defense in depth and closes CodeQL alert `js/xss-through-dom`.
 
+### Fixed
+
+- Shutting down now waits for in-flight session and API-key "last used" writes before closing the database, instead of letting them fail against a closed connection (also caused flaky `internal/ui` tests in CI).
+
 [Unreleased]: https://github.com/sinhaparth5/palisade-waf/compare/v2.5.3...main
 [2.5.3]: https://github.com/sinhaparth5/palisade-waf/compare/v2.5.2...v2.5.3
