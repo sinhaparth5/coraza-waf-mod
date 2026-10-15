@@ -128,6 +128,10 @@
   var largeJSUploadsToggle = document.getElementById('svc-large-js-uploads');
   var http3Form = document.getElementById('svc-http3-form');
   var http3Toggle = document.getElementById('svc-http3-enabled');
+  var backendsForm = document.getElementById('svc-backends-form');
+  var backendsText = document.getElementById('svc-backends');
+  var healthPathInput = document.getElementById('svc-health-path');
+  var healthIntervalInput = document.getElementById('svc-health-interval');
   var compressForm = document.getElementById('svc-compress-form');
   var compressToggle = document.getElementById('svc-compress-enabled');
   var schemaForm = document.getElementById('svc-schema-form');
@@ -186,6 +190,14 @@
     htmx.process(http3Form);
     http3Toggle.checked = d.http3 === '1';
 
+    backendsForm.setAttribute('hx-post', adminPath + '/services/backends/' + d.id);
+    htmx.process(backendsForm);
+    backendsText.value = d.backends || '';
+    var lbRadio = overlay.querySelector('input[name="lb_policy"][value="' + (d.lb || 'round_robin') + '"]');
+    if (lbRadio) lbRadio.checked = true;
+    healthPathInput.value = d.healthPath || '';
+    healthIntervalInput.value = parseInt(d.healthInterval) > 0 ? d.healthInterval : '';
+
     compressForm.setAttribute('hx-post', adminPath + '/services/compress/' + d.id);
     htmx.process(compressForm);
     compressToggle.checked = d.compress === '1';
@@ -228,7 +240,7 @@
     deleteBtn.setAttribute('hx-confirm', 'Remove service ' + d.name + '?');
     htmx.process(deleteBtn);
 
-    ['tls-error', 'rl-error', 'bot-error', 'svc-uploads-error', 'svc-http3-error', 'svc-compress-error', 'svc-schema-error', 'svc-cache-error', 'svc-cache-session-error', 'svc-cache-tuning-error'].forEach(function (id) {
+    ['tls-error', 'rl-error', 'bot-error', 'svc-uploads-error', 'svc-http3-error', 'svc-compress-error', 'svc-backends-error', 'svc-schema-error', 'svc-cache-error', 'svc-cache-session-error', 'svc-cache-tuning-error'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.textContent = '';
     });
@@ -276,6 +288,7 @@
   // real error statuses, so afterRequest.successful is meaningful there.
   document.body.addEventListener('tls-saved', closeModal);
   document.body.addEventListener('rl-saved', closeModal);
+  document.body.addEventListener('backends-saved', closeModal);
   document.body.addEventListener('htmx:afterRequest', function (e) {
     var elt = e.detail.elt;
     if ((elt === botForm || elt === uploadsForm || elt === http3Form || elt === compressForm || elt === schemaForm || elt === cacheForm || elt === cacheSessionForm || elt === cacheTuningForm || elt === deleteBtn) && e.detail.successful) closeModal();

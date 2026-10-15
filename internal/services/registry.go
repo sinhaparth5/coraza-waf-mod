@@ -107,20 +107,27 @@ var spoofableHostHeaders = []string{
 type Registry struct {
 	mu        sync.RWMutex
 	list      []storage.Service
-	proxies   map[string]*httputil.ReverseProxy
-	direct    map[string]*httputil.ReverseProxy // straight-to-backend proxies for the cache-return path
-	cached    map[string]bool                   // services whose outer proxy currently targets Varnish
-	varnish   string                            // Varnish address the cached proxies target (for auto-purge on change)
-	limiters  map[string]*ratelimit.Limiter     // service name -> per-service limiter (nil if not configured)
-	certs     map[string]*tls.Certificate       // host (lowercase) -> uploaded custom cert
-	autoHosts map[string]bool                   // host (lowercase) -> true if tls_mode == "auto"
+	proxies   map[string]http.Handler       // a pool, or for cached services the Varnish-bound proxy
+	direct    map[string]http.Handler       // straight-to-backend pools for the cache-return path
+	cached    map[string]bool               // services whose outer proxy currently targets Varnish
+	varnish   string                        // Varnish address the cached proxies target (for auto-purge on change)
+	limiters  map[string]*ratelimit.Limiter // service name -> per-service limiter (nil if not configured)
+	certs     map[string]*tls.Certificate   // host (lowercase) -> uploaded custom cert
+	autoHosts map[string]bool               // host (lowercase) -> true if tls_mode == "auto"
+	stopCheck chan struct{}                 // closed on Reload to stop the previous active health checks
 
 	healthMu sync.RWMutex
-	health   map[string]bool // service name -> reachable; absent = not checked yet
+	health   map[string]*backendHealth // service name + "\x00" + backend URL
+}
+
+type healthCheck struct {
+	pool     *pool
+	path     string
+	interval time.Duration
 }
 
 func New(db *storage.DB) (*Registry, error) {
-	r := &Registry{health: make(map[string]bool), limiters: make(map[string]*ratelimit.Limiter)}
+	r := &Registry{limiters: make(map[string]*ratelimit.Limiter)}
 	return r, r.Reload(db)
 }
 
@@ -136,10 +143,14 @@ func (r *Registry) Reload(db *storage.DB) error {
 		return err
 	}
 
-	reg := r // avoid shadowing by the *http.Request param named "r" below
-	proxies := make(map[string]*httputil.ReverseProxy, len(list))
-	direct := make(map[string]*httputil.ReverseProxy, len(list))
+	proxies := make(map[string]http.Handler, len(list))
+	direct := make(map[string]http.Handler, len(list))
 	cached := make(map[string]bool)
+	health := make(map[string]*backendHealth)
+	var checks []healthCheck
+	r.healthMu.RLock()
+	oldHealth := r.health
+	r.healthMu.RUnlock()
 	for _, s := range list {
 		target, err := url.Parse(s.Backend)
 		if err != nil {
@@ -220,42 +231,6 @@ func (r *Registry) Reload(db *storage.DB) error {
 				req.URL.Host = varnishAddr
 			}
 		}
-		rp.Transport = &timedTransport{rt: backendTransport, name: name}
-		var bypass *httputil.ReverseProxy
-		if cached[name] {
-			bypass = httputil.NewSingleHostReverseProxy(target)
-			bypass.Transport = rp.Transport
-		}
-		// Passive health tracking: no separate probe traffic at all — a
-		// service is marked down the instant a real proxied request fails
-		// to reach it, and healthy again on the next real request that
-		// gets a response (matches how nginx/HAProxy/Envoy do "passive"
-		// health checks, and how SafeLine avoids logging synthetic probes).
-		backendErr := func(w http.ResponseWriter, r *http.Request, err error) {
-			log.Printf("proxy error [%s]: %v", name, err)
-			reg.markHealth(name, false)
-			http.Error(w, "bad gateway", http.StatusBadGateway)
-		}
-		rp.ErrorHandler = backendErr
-		if bypass != nil {
-			// Varnish is an accelerator, not a dependency: if varnishd is down
-			// (not installed, crashed, mid-restart) a cache-routed service
-			// would otherwise 502 while its backend is perfectly healthy —
-			// and get marked unhealthy for it. Fail open to the backend when
-			// the dial to Varnish itself fails; anything else (or a failure
-			// past the dial) is a real error.
-			rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-				var opErr *net.OpError
-				// Only GET/HEAD are routed to Varnish (see Director), and
-				// neither carries a body a failed dial could have consumed.
-				if errors.As(err, &opErr) && opErr.Op == "dial" && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
-					log.Printf("cache [%s]: varnish unreachable, serving from backend: %v", name, err)
-					bypass.ServeHTTP(w, r)
-					return
-				}
-				backendErr(w, r, err)
-			}
-		}
 		// Override whatever Server header the backend sends — the WAF/proxy
 		// is what the client actually talks to, so it should identify itself.
 		// Also strip security headers from the backend response so the WAF's
@@ -278,36 +253,69 @@ func (r *Registry) Reload(db *storage.DB) error {
 			} {
 				resp.Header.Del(h)
 			}
-			reg.markHealth(name, true)
 			return nil
 		}
-		rp.ModifyResponse = modify
+		clientModify := modify
 		if s.CompressEnabled {
-			rp.ModifyResponse = func(resp *http.Response) error {
+			clientModify = func(resp *http.Response) error {
 				compressResponse(resp)
 				return modify(resp)
 			}
 		}
-		if bypass != nil {
-			bypass.ModifyResponse = rp.ModifyResponse
-			bypass.ErrorHandler = backendErr
+		healthOf := func(raw string) *backendHealth {
+			key := name + "\x00" + raw
+			if h := health[key]; h != nil {
+				return h
+			}
+			h := oldHealth[key]
+			if h == nil {
+				h = &backendHealth{}
+			}
+			health[key] = h
+			return h
 		}
-		proxies[s.Name] = rp
-
-		// Straight-to-backend twin used by the cache-return listener when
-		// Varnish fetches a miss. The target deliberately drops any path
-		// component of the backend URL: the outer director already joined it
-		// before the request went to Varnish, so joining again here would
-		// double it (backend /base + /base/x). Health/response hooks are the
-		// same as the outer proxy — on the cache path this hop is the one
-		// that actually talks to the backend.
-		drp := httputil.NewSingleHostReverseProxy(&url.URL{Scheme: target.Scheme, Host: target.Host})
-		drp.Transport = &timedTransport{rt: backendTransport, name: name}
-		drp.ErrorHandler = rp.ErrorHandler
-		// Uncompressed: this hop answers Varnish, and the outer proxy
-		// compresses per client on the way out.
-		drp.ModifyResponse = modify
-		direct[s.Name] = drp
+		// Balances across the service's backends; per-backend health,
+		// retries and response hooks live in the pool (balancer.go).
+		bp := newPool(s, healthOf, false, clientModify)
+		if bp == nil {
+			continue
+		}
+		if s.HealthPath != "" {
+			interval := s.HealthInterval
+			if interval <= 0 {
+				interval = storage.DefaultHealthInterval
+			}
+			checks = append(checks, healthCheck{bp, s.HealthPath, time.Duration(interval) * time.Second})
+		}
+		// Straight-to-backend pool used by the cache-return listener when
+		// Varnish fetches a miss, sharing the backends' health. Uncompressed:
+		// this hop answers Varnish, and the outer proxy compresses per client
+		// on the way out.
+		direct[name] = newPool(s, healthOf, true, modify)
+		if !cached[name] {
+			proxies[name] = bp
+			continue
+		}
+		rp.Transport = &timedTransport{rt: backendTransport, name: name}
+		rp.ModifyResponse = clientModify
+		// Varnish is an accelerator, not a dependency: if varnishd is down
+		// (not installed, crashed, mid-restart) a cache-routed service
+		// would otherwise 502 while its backends are perfectly healthy.
+		// Fail open to the backends when the dial to Varnish itself fails;
+		// anything else (or a failure past the dial) is a real error.
+		rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+			var opErr *net.OpError
+			// Only GET/HEAD are routed to Varnish (see Director), and
+			// neither carries a body a failed dial could have consumed.
+			if errors.As(err, &opErr) && opErr.Op == "dial" && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+				log.Printf("cache [%s]: varnish unreachable, serving from backend: %v", name, err)
+				bp.ServeHTTP(w, r)
+				return
+			}
+			log.Printf("proxy error [%s]: %v", name, err)
+			http.Error(w, "bad gateway", http.StatusBadGateway)
+		}
+		proxies[name] = rp
 	}
 
 	certs := make(map[string]*tls.Certificate)
@@ -391,19 +399,22 @@ func (r *Registry) Reload(db *storage.DB) error {
 		}(stale)
 	}
 
-	// Drop health entries for services that no longer exist, so a removed
-	// (or renamed) service can't leave a stale dot behind.
-	valid := make(map[string]bool, len(list))
-	for _, s := range list {
-		valid[s.Name] = true
-	}
+	// Entries for removed services or backends were simply not carried
+	// over, so a removed backend can't leave a stale dot behind.
 	r.healthMu.Lock()
-	for name := range r.health {
-		if !valid[name] {
-			delete(r.health, name)
-		}
-	}
+	r.health = health
 	r.healthMu.Unlock()
+
+	r.mu.Lock()
+	if r.stopCheck != nil {
+		close(r.stopCheck)
+	}
+	r.stopCheck = make(chan struct{})
+	stop := r.stopCheck
+	r.mu.Unlock()
+	for _, c := range checks {
+		go c.pool.runChecks(c.path, c.interval, stop)
+	}
 
 	return nil
 }
@@ -534,7 +545,7 @@ func (r *Registry) hostMatch(host string, ok func(*storage.Service) bool) bool {
 }
 
 // Proxy returns the reverse proxy for the named service.
-func (r *Registry) Proxy(name string) (*httputil.ReverseProxy, bool) {
+func (r *Registry) Proxy(name string) (http.Handler, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	rp, ok := r.proxies[name]
@@ -659,6 +670,47 @@ func Validate(backend string) error {
 	return nil
 }
 
+// maxBackends caps one service's backend list.
+const maxBackends = 32
+
+// ValidateBackends checks a service's backend list and its active health
+// check settings. Each URL must pass Validate, appear once, and share one
+// base path: on the Varnish route the path is joined before a backend is
+// picked, so backends can't differ in it.
+func ValidateBackends(backends []string, healthPath string, healthInterval int) error {
+	if len(backends) == 0 {
+		return fmt.Errorf("at least one backend is required")
+	}
+	if len(backends) > maxBackends {
+		return fmt.Errorf("at most %d backends per service", maxBackends)
+	}
+	seen := make(map[string]bool, len(backends))
+	var basePath string
+	for i, b := range backends {
+		if err := Validate(b); err != nil {
+			return fmt.Errorf("%s: %w", b, err)
+		}
+		if seen[b] {
+			return fmt.Errorf("backend %s is listed twice", b)
+		}
+		seen[b] = true
+		u, _ := url.Parse(b)
+		p := strings.TrimSuffix(u.Path, "/")
+		if i == 0 {
+			basePath = p
+		} else if p != basePath {
+			return fmt.Errorf("all backends must use the same path (%q vs %q)", basePath, p)
+		}
+	}
+	if healthPath != "" && !strings.HasPrefix(healthPath, "/") {
+		return fmt.Errorf("health check path must start with /")
+	}
+	if healthInterval < 0 || healthInterval > 3600 {
+		return fmt.Errorf("health check interval must be between 1 and 3600 seconds")
+	}
+	return nil
+}
+
 // Probe checks whether a backend URL is currently reachable. Any HTTP
 // response (even 404/500) counts as reachable — we're checking connectivity,
 // not whether the backend has a route at "/". Only a dial/timeout failure
@@ -768,23 +820,52 @@ func sendPurge(addr, serviceName, urlRegex string) error {
 	return nil
 }
 
-// IsHealthy returns the last known reachability of a service, tracked
-// passively from real proxied traffic (see Reload's ErrorHandler/
-// ModifyResponse hooks) — no separate probe requests are ever sent. known is
-// false if no real request has been proxied to it yet, e.g. a brand new or
-// fully idle service.
-func (r *Registry) IsHealthy(name string) (healthy, known bool) {
+// BackendHealth returns the health of each of the named service's backends,
+// in configured order. Health comes from real proxied traffic (a response
+// marks a backend up, a connection failure takes it out of rotation) and,
+// for services with a health path, from active checks.
+func (r *Registry) BackendHealth(name string) []BackendStatus {
+	var backends []string
+	r.mu.RLock()
+	for _, s := range r.list {
+		if s.Name == name {
+			backends = s.Backends()
+			break
+		}
+	}
+	r.mu.RUnlock()
+	now := time.Now().UnixNano()
+	out := make([]BackendStatus, 0, len(backends))
 	r.healthMu.RLock()
 	defer r.healthMu.RUnlock()
-	healthy, known = r.health[name]
+	for _, raw := range backends {
+		st := BackendStatus{URL: raw}
+		if h := r.health[name+"\x00"+raw]; h != nil {
+			st.Known = h.known.Load()
+			st.Healthy = st.Known && h.available(now)
+		}
+		out = append(out, st)
+	}
+	return out
+}
+
+// IsHealthy summarizes BackendHealth: healthy while any backend is, known
+// once any backend has been reached or checked.
+func (r *Registry) IsHealthy(name string) (healthy, known bool) {
+	for _, b := range r.BackendHealth(name) {
+		known = known || b.Known
+		healthy = healthy || b.Healthy
+	}
 	return healthy, known
 }
 
-// markHealth records the outcome of a real proxied request to a service.
-func (r *Registry) markHealth(name string, healthy bool) {
-	r.healthMu.Lock()
-	r.health[name] = healthy
-	r.healthMu.Unlock()
+// EachBackend reports every backend's health for /metrics.
+func (r *Registry) EachBackend(fn func(service, backend string, healthy, known bool)) {
+	for _, s := range r.List() {
+		for _, b := range r.BackendHealth(s.Name) {
+			fn(s.Name, b.URL, b.Healthy, b.Known)
+		}
+	}
 }
 
 // ── TLS ──────────────────────────────────────────────────────────────────────

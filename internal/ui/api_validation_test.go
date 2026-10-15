@@ -43,12 +43,17 @@ func TestAPIValidation(t *testing.T) {
 		{"PUT", "/admin/api/v1/services/x", `{}`, 400},
 		{"PUT", "/admin/api/v1/services/99999", `{}`, 404},
 		{"PUT", svc, "{", 400},
+		{"PUT", svc, `{"backends":[]}`, 400},
+		{"PUT", svc, `{"backends":["http://127.0.0.1:1/x","http://127.0.0.2:1/y"]}`, 400},
+		{"PUT", svc, `{"health_path":"healthz"}`, 400},
+		{"POST", "/admin/api/v1/services", `{"name":"x","match_type":"host","match_value":"x.test","backends":["` + backend.URL + `","http://127.0.0.1:1"]}`, 400},
 		{"PUT", svc, `{"backend":"http://169.254.169.254"}`, 400},
 		{"PUT", svc, `{"name":" "}`, 400},
 		{"PUT", svc, `{"bot_mode":"sometimes"}`, 400},
 		{"PUT", svc, `{"schema_mode":"strict"}`, 400},
 		{"PUT", svc, `{"schema_mode":"enforce","request_schema":"{\"type\":"}`, 400},
 		{"PUT", svc, `{"host":"https://new.example.com/","prefix":"","backend":"` + backend.URL + `","rate_limit_rps":4,"rate_limit_burst":8,"bot_mode":"off","schema_mode":"log","request_schema":"{\"type\":\"object\"}"}`, 200},
+		{"PUT", svc, `{"backends":["` + backend.URL + `","http://127.0.0.1:9002"],"lb_policy":"least_conn","health_path":"/up","health_interval":5}`, 200},
 		{"DELETE", "/admin/api/v1/services/x", "", 400},
 		{"POST", "/admin/api/v1/ip-rules", "{", 400},
 		{"POST", "/admin/api/v1/ip-rules", `{"ip":"1.2.3.4","rule_type":"maybe"}`, 400},
@@ -66,7 +71,8 @@ func TestAPIValidation(t *testing.T) {
 	}
 
 	got, _ := h.db.GetService(svcs[0].ID)
-	if got.Host != "new.example.com" || got.RateLimitRPS != 4 || got.RateLimitBurst != 8 || got.BotMode != "off" || got.SchemaMode != "log" {
+	if got.Host != "new.example.com" || got.RateLimitRPS != 4 || got.RateLimitBurst != 8 || got.BotMode != "off" || got.SchemaMode != "log" ||
+		len(got.Backends()) != 2 || got.LBPolicy != "least_conn" || got.HealthPath != "/up" || got.HealthInterval != 5 {
 		t.Errorf("updated service = %+v", got)
 	}
 	rules, _ := h.db.ListIPRules()

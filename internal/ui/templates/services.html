@@ -123,6 +123,7 @@
     <!-- Tabs -->
     <div id="svc-tabs" class="grid grid-cols-2 sm:grid-cols-6 gap-1 mb-5 bg-surface rounded-lg p-1">
       <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-white shadow-sm text-slate-900" data-tab="ratelimit">Rate Limit</button>
+      <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="backends">Backends</button>
       <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="bot">Bot</button>
       <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="uploads">Uploads</button>
       <button type="button" class="svc-tab-btn flex-1 py-[7px] rounded-sm text-[12px] font-semibold cursor-pointer font-sans border-none bg-transparent text-slate-500" data-tab="schema">Schema</button>
@@ -150,6 +151,47 @@
         <button type="submit" class="btn-primary w-full">Save</button>
       </form>
       <div id="rl-error" class="text-[12px] text-red-500 mt-[10px]"></div>
+    </div>
+
+    <!-- ── Backends tab ── -->
+    <div class="svc-tab hidden" data-tab="backends">
+      <form id="svc-backends-form" hx-post="{{.AdminPath}}/services/backends/0" hx-target="#services-body" hx-swap="innerHTML">
+        <p class="text-[12px] text-slate-500 mb-4 leading-[1.5]">Requests are spread across every backend listed. A backend that stops answering leaves the rotation, and GET or HEAD requests that hit it are retried once on another backend.</p>
+        <label for="svc-backends" class="block text-[12px] text-slate-500 mb-[6px] font-medium">Backends, one per line</label>
+        <textarea id="svc-backends" name="backends" rows="4" placeholder="http://10.0.0.5:3000&#10;http://10.0.0.6:3000"
+          class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[13px] font-mono outline-hidden text-slate-800 bg-white mb-4"></textarea>
+        <div class="flex flex-col gap-2 mb-4">
+          <label class="flex items-start gap-3 cursor-pointer p-3 rounded-md border border-line hover:border-brand transition-colors has-[:checked]:border-brand has-[:checked]:bg-green-50">
+            <input type="radio" name="lb_policy" value="round_robin" class="mt-[3px] shrink-0 accent-brand"/>
+            <div>
+              <p class="text-[13px] font-semibold text-slate-800">Round robin</p>
+              <p class="text-[12px] text-slate-500 mt-[2px]">Each backend takes the next request in turn.</p>
+            </div>
+          </label>
+          <label class="flex items-start gap-3 cursor-pointer p-3 rounded-md border border-line hover:border-brand transition-colors has-[:checked]:border-brand has-[:checked]:bg-green-50">
+            <input type="radio" name="lb_policy" value="least_conn" class="mt-[3px] shrink-0 accent-brand"/>
+            <div>
+              <p class="text-[13px] font-semibold text-slate-800">Least connections</p>
+              <p class="text-[12px] text-slate-500 mt-[2px]">Each request goes to the backend with the fewest requests in progress. Better when some requests are much slower than others.</p>
+            </div>
+          </label>
+        </div>
+        <div class="flex gap-3 mb-3">
+          <div class="flex-1">
+            <label for="svc-health-path" class="block text-[12px] text-slate-500 mb-[6px] font-medium">Health check path</label>
+            <input id="svc-health-path" name="health_path" type="text" placeholder="/healthz" autocomplete="off"
+              class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white font-mono"/>
+          </div>
+          <div class="flex-1">
+            <label for="svc-health-interval" class="block text-[12px] text-slate-500 mb-[6px] font-medium">Every (seconds)</label>
+            <input id="svc-health-interval" name="health_interval" type="number" min="1" max="3600" placeholder="10"
+              class="focus-green w-full border-[1.5px] border-line rounded-md px-[14px] py-[10px] text-[14px] outline-hidden text-slate-800 bg-white"/>
+          </div>
+        </div>
+        <p class="text-[12px] text-slate-400 mb-4 leading-[1.5]">With a path set, each backend is checked on that path and leaves the rotation until it answers 2xx or 3xx again. Leave it blank to judge backends by real traffic only: one that fails sits out for 10 seconds, then gets traffic again.</p>
+        <button type="submit" class="btn-primary w-full">Save</button>
+      </form>
+      <div id="svc-backends-error" role="alert" aria-live="polite" class="text-[12px] text-red-500 mt-[10px]"></div>
     </div>
 
     <!-- ── Bot Protection tab ── -->
@@ -510,7 +552,17 @@
       <span class="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-px rounded-sm shrink-0">prefix</span>
       {{end}}
     </div>
-    <div class="font-mono text-[12px] text-slate-500 truncate">{{if .Host}}{{.Host}}{{else}}{{.Prefix}}{{end}} &rarr; {{.Backend}}</div>
+    <div class="font-mono text-[12px] text-slate-500 truncate">{{if .Host}}{{.Host}}{{else}}{{.Prefix}}{{end}} &rarr; {{.Backend}}{{if .ExtraBackends}} +{{len .ExtraBackends}}{{end}}</div>
+    {{if .ExtraBackends}}
+    <div class="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+      {{range .Health}}
+      <span class="inline-flex items-center gap-[5px] font-mono text-[11px] text-slate-500 min-w-0" title="{{if not .Known}}not reached or checked yet{{else if .Healthy}}in rotation{{else}}down, out of rotation{{end}}">
+        <span class="w-2 h-2 rounded-full shrink-0 {{if not .Known}}bg-slate-300{{else if .Healthy}}bg-brand{{else}}bg-red-500{{end}}"></span>
+        <span class="truncate">{{.URL}}</span>
+      </span>
+      {{end}}
+    </div>
+    {{end}}
   </div>
   <div class="flex items-center gap-2 flex-wrap sm:justify-end sm:shrink-0">
     {{if .Host}}
@@ -554,6 +606,7 @@
       data-rps="{{.RateLimitRPS}}" data-burst="{{.RateLimitBurst}}" data-mode="{{.BotMode}}" data-cache="{{if .CacheEnabled}}1{{else}}0{{end}}"
       data-session-cache="{{if .CacheBySession}}1{{else}}0{{end}}" data-session-cookie="{{.SessionCookieName}}"
       data-large-js-uploads="{{if .AllowLargeJSUploads}}1{{else}}0{{end}}" data-http3="{{if .HTTP3Enabled}}1{{else}}0{{end}}" data-compress="{{if .CompressEnabled}}1{{else}}0{{end}}"
+      data-backends="{{range $i, $b := .Backends}}{{if $i}}&#10;{{end}}{{$b}}{{end}}" data-lb="{{.LBPolicy}}" data-health-path="{{.HealthPath}}" data-health-interval="{{.HealthInterval}}"
       data-schema="{{.RequestSchema}}" data-schema-mode="{{.SchemaMode}}"
       data-ttl-floor="{{.CacheTTLFloor}}" data-ttl-ceiling="{{.CacheTTLCeiling}}" data-grace="{{.CacheGrace}}" data-keep="{{.CacheKeep}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-settings-01 text-xs"></i>

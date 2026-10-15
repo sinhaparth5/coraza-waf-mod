@@ -332,6 +332,10 @@ var schemaMigrations = []struct{ table, columnDef string }{
 	{"services", "schema_mode TEXT NOT NULL DEFAULT 'off'"},
 	{"services", "http3_enabled INTEGER NOT NULL DEFAULT 0"},
 	{"services", "compress_enabled INTEGER NOT NULL DEFAULT 0"},
+	{"services", "extra_backends TEXT NOT NULL DEFAULT ''"},
+	{"services", "lb_policy TEXT NOT NULL DEFAULT 'round_robin'"},
+	{"services", "health_path TEXT NOT NULL DEFAULT ''"},
+	{"services", "health_interval INTEGER NOT NULL DEFAULT 0"},
 }
 
 func (db *DB) migrate() error {
@@ -780,6 +784,37 @@ type Service struct {
 	SchemaMode          string // "off" | "log" | "enforce" — see waf.Engine.SetRequestSchema
 	HTTP3Enabled        bool   // advertise and accept HTTP/3 for this service's Host (needs --listen-h3)
 	CompressEnabled     bool   // zstd/gzip-encode text-like responses for clients that accept it
+	// ExtraBackends are load-balanced alongside Backend. Kept out of the
+	// backend column so an older binary rolled back still reads a single URL.
+	ExtraBackends  []string
+	LBPolicy       string // "round_robin" | "least_conn"
+	HealthPath     string // active health check path, e.g. "/healthz"; "" = passive checks only
+	HealthInterval int    // seconds between active checks; 0 = DefaultHealthInterval
+}
+
+// DefaultHealthInterval is the active health check interval used when a
+// service sets a HealthPath but no interval.
+const DefaultHealthInterval = 10
+
+// Backends returns every backend URL of the service, Backend first.
+func (s Service) Backends() []string {
+	return append([]string{s.Backend}, s.ExtraBackends...)
+}
+
+// SetServiceBackends replaces a service's backend list (backends[0] becomes
+// the primary) and its balancing and active health check settings.
+func (db *DB) SetServiceBackends(id int, backends []string, policy, healthPath string, healthInterval int) error {
+	if len(backends) == 0 {
+		return fmt.Errorf("at least one backend is required")
+	}
+	if policy != "least_conn" {
+		policy = "round_robin"
+	}
+	_, err := db.exec(
+		`UPDATE services SET backend = ?, extra_backends = ?, lb_policy = ?, health_path = ?, health_interval = ? WHERE id = ?`,
+		backends[0], strings.Join(backends[1:], "\n"), policy, healthPath, healthInterval, id,
+	)
+	return err
 }
 
 func (db *DB) AddService(name, host, prefix, backend string, rps float64, burst int) error {
@@ -1045,11 +1080,15 @@ func (db *DB) SetBotSettings(enabled bool, threshold, ttl int) error {
 
 // serviceColumns is shared by ListServices/GetService so their SELECT list
 // and Scan args can't drift out of sync as columns are added.
-const serviceColumns = `id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled, cache_by_session, session_cookie_name, cache_ttl_floor, cache_ttl_ceiling, cache_grace, cache_keep, allow_large_js_uploads, request_schema, schema_mode, http3_enabled, compress_enabled`
+const serviceColumns = `id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled, cache_by_session, session_cookie_name, cache_ttl_floor, cache_ttl_ceiling, cache_grace, cache_keep, allow_large_js_uploads, request_schema, schema_mode, http3_enabled, compress_enabled, extra_backends, lb_policy, health_path, health_interval`
 
 func (db *DB) scanService(row interface{ Scan(...any) error }) (Service, error) {
 	var s Service
-	err := row.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled, &s.CacheBySession, &s.SessionCookieName, &s.CacheTTLFloor, &s.CacheTTLCeiling, &s.CacheGrace, &s.CacheKeep, &s.AllowLargeJSUploads, &s.RequestSchema, &s.SchemaMode, &s.HTTP3Enabled, &s.CompressEnabled)
+	var extra string
+	err := row.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled, &s.CacheBySession, &s.SessionCookieName, &s.CacheTTLFloor, &s.CacheTTLCeiling, &s.CacheGrace, &s.CacheKeep, &s.AllowLargeJSUploads, &s.RequestSchema, &s.SchemaMode, &s.HTTP3Enabled, &s.CompressEnabled, &extra, &s.LBPolicy, &s.HealthPath, &s.HealthInterval)
+	if extra != "" {
+		s.ExtraBackends = strings.Split(extra, "\n")
+	}
 	return s, err
 }
 

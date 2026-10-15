@@ -15,6 +15,12 @@ type fakeRegistry struct{}
 
 func (fakeRegistry) List() []storage.Service { return make([]storage.Service, 3) }
 
+func (fakeRegistry) EachBackend(fn func(service, backend string, healthy, known bool)) {
+	fn("shop", "http://10.0.0.5:3000", true, true)
+	fn("shop", "http://10.0.0.6:3000", false, true)
+	fn("shop", "http://10.0.0.7:3000", false, false)
+}
+
 type fakeLimiter struct{}
 
 func (fakeLimiter) TrackedIPs() int { return 7 }
@@ -57,9 +63,14 @@ func TestMetricsExposition(t *testing.T) {
 		"palisade_services_total 3",
 		"palisade_rate_limit_tracked_ips 7",
 		"palisade_log_queue_depth 0",
+		`palisade_backend_up{app="shop",backend="http://10.0.0.5:3000"} 1`,
+		`palisade_backend_up{app="shop",backend="http://10.0.0.6:3000"} 0`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q", want)
 		}
+	}
+	if strings.Contains(out, "10.0.0.7") {
+		t.Error("backend with unknown health exported")
 	}
 }

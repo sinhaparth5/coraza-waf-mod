@@ -3,6 +3,7 @@ package services
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"path/filepath"
 	"testing"
 
@@ -64,7 +65,11 @@ func TestVarnishRouting(t *testing.T) {
 		req.Header.Set("X-Original-URL", "/admin")
 		req.Header.Set("X-Cache-Service", "spoofed")
 		req.Header.Set("X-Waf-Backend", "6.6.6.6:666")
-		rp.Director(req) //nolint:staticcheck // SA1019: exercises the Director under test
+		target, isProxy := rp.(*httputil.ReverseProxy)
+		if !isProxy {
+			target = rp.(*pool).ups[0].rp // uncached: the first backend's proxy
+		}
+		target.Director(req) //nolint:staticcheck // SA1019: exercises the Director under test
 		return req
 	}
 

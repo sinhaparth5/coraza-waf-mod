@@ -125,6 +125,37 @@ var _ = promauto.NewGaugeFunc(prometheus.GaugeOpts{
 	return float64(currentLimiter.TrackedIPs())
 })
 
+// backendUp reports each service backend's health on every scrape, read
+// from the registry like the gauges above. A backend no request or health
+// check has reached yet is left out rather than guessed.
+type backendUp struct{ desc *prometheus.Desc }
+
+func (b backendUp) Describe(ch chan<- *prometheus.Desc) { ch <- b.desc }
+
+func (b backendUp) Collect(ch chan<- prometheus.Metric) {
+	src, ok := currentRegistry.(interface {
+		EachBackend(func(service, backend string, healthy, known bool))
+	})
+	if !ok {
+		return
+	}
+	src.EachBackend(func(service, backend string, healthy, known bool) {
+		if !known {
+			return
+		}
+		v := 0.0
+		if healthy {
+			v = 1
+		}
+		ch <- prometheus.MustNewConstMetric(b.desc, prometheus.GaugeValue, v, service, backend)
+	})
+}
+
+func init() {
+	prometheus.MustRegister(backendUp{prometheus.NewDesc("palisade_backend_up",
+		"1 while a service backend is in rotation, 0 while it is down.", []string{"app", "backend"}, nil)})
+}
+
 // RecordRequest updates the request-volume counter and latency histogram.
 // Called exactly once per request, regardless of outcome.
 func RecordRequest(app, status string, seconds float64) {
