@@ -81,6 +81,7 @@ jobs:
           files: coverage.out
           flags: unit
           token: ${{ secrets.CODECOV_TOKEN }}
+          slug: sinhaparth5/coraza-waf-mod
 
   test-external-db:
     name: Test (${{ matrix.driver }})
@@ -155,6 +156,7 @@ jobs:
           files: coverage.out
           flags: ${{ matrix.driver }}
           token: ${{ secrets.CODECOV_TOKEN }}
+          slug: sinhaparth5/coraza-waf-mod
 
   release:
     name: Release
