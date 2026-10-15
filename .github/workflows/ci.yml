@@ -73,7 +73,8 @@ jobs:
           TEST_REDIS_ADDR: 127.0.0.1:6379
         # -coverpkg credits code to its own package wherever it runs, e.g.
         # storage queries exercised by the admin UI tests.
-        run: go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
+        # gotestsum wraps go test to also write JUnit XML for Codecov Test Analytics.
+        run: go run gotest.tools/gotestsum@v1.13.0 --junitfile junit.xml -- -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -82,6 +83,14 @@ jobs:
           flags: unit
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: sinhaparth5/coraza-waf-mod
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          files: junit.xml
+          flags: unit
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   test-external-db:
     name: Test (${{ matrix.driver }})
@@ -146,7 +155,7 @@ jobs:
         env:
           TEST_DB_DRIVER: ${{ matrix.driver }}
           TEST_DB_DSN: ${{ matrix.dsn }}
-        run: go test -covermode=atomic -coverprofile=coverage.out ./internal/storage/... -v
+        run: go run gotest.tools/gotestsum@v1.13.0 --format standard-verbose --junitfile junit.xml -- -covermode=atomic -coverprofile=coverage.out ./internal/storage/...
 
       # Merged with the unit upload by Codecov, so dialect branches that only
       # run against MySQL/Postgres count toward storage coverage too.
@@ -157,6 +166,14 @@ jobs:
           flags: ${{ matrix.driver }}
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: sinhaparth5/coraza-waf-mod
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          files: junit.xml
+          flags: ${{ matrix.driver }}
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   release:
     name: Release

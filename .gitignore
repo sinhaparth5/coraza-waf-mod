@@ -10,3 +10,4 @@ waf.db-wal
 GeoLite2-Country_*/
 .cache/
 coverage.out
+junit.xml
