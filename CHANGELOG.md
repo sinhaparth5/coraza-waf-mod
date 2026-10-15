@@ -14,6 +14,8 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-10-15
+
 ### Added
 
 - Response compression, opt-in per service. Turn on **Compress responses** in a service's Cache tab (or set `compress_enabled` through the API) and Palisade compresses text responses over 1 KB (HTML, CSS, JavaScript, JSON, SVG and similar) with zstd or gzip, whichever the browser supports, when the backend didn't already compress them. Images, video, live event streams (SSE) and WebSockets pass through unchanged, streamed responses still arrive chunk by chunk, and responses carry `Vary: Accept-Encoding` so caches keep the variants apart. It doesn't need Varnish.
@@ -32,15 +34,5 @@ rather than growing this file forever.
 - Builds now require Go 1.27.2 or later, which fixes 12 Go standard-library vulnerabilities reachable from Palisade (HTTP/2, `net/http`, `crypto/tls`, `html/template`, `net/textproto`).
 - Updated dependencies to their latest patch releases, including libinjection-go 0.3.5 (the WAF's SQL injection and XSS detector) and `golang.org/x/net` 0.61.0.
 
-## [2.6.0] - 2026-10-15
-
-### Added
-
-- HTTP/3 (QUIC), opt-in per service. Start Palisade with `--listen-h3 :443` (the installer now passes it) and allow UDP 443, then turn on **HTTP/3** in a service's TLS tab. Only those domains advertise HTTP/3 (`Alt-Svc`); HTTP/2 stays the default and fallback for everything else, including the admin UI. The full WAF pipeline runs unchanged, 0-RTT is disabled, and JA4 fingerprints from QUIC handshakes start with `q`. Also settable through the API as `http3_enabled`.
-
-### Changed
-
-- Redesigned the report, ban-alert and login-code emails to match the admin UI's current look (colours, Calistoga / DM Sans / JetBrains Mono). The daily report now adds an hourly traffic chart with the busiest hour marked, a breakdown of which stage blocked what, top blocked countries, IPs and WAF rules, and a comparison with the previous day. The charts are built from HTML tables, so they show up in Gmail too.
-
-[Unreleased]: https://github.com/sinhaparth5/palisade-waf/compare/v2.6.0...main
-[2.6.0]: https://github.com/sinhaparth5/palisade-waf/compare/v2.5.3...v2.6.0
+[Unreleased]: https://github.com/sinhaparth5/palisade-waf/compare/v2.7.0...main
+[2.7.0]: https://github.com/sinhaparth5/palisade-waf/compare/v2.6.0...v2.7.0
