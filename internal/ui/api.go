@@ -256,6 +256,7 @@ type apiUpdateServiceRequest struct {
 	BotMode             *string  `json:"bot_mode"` // "inherit" | "always" | "off"
 	AllowLargeJSUploads *bool    `json:"allow_large_js_uploads"`
 	HTTP3Enabled        *bool    `json:"http3_enabled"`
+	CompressEnabled     *bool    `json:"compress_enabled"`
 	RequestSchema       *string  `json:"request_schema"` // JSON Schema text; "" (with SchemaMode omitted or "off") disables validation
 	SchemaMode          *string  `json:"schema_mode"`    // "off" | "log" | "enforce"
 }
@@ -326,6 +327,11 @@ func (h *Handler) APIUpdateService(c echo.Context) error {
 	}
 	if req.HTTP3Enabled != nil {
 		if err := h.db.SetServiceHTTP3(id, *req.HTTP3Enabled); err != nil {
+			return apiError(c, http.StatusInternalServerError, err.Error())
+		}
+	}
+	if req.CompressEnabled != nil {
+		if err := h.db.SetServiceCompress(id, *req.CompressEnabled); err != nil {
 			return apiError(c, http.StatusInternalServerError, err.Error())
 		}
 	}

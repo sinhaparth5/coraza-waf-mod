@@ -374,6 +374,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/services/bot/:id", h.SetServiceBotMode)
 	g.POST("/services/uploads/:id", h.SetServiceLargeJSUploads)
 	g.POST("/services/http3/:id", h.SetServiceHTTP3)
+	g.POST("/services/compress/:id", h.SetServiceCompress)
 	g.POST("/services/schema/:id", h.SetServiceSchema)
 	g.POST("/services/cache/:id", h.SetServiceCache)
 	g.POST("/services/cache-session/:id", h.SetServiceCacheSession)
@@ -2435,6 +2436,23 @@ func (h *Handler) SetServiceHTTP3(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
 	}
 	if err := h.db.SetServiceHTTP3(id, c.FormValue("enabled") == "1"); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	if err := h.registry.Reload(h.db); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	w := c.Response().Writer
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return h.tmpls["services"].ExecuteTemplate(w, "services-rows", h.serviceViews())
+}
+
+// SetServiceCompress turns response compression on or off for one service.
+func (h *Handler) SetServiceCompress(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
+	}
+	if err := h.db.SetServiceCompress(id, c.FormValue("enabled") == "1"); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	if err := h.registry.Reload(h.db); err != nil {

@@ -14,6 +14,10 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Added
+
+- Response compression, opt-in per service. Turn on **Compress responses** in a service's Cache tab (or set `compress_enabled` through the API) and Palisade compresses text responses over 1 KB (HTML, CSS, JavaScript, JSON, SVG and similar) with zstd or gzip, whichever the browser supports, when the backend didn't already compress them. Images, video, live event streams (SSE) and WebSockets pass through unchanged, streamed responses still arrive chunk by chunk, and responses carry `Vary: Accept-Encoding` so caches keep the variants apart. It doesn't need Varnish.
+
 ### Changed
 
 - Palisade now keeps up to 100 idle connections open to each backend instead of Go's default of 2, so busy services reuse connections instead of opening a new TCP (and TLS) connection for most requests. In a test of 10 rounds of 20 concurrent requests, new backend connections dropped from 182 to 20.

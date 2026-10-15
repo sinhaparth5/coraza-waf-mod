@@ -307,6 +307,18 @@
         </form>
         <div id="svc-cache-purge-status" class="text-[12px] mt-[10px]"></div>
       </div>
+
+      <div class="border-t border-canvas mt-5 pt-4">
+        <form id="svc-compress-form" hx-post="{{.AdminPath}}/services/compress/0" hx-target="#services-body" hx-swap="innerHTML">
+          <label class="flex items-center justify-between cursor-pointer py-2 mb-2">
+            <span class="text-[13px] font-semibold text-slate-700">Compress responses</span>
+            {{template "toggle-switch" (map "Name" "enabled" "ID" "svc-compress-enabled")}}
+          </label>
+          <p class="text-[12px] text-slate-500 mb-3 leading-[1.5]">Compresses text responses (HTML, CSS, JavaScript, JSON, SVG) over 1 KB with zstd or gzip, whichever the browser supports, when the backend didn't already compress them. Doesn't need Varnish. Images, video, live event streams and WebSockets pass through unchanged.</p>
+          <button type="submit" class="btn-primary w-full">Save</button>
+        </form>
+        <div id="svc-compress-error" role="alert" aria-live="polite" class="text-[12px] text-red-500 mt-[10px]"></div>
+      </div>
     </div>
 
     <!-- ── TLS tab (host-matched services only) ── -->
@@ -527,6 +539,9 @@
     {{if .HTTP3Enabled}}
     <span class="text-[11px] font-semibold bg-sky-100 text-sky-600 px-2 py-[2px] rounded-sm">HTTP/3</span>
     {{end}}
+    {{if .CompressEnabled}}
+    <span class="text-[11px] font-semibold bg-sky-100 text-sky-600 px-2 py-[2px] rounded-sm">Compressed</span>
+    {{end}}
     {{if .AllowLargeJSUploads}}
     <span class="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-[2px] rounded-sm">Large JS uploads</span>
     {{end}}
@@ -538,7 +553,7 @@
       data-id="{{.ID}}" data-name="{{.Name}}" data-has-host="{{if .Host}}1{{else}}0{{end}}"
       data-rps="{{.RateLimitRPS}}" data-burst="{{.RateLimitBurst}}" data-mode="{{.BotMode}}" data-cache="{{if .CacheEnabled}}1{{else}}0{{end}}"
       data-session-cache="{{if .CacheBySession}}1{{else}}0{{end}}" data-session-cookie="{{.SessionCookieName}}"
-      data-large-js-uploads="{{if .AllowLargeJSUploads}}1{{else}}0{{end}}" data-http3="{{if .HTTP3Enabled}}1{{else}}0{{end}}"
+      data-large-js-uploads="{{if .AllowLargeJSUploads}}1{{else}}0{{end}}" data-http3="{{if .HTTP3Enabled}}1{{else}}0{{end}}" data-compress="{{if .CompressEnabled}}1{{else}}0{{end}}"
       data-schema="{{.RequestSchema}}" data-schema-mode="{{.SchemaMode}}"
       data-ttl-floor="{{.CacheTTLFloor}}" data-ttl-ceiling="{{.CacheTTLCeiling}}" data-grace="{{.CacheGrace}}" data-keep="{{.CacheKeep}}">
       <i class="hgi hgi-stroke hgi-rounded hgi-settings-01 text-xs"></i>

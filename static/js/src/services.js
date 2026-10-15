@@ -128,6 +128,8 @@
   var largeJSUploadsToggle = document.getElementById('svc-large-js-uploads');
   var http3Form = document.getElementById('svc-http3-form');
   var http3Toggle = document.getElementById('svc-http3-enabled');
+  var compressForm = document.getElementById('svc-compress-form');
+  var compressToggle = document.getElementById('svc-compress-enabled');
   var schemaForm = document.getElementById('svc-schema-form');
   var schemaText = document.getElementById('svc-schema-text');
   var cacheForm = document.getElementById('svc-cache-form');
@@ -184,6 +186,10 @@
     htmx.process(http3Form);
     http3Toggle.checked = d.http3 === '1';
 
+    compressForm.setAttribute('hx-post', adminPath + '/services/compress/' + d.id);
+    htmx.process(compressForm);
+    compressToggle.checked = d.compress === '1';
+
     schemaForm.setAttribute('hx-post', adminPath + '/services/schema/' + d.id);
     htmx.process(schemaForm);
     schemaText.value = d.schema || '';
@@ -222,7 +228,7 @@
     deleteBtn.setAttribute('hx-confirm', 'Remove service ' + d.name + '?');
     htmx.process(deleteBtn);
 
-    ['tls-error', 'rl-error', 'bot-error', 'svc-uploads-error', 'svc-http3-error', 'svc-schema-error', 'svc-cache-error', 'svc-cache-session-error', 'svc-cache-tuning-error'].forEach(function (id) {
+    ['tls-error', 'rl-error', 'bot-error', 'svc-uploads-error', 'svc-http3-error', 'svc-compress-error', 'svc-schema-error', 'svc-cache-error', 'svc-cache-session-error', 'svc-cache-tuning-error'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.textContent = '';
     });
@@ -272,7 +278,7 @@
   document.body.addEventListener('rl-saved', closeModal);
   document.body.addEventListener('htmx:afterRequest', function (e) {
     var elt = e.detail.elt;
-    if ((elt === botForm || elt === uploadsForm || elt === http3Form || elt === schemaForm || elt === cacheForm || elt === cacheSessionForm || elt === cacheTuningForm || elt === deleteBtn) && e.detail.successful) closeModal();
+    if ((elt === botForm || elt === uploadsForm || elt === http3Form || elt === compressForm || elt === schemaForm || elt === cacheForm || elt === cacheSessionForm || elt === cacheTuningForm || elt === deleteBtn) && e.detail.successful) closeModal();
     // Purge intentionally does not close the modal — its status fragment
     // (success or error) renders inline so the admin sees the outcome.
   });
