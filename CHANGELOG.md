@@ -14,24 +14,12 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+## [2.5.2] - 2026-10-15
+
 ### Changed
 
 - The installer's version pin is now `PALISADE_VERSION` (e.g. `curl -fsSL ... | sudo PALISADE_VERSION=v2.5.1 bash`).
 - The installer only installs v2.5.1 and later: it no longer migrates a pre-2.5.0 `coraza-waf-mod` install, falls back to the old `coraza-waf-mod-*` release asset names, or reads `CORAZA_VERSION`.
 
-## [2.5.1] - 2026-10-15
-
-### Added
-
-- Codecov coverage reporting in CI. The unit run uses `-coverpkg=./...` so code is credited wherever it executes, the MySQL/Postgres storage runs upload as separate flags and merge in, and a Redis service backs the previously untested Redis rate-limit and cluster-sync paths. README carries a coverage badge. Test results are uploaded too (via `gotestsum` JUnit output) for Codecov Test Analytics. Coverage is about 90%, up from 56%; new tests cover every admin UI route through the real middleware stack, the storage CRUD/query layer on all three database backends, and the previously untested config, bot, JA3, blocklist, threat-intel, metrics and passkey packages.
-
-### Changed
-
-- The GitHub repository is now `sinhaparth5/palisade-waf` (old URLs redirect). Release assets are published as `palisade-waf-linux-amd64`/`-arm64`/`-windows-amd64.exe`, Docker images as `ghcr.io/sinhaparth5/palisade-waf` and `palisade-waf` on Docker Hub, and the installer moved to `https://waf-install.astrareconslabs.com/palisade-waf/install.sh`. The new installer still installs pre-rename versions pinned with `CORAZA_VERSION`. Images already published under `coraza-waf-mod` stay there and get no new tags.
-
-### Fixed
-
-- Saving the Let's Encrypt contact email from the Services page left the email dialog open: the handler's `acme-email-saved` event was overwritten by the `tls-saved` event sent right after it, so the dialog never received it. Both events are now sent.
-
-[Unreleased]: https://github.com/sinhaparth5/palisade-waf/compare/v2.5.1...main
-[2.5.1]: https://github.com/sinhaparth5/palisade-waf/compare/v2.5.0...v2.5.1
+[Unreleased]: https://github.com/sinhaparth5/palisade-waf/compare/v2.5.2...main
+[2.5.2]: https://github.com/sinhaparth5/palisade-waf/compare/v2.5.1...v2.5.2
