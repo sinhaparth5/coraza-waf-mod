@@ -312,15 +312,13 @@ func (h *Handler) Handle(c echo.Context) error {
 		mark("blocklist")
 		metrics.IPBlockedTotal.WithLabelValues(appName).Inc()
 		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, ipReason, time.Since(start), meta)
-		w.Header().Set("X-WAF-Block-Reason", "ip_blocked")
-		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied"})
+		return deny(c, http.StatusForbidden, "ip_blocked", reqID, map[string]any{"error": "access denied"})
 	}
 	if blockedByGeo {
 		mark("blocklist")
 		metrics.GeoBlockedTotal.WithLabelValues(appName, country).Inc()
 		h.logBlocked(r, appName, clientIP, country, http.StatusForbidden, 0, geoReason, time.Since(start), meta)
-		w.Header().Set("X-WAF-Block-Reason", "geo_blocked")
-		return c.JSON(http.StatusForbidden, map[string]string{"error": "access denied", "country": country})
+		return deny(c, http.StatusForbidden, "geo_blocked", reqID, map[string]any{"error": "access denied", "country": country})
 	}
 	mark("blocklist")
 
@@ -381,8 +379,7 @@ func (h *Handler) Handle(c echo.Context) error {
 			secs = 1
 		}
 		c.Response().Header().Set("Retry-After", strconv.Itoa(secs))
-		w.Header().Set("X-WAF-Block-Reason", "rate_limited")
-		return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
+		return deny(c, http.StatusTooManyRequests, "rate_limited", reqID, map[string]any{"error": "too many requests"})
 	}
 
 	// 4.5 Per-service rate limit — only if the matched service has its own limit.
@@ -398,8 +395,7 @@ func (h *Handler) Handle(c echo.Context) error {
 				secs = 1
 			}
 			c.Response().Header().Set("Retry-After", strconv.Itoa(secs))
-			w.Header().Set("X-WAF-Block-Reason", "rate_limited")
-			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
+			return deny(c, http.StatusTooManyRequests, "rate_limited", reqID, map[string]any{"error": "too many requests"})
 		}
 	}
 	mark("ratelimit")
@@ -427,8 +423,7 @@ func (h *Handler) Handle(c echo.Context) error {
 		}
 		metrics.WAFBlockedTotal.WithLabelValues(appName, result.Action).Inc()
 		h.logBlocked(r, appName, clientIP, country, status, result.RuleID, result.Action, time.Since(start), meta)
-		w.Header().Set("X-WAF-Block-Reason", "waf_rule")
-		return c.JSON(status, map[string]any{"error": "request blocked", "rule_id": result.RuleID})
+		return deny(c, status, "waf_rule", reqID, map[string]any{"error": "request blocked", "rule_id": result.RuleID})
 	}
 	mark("waf")
 
