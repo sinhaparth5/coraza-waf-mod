@@ -11,7 +11,7 @@ import (
 
 	"palisade/internal/config"
 
-	"github.com/corazawaf/coraza-coreruleset"
+	coreruleset "github.com/corazawaf/coraza-coreruleset/v4"
 	"github.com/corazawaf/coraza/v3"
 	"github.com/kaptinlin/jsonschema"
 )

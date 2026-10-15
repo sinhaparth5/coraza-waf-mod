@@ -14,6 +14,10 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Security
+
+- Updated the bundled OWASP Core Rule Set from 4.0.0 (February 2024) to 4.25.0, bringing in more than a year and a half of new detections and false-positive fixes. The CRS is now a versioned dependency, so Dependabot proposes each new CRS release automatically, and a new baseline test checks on every update that common attacks are still blocked and ordinary traffic still passes.
+
 ## [2.6.0] - 2026-10-15
 
 ### Added
