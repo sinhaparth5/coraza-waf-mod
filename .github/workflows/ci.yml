@@ -77,7 +77,7 @@ jobs:
         run: go run gotest.tools/gotestsum@v1.13.0 --junitfile junit.xml -- -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: coverage.out
           flags: unit
@@ -86,7 +86,7 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           report_type: test_results
           files: junit.xml
@@ -162,7 +162,7 @@ jobs:
       # Merged with the unit upload by Codecov, so dialect branches that only
       # run against MySQL/Postgres count toward storage coverage too.
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: coverage.out
           flags: ${{ matrix.driver }}
@@ -171,7 +171,7 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           report_type: test_results
           files: junit.xml
