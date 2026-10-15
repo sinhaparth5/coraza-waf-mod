@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{{.Title}} — {{.Host}}</title>
+  <link rel="icon" type="image/svg+xml" href="/_cz/logo.svg">
+  <style>
+    :root { --bg: #ffffff; --ink: #232323; --muted: #595959; --faint: #8a8f8a; --line: #d9dee3; --red: #c2452d; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #1c1e1c; --ink: #ececec; --muted: #a8ada8; --faint: #7c817c; --line: #343834; --red: #e06a52; }
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, sans-serif;
+      background: var(--bg); color: var(--ink);
+      display: flex; justify-content: center; -webkit-font-smoothing: antialiased;
+    }
+    .page { width: min(600px, 100% - 32px); display: flex; flex-direction: column; padding: 18vh 0 32px; min-height: 100%; }
+    .wordmark { display: flex; align-items: center; gap: 10px; margin-bottom: 36px; }
+    .wordmark img { width: 32px; height: 32px; display: block; }
+    .wordmark span { font-size: 15px; font-weight: 600; letter-spacing: .01em; }
+    .status { font-size: 13px; font-weight: 600; color: var(--red); margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+    h1 { font-size: 30px; font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; margin-bottom: 10px; }
+    .sub { font-size: 16px; color: var(--muted); line-height: 1.5; margin-bottom: 28px; }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; font-size: 14px; border: 1px solid var(--line); border-radius: 6px; padding: 16px 18px; }
+    dt { color: var(--faint); }
+    dd { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    dd code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+    .hint { font-size: 13px; color: var(--faint); margin-top: 12px; line-height: 1.5; }
+    footer {
+      margin-top: auto; padding-top: 20px; border-top: 1px solid var(--line);
+      display: flex; justify-content: flex-end; align-items: center; gap: 7px;
+      font-size: 12px; color: var(--faint);
+    }
+    footer img { width: 16px; height: 16px; }
+    footer b { font-weight: 600; color: var(--muted); }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="wordmark">
+    <img src="/_cz/logo.svg" alt="">
+    <span>Palisade</span>
+  </div>
+  <p class="status">{{.Status}} {{.StatusText}}</p>
+  <h1>{{.Title}}</h1>
+  <p class="sub">{{.Message}}</p>
+  <dl>
+    <dt>Site</dt><dd>{{.Host}}</dd>
+    <dt>Time</dt><dd>{{.Time}}</dd>
+    <dt>Request ID</dt><dd><code>{{.RequestID}}</code></dd>
+  </dl>
+  <p class="hint">If you think this is a mistake, contact the site owner and include the request ID.</p>
+  <footer>
+    <img src="/_cz/logo.svg" alt="">
+    <span>Security by <b>Palisade</b></span>
+  </footer>
+</div>
+</body>
+</html>
