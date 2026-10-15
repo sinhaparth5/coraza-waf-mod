@@ -14,6 +14,10 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Changed
+
+- Palisade now keeps up to 100 idle connections open to each backend instead of Go's default of 2, so busy services reuse connections instead of opening a new TCP (and TLS) connection for most requests. In a test of 10 rounds of 20 concurrent requests, new backend connections dropped from 182 to 20.
+
 ### Security
 
 - CI now runs govulncheck on every push and pull request, and weekly. It fails when Palisade's code reaches a known vulnerability in a dependency or in the Go standard library.

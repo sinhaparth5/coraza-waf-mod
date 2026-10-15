@@ -74,7 +74,12 @@ var backendTransport = &http.Transport{
 	}).DialContext,
 	ResponseHeaderTimeout: 10 * time.Second,
 	ForceAttemptHTTP2:     true,
-	MaxIdleConns:          100,
+	// Without MaxIdleConnsPerHost Go keeps only 2 idle conns per backend, so
+	// past 2 concurrent requests every extra conn is closed after use and the
+	// next request pays a fresh TCP/TLS handshake. Varnish is one host for
+	// every cached service, which makes the per-host cap the one that binds.
+	MaxIdleConns:          512,
+	MaxIdleConnsPerHost:   100,
 	IdleConnTimeout:       90 * time.Second,
 	TLSHandshakeTimeout:   10 * time.Second,
 	ExpectContinueTimeout: 1 * time.Second,
