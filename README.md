@@ -74,7 +74,7 @@ echo "your-password" | ./palisade setup --admin-email you@example.com
 ./palisade   # defaults: --listen :8080 --db waf.db --certs ./certs
 ```
 
-`make run` builds and runs in one step. Run `setup` first, at least once, so you can log in. The project uses Go only; the SQLite driver is `modernc.org/sqlite`, with no CGO. See the flags in `main.go`, or the flag table in `CLAUDE.md`, for every bootstrap option (`--listen-tls`, `--waf-rules`, `--geo-db`, `--retention`, `--tls-cert`/`--tls-key`, `--trusted-proxies`).
+`make run` builds and runs in one step. Run `setup` first, at least once, so you can log in. The project uses Go only; the SQLite driver is `modernc.org/sqlite`, with no CGO. See the flags in `main.go`, or the flag table in `CLAUDE.md`, for every bootstrap option (`--listen-tls`, `--listen-h3`, `--waf-rules`, `--geo-db`, `--retention`, `--tls-cert`/`--tls-key`, `--trusted-proxies`).
 
 ### Option C: cross-compiled release binaries
 

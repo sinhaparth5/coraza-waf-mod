@@ -30,9 +30,10 @@ var greaseSet = map[uint16]bool{
 }
 
 const (
-	extServerName = 0x0000 // SNI — excluded from the section-c hash, still counted in section a
-	extALPN       = 0x0010 // ALPN — excluded from the section-c hash, still counted in section a
-	emptyHash     = "000000000000"
+	extServerName          = 0x0000 // SNI — excluded from the section-c hash, still counted in section a
+	extALPN                = 0x0010 // ALPN — excluded from the section-c hash, still counted in section a
+	extQUICTransportParams = 0x0039 // only present in QUIC handshakes
+	emptyHash              = "000000000000"
 )
 
 // connStore maps "host:port" → JA4 fingerprint, populated by
@@ -91,10 +92,15 @@ func sectionA(hello *tls.ClientHelloInfo) string {
 		sni = "d" // SNI present: client connected to a domain
 	}
 
-	// This proxy only terminates TLS over TCP; "q" (QUIC) would apply if an
-	// HTTP/3 listener is ever added.
-	return fmt.Sprintf("t%s%s%02d%02d%s",
-		version, sni,
+	// "q" for QUIC (HTTP/3), "t" for TCP. Only a QUIC ClientHello carries
+	// the quic_transport_parameters extension, so it identifies the transport
+	// without threading a flag through every caller.
+	transport := "t"
+	if slices.Contains(hello.Extensions, extQUICTransportParams) {
+		transport = "q"
+	}
+	return fmt.Sprintf("%s%s%s%02d%02d%s",
+		transport, version, sni,
 		min(len(noGREASE(hello.CipherSuites)), 99),
 		min(len(noGREASE(hello.Extensions)), 99),
 		alpnChars(hello.SupportedProtos),

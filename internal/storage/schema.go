@@ -140,7 +140,8 @@ func (db *DB) schemaStatements() []string {
 			cache_keep         INTEGER NOT NULL DEFAULT 0,
 			allow_large_js_uploads INTEGER NOT NULL DEFAULT 0,
 			request_schema   TEXT NOT NULL DEFAULT '',
-			schema_mode      TEXT NOT NULL DEFAULT 'off'
+			schema_mode      TEXT NOT NULL DEFAULT 'off',
+			http3_enabled    INTEGER NOT NULL DEFAULT 0
 		)`, pk, ts),
 
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS certificates (

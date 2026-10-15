@@ -330,6 +330,7 @@ var schemaMigrations = []struct{ table, columnDef string }{
 	{"api_keys", "read_only INTEGER NOT NULL DEFAULT 0"},
 	{"services", "request_schema TEXT NOT NULL DEFAULT ''"},
 	{"services", "schema_mode TEXT NOT NULL DEFAULT 'off'"},
+	{"services", "http3_enabled INTEGER NOT NULL DEFAULT 0"},
 }
 
 func (db *DB) migrate() error {
@@ -776,6 +777,7 @@ type Service struct {
 	AllowLargeJSUploads bool   // stream JavaScript request bodies without deep WAF body inspection
 	RequestSchema       string // JSON Schema text validated against JSON request bodies; "" disables validation
 	SchemaMode          string // "off" | "log" | "enforce" — see waf.Engine.SetRequestSchema
+	HTTP3Enabled        bool   // advertise and accept HTTP/3 for this service's Host (needs --listen-h3)
 }
 
 func (db *DB) AddService(name, host, prefix, backend string, rps float64, burst int) error {
@@ -847,6 +849,12 @@ func (db *DB) SetServiceRateLimit(id int, rps float64, burst int) error {
 // mode must be one of "inherit", "always", or "off".
 func (db *DB) SetServiceBotMode(id int, mode string) error {
 	_, err := db.exec(`UPDATE services SET bot_mode = ? WHERE id = ?`, mode, id)
+	return err
+}
+
+// SetServiceHTTP3 controls whether the service's Host is offered HTTP/3.
+func (db *DB) SetServiceHTTP3(id int, enabled bool) error {
+	_, err := db.exec(`UPDATE services SET http3_enabled = ? WHERE id = ?`, boolToInt(enabled), id)
 	return err
 }
 
@@ -1029,11 +1037,11 @@ func (db *DB) SetBotSettings(enabled bool, threshold, ttl int) error {
 
 // serviceColumns is shared by ListServices/GetService so their SELECT list
 // and Scan args can't drift out of sync as columns are added.
-const serviceColumns = `id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled, cache_by_session, session_cookie_name, cache_ttl_floor, cache_ttl_ceiling, cache_grace, cache_keep, allow_large_js_uploads, request_schema, schema_mode`
+const serviceColumns = `id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled, cache_by_session, session_cookie_name, cache_ttl_floor, cache_ttl_ceiling, cache_grace, cache_keep, allow_large_js_uploads, request_schema, schema_mode, http3_enabled`
 
 func (db *DB) scanService(row interface{ Scan(...any) error }) (Service, error) {
 	var s Service
-	err := row.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled, &s.CacheBySession, &s.SessionCookieName, &s.CacheTTLFloor, &s.CacheTTLCeiling, &s.CacheGrace, &s.CacheKeep, &s.AllowLargeJSUploads, &s.RequestSchema, &s.SchemaMode)
+	err := row.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled, &s.CacheBySession, &s.SessionCookieName, &s.CacheTTLFloor, &s.CacheTTLCeiling, &s.CacheGrace, &s.CacheKeep, &s.AllowLargeJSUploads, &s.RequestSchema, &s.SchemaMode, &s.HTTP3Enabled)
 	return s, err
 }
 

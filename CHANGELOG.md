@@ -14,6 +14,10 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Added
+
+- HTTP/3 (QUIC), opt-in per service. Start Palisade with `--listen-h3 :443` (the installer now passes it) and allow UDP 443, then turn on **HTTP/3** in a service's TLS tab. Only those domains advertise HTTP/3 (`Alt-Svc`); HTTP/2 stays the default and fallback for everything else, including the admin UI. The full WAF pipeline runs unchanged, 0-RTT is disabled, and JA4 fingerprints from QUIC handshakes start with `q`. Also settable through the API as `http3_enabled`.
+
 ## [2.5.3] - 2026-10-15
 
 ### Security

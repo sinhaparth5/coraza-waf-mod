@@ -54,6 +54,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 	"golang.org/x/crypto/acme/autocert"
 )
 
@@ -90,6 +92,7 @@ func main() {
 	fs := flag.NewFlagSet("palisade", flag.ExitOnError)
 	listen := fs.String("listen", ":8080", "HTTP listen address")
 	listenTLS := fs.String("listen-tls", "", "HTTPS listen address (empty = HTTP only)")
+	listenH3 := fs.String("listen-h3", "", "HTTP/3 (QUIC) UDP listen address, e.g. :443; needs --listen-tls; services opt in individually (empty = off)")
 	trustedProxies := fs.String("trusted-proxies", "", "comma-separated trusted proxy CIDRs for X-Forwarded-For/X-Real-IP")
 	dbPath := fs.String("db", "waf.db", "database path (sqlite) or DSN (mysql/postgres)")
 	dbDriver := fs.String("db-driver", "sqlite", "database driver: sqlite, mysql (or mariadb), postgres (or postgresql/cockroachdb/neon)")
@@ -110,6 +113,10 @@ func main() {
 	cfg := config.Defaults()
 	cfg.ListenAddr = *listen
 	cfg.ListenAddrTLS = *listenTLS
+	cfg.ListenAddrH3 = *listenH3
+	if cfg.ListenAddrH3 != "" && cfg.ListenAddrTLS == "" {
+		log.Fatalf("--listen-h3 needs --listen-tls: browsers only discover HTTP/3 from an HTTPS response")
+	}
 	cfg.TrustedProxies = splitCSV(*trustedProxies)
 	cfg.DB.Path = *dbPath
 	cfg.DB.Driver = *dbDriver
@@ -649,9 +656,92 @@ func startTLS(e *echo.Echo, cfg *config.Config, registry *services.Registry, db 
 		},
 	}
 
+	servers := []shutdowner{redirectServer}
+	if cfg.ListenAddrH3 != "" {
+		h3, err := startHTTP3(e, cfg.ListenAddrH3, s.TLSConfig, registry)
+		if err != nil {
+			return err
+		}
+		servers = append(servers, h3)
+	}
+
 	log.Printf("palisade TLS on %s (waf=%v, apps=%d)", cfg.ListenAddrTLS, cfg.WAF.Enabled, appCount)
-	shutdownOnSignal(e, redirectServer)
+	shutdownOnSignal(e, servers...)
 	return e.StartServer(s)
+}
+
+// startHTTP3 serves the same Echo app over QUIC on addr (UDP). Only services
+// with HTTP/3 enabled are advertised (Alt-Svc on their TCP responses) or
+// accepted; everything else, the admin UI included, stays on HTTP/1.1 and HTTP/2.
+func startHTTP3(e *echo.Echo, addr string, tlsConf *tls.Config, registry *services.Registry) (*http3.Server, error) {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("--listen-h3 %q: %w", addr, err)
+	}
+	// Bind here rather than in ListenAndServe so a taken port fails startup
+	// instead of only being logged from a goroutine.
+	conn, err := net.ListenPacket("udp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("http3 listen %s: %w", addr, err)
+	}
+
+	altSvc := fmt.Sprintf(`h3=":%s"; ma=86400`, port)
+	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if registry.HTTP3Host(c.Request().Host) {
+				c.Response().Header().Set("Alt-Svc", altSvc)
+			}
+			return next(c)
+		}
+	})
+
+	srv := &http3.Server{
+		TLSConfig: tlsConf.Clone(),
+		// 0-RTT early data can be replayed by anyone who captured it, and a
+		// WAF must not act on a request it can't tell apart from its replay.
+		// quic-go enables it when QUICConfig is nil, so this must stay set.
+		QUICConfig: &quic.Config{Allow0RTT: false},
+		Handler:    http3Gate(registry, e),
+		// QUIC has no ConnState hook, so clear the per-connection stores
+		// (filled at handshake by GetConfigForClient) when the conn ends.
+		ConnContext: func(ctx context.Context, c *quic.Conn) context.Context {
+			remote := c.RemoteAddr().String()
+			go func() {
+				<-c.Context().Done()
+				ja3pkg.Delete(remote)
+				ja4pkg.Delete(remote)
+				geo.DeleteConn(remote)
+				asn.DeleteConn(remote)
+			}()
+			return ctx
+		},
+	}
+	go func() {
+		log.Printf("palisade HTTP/3 on %s (udp)", addr)
+		if err := srv.Serve(conn); err != nil && err != http.ErrServerClosed {
+			log.Printf("http3 server: %v", err)
+		}
+	}()
+	return srv, nil
+}
+
+// http3Gate answers 421 for hosts that haven't opted into HTTP/3, so a client
+// replaying a stale Alt-Svc (or trying QUIC on the admin host) retries the
+// same request over TCP instead of bypassing the per-service choice.
+func http3Gate(registry *services.Registry, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !registry.HTTP3Host(r.Host) {
+			w.WriteHeader(http.StatusMisdirectedRequest)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// shutdowner is the graceful-stop surface *http.Server and *http3.Server share.
+type shutdowner interface {
+	Shutdown(context.Context) error
+	Close() error
 }
 
 // startCacheReturn binds the loopback listener Varnish fetches cache misses
@@ -683,7 +773,7 @@ func startCacheReturn(db *storage.DB, registry *services.Registry) {
 	}
 }
 
-func shutdownOnSignal(e *echo.Echo, extraServers ...*http.Server) {
+func shutdownOnSignal(e *echo.Echo, extraServers ...shutdowner) {
 	go func() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -695,9 +785,6 @@ func shutdownOnSignal(e *echo.Echo, extraServers ...*http.Server) {
 		defer cancel()
 
 		for _, srv := range extraServers {
-			if srv == nil {
-				continue
-			}
 			if err := srv.Shutdown(ctx); err != nil {
 				log.Printf("http shutdown: %v", err)
 				if closeErr := srv.Close(); closeErr != nil {
