@@ -2809,6 +2809,69 @@ func (db *DB) GetDisabledWAFRuleIDs() ([]int, error) {
 	return ids, rows.Err()
 }
 
+// ── WAF custom rules (issue #112) ───────────────────────────────────────────
+
+// WAFCustomRule is an admin-written SecRule (or chain) stored in the DB and
+// compiled into the engine after CRS. ServiceName "" means every service.
+type WAFCustomRule struct {
+	ID          int64
+	ServiceName string
+	Rule        string
+	Note        string
+	Enabled     bool
+	CreatedAt   time.Time
+}
+
+// SaveWAFCustomRule inserts r when r.ID is 0, otherwise updates its scope,
+// text and note. Enabled is only set on insert; see SetWAFCustomRuleEnabled.
+func (db *DB) SaveWAFCustomRule(r WAFCustomRule) error {
+	if r.ID == 0 {
+		_, err := db.exec(`INSERT INTO waf_custom_rules (service_name, rule, note, enabled) VALUES (?, ?, ?, ?)`,
+			r.ServiceName, r.Rule, r.Note, boolToInt(r.Enabled))
+		return err
+	}
+	res, err := db.exec(`UPDATE waf_custom_rules SET service_name = ?, rule = ?, note = ? WHERE id = ?`,
+		r.ServiceName, r.Rule, r.Note, r.ID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (db *DB) SetWAFCustomRuleEnabled(id int64, enabled bool) error {
+	_, err := db.exec(`UPDATE waf_custom_rules SET enabled = ? WHERE id = ?`, boolToInt(enabled), id)
+	return err
+}
+
+func (db *DB) DeleteWAFCustomRule(id int64) error {
+	_, err := db.exec(`DELETE FROM waf_custom_rules WHERE id = ?`, id)
+	return err
+}
+
+// ListWAFCustomRules returns every custom rule, oldest first, which is also
+// the order they are loaded into the engine.
+func (db *DB) ListWAFCustomRules() ([]WAFCustomRule, error) {
+	rows, err := db.query(`SELECT id, service_name, rule, note, enabled, created_at FROM waf_custom_rules ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var rules []WAFCustomRule
+	for rows.Next() {
+		var r WAFCustomRule
+		var enabled int
+		if err := rows.Scan(&r.ID, &r.ServiceName, &r.Rule, &r.Note, &enabled, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		r.Enabled = enabled == 1
+		rules = append(rules, r)
+	}
+	return rules, rows.Err()
+}
+
 // ── WAF per-service rule exceptions ─────────────────────────────────────────
 //
 // A separate table rather than a service_name column on waf_disabled_rules:

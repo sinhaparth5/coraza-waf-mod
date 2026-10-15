@@ -28,7 +28,7 @@ type MigrationTableResult struct {
 //
 // Migrated: services, ip_rules, geo_rules, meta (settings, secrets,
 // credentials), certificates, api_keys, waf_disabled_rules,
-// waf_service_rule_exceptions, threat_intel_sources + their synced
+// waf_service_rule_exceptions, waf_custom_rules, threat_intel_sources + their synced
 // threat_intel_ips, webhook_config, ip_threat_scores, ja4_reputation.
 //
 // Deliberately NOT migrated: requests (the access/request log — could be
@@ -101,6 +101,7 @@ func (db *DB) MigrateConfigTo(targetDriver, targetDSN string) (MigrationReport, 
 		{"api_keys", migrateAPIKeysTable, true},
 		{"waf_disabled_rules", migrateWAFDisabledRulesTable, true},
 		{"waf_service_rule_exceptions", migrateWAFServiceExceptionsTable, true},
+		{"waf_custom_rules", migrateWAFCustomRulesTable, true},
 		{"threat_intel_sources", migrateThreatIntelSourcesTable, true},
 		{"threat_intel_ips", migrateThreatIntelIPsTable, false},
 		{"webhook_config", migrateWebhookConfigTable, false},
@@ -387,6 +388,32 @@ func migrateWAFServiceExceptionsTable(source, target *DB, overriding bool) (int,
 		q := fmt.Sprintf(`INSERT INTO waf_service_rule_exceptions (id, service_name, rule_id, reason, created_at)%s VALUES (%s)`,
 			overridingClause(overriding), placeholders(5))
 		if _, err := target.exec(q, id, serviceName, ruleID, reason, createdAt); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, rows.Err()
+}
+
+func migrateWAFCustomRulesTable(source, target *DB, overriding bool) (int, error) {
+	rows, err := source.query(`SELECT id, service_name, rule, note, enabled, created_at FROM waf_custom_rules`)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	n := 0
+	for rows.Next() {
+		var id int64
+		var serviceName, rule, note string
+		var enabled int
+		var createdAt time.Time
+		if err := rows.Scan(&id, &serviceName, &rule, &note, &enabled, &createdAt); err != nil {
+			return n, err
+		}
+		q := fmt.Sprintf(`INSERT INTO waf_custom_rules (id, service_name, rule, note, enabled, created_at)%s VALUES (%s)`,
+			overridingClause(overriding), placeholders(6))
+		if _, err := target.exec(q, id, serviceName, rule, note, enabled, createdAt); err != nil {
 			return n, err
 		}
 		n++

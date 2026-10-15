@@ -161,7 +161,12 @@ func main() {
 		if err != nil {
 			return nil, nil, err
 		}
-		defaultEngine, err := waf.New(cfg.WAF, globalIDs)
+		customs, err := db.ListWAFCustomRules()
+		if err != nil {
+			return nil, nil, err
+		}
+		globalCustom, svcCustom := customRuleDirectives(customs)
+		defaultEngine, err := waf.NewWithDirectives(cfg.WAF, globalIDs, globalCustom)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -196,6 +201,12 @@ func main() {
 				}
 			}
 		}
+		// A service-scoped custom rule needs its own engine too.
+		for name := range svcCustom {
+			if _, ok := serviceSet[name]; !ok {
+				serviceSet[name] = wafServiceOpts{}
+			}
+		}
 		byService := make(map[string]*waf.Engine, len(serviceSet))
 		for name, opts := range serviceSet {
 			svcIDs, err := db.GetWAFRuleIDsForService(name)
@@ -210,7 +221,7 @@ func main() {
 			if opts.allowLargeJS {
 				merged = append(merged, 911100, 920420)
 			}
-			eng, err := waf.New(cfg.WAF, merged)
+			eng, err := waf.NewWithDirectives(cfg.WAF, merged, globalCustom+"\n"+svcCustom[name])
 			if err != nil {
 				return nil, nil, err
 			}
@@ -1173,4 +1184,27 @@ func buildRateLimit(db *storage.DB, redisAddr, redisPwd string) ratelimit.Backen
 	l.StartPersistence(db)
 	log.Printf("rate limit: in-memory+SQLite backend (%.2g rps, burst %d)", rps, burst)
 	return l
+}
+
+// customRuleDirectives splits the enabled custom WAF rules (issue #112) into
+// the global directives and per-service ones. Rules were validated when
+// saved; one that no longer validates (a hand-edited row) is logged and
+// skipped so it can't stop the whole engine from building.
+func customRuleDirectives(rules []storage.WAFCustomRule) (global string, byService map[string]string) {
+	byService = map[string]string{}
+	for _, r := range rules {
+		if !r.Enabled {
+			continue
+		}
+		if _, err := waf.ValidateCustomRule(r.Rule); err != nil {
+			log.Printf("waf: custom rule %d is invalid, skipping: %v", r.ID, err)
+			continue
+		}
+		if r.ServiceName == "" {
+			global += r.Rule + "\n"
+		} else {
+			byService[r.ServiceName] += r.Rule + "\n"
+		}
+	}
+	return global, byService
 }
