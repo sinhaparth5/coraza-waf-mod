@@ -14,6 +14,10 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Security
+
+- The bot-challenge page now also checks its post-solve redirect in the browser and only follows same-origin `http(s)` paths, falling back to `/`. The server has filtered this value since v2.2.4, so this is defense in depth and closes CodeQL alert `js/xss-through-dom`.
+
 ## [2.5.2] - 2026-10-15
 
 ### Changed

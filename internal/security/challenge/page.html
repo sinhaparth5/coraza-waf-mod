@@ -188,6 +188,19 @@
     msg.textContent = text;
   }
 
+  // Same-origin path or '/'. ServePage already does this (localRedirect);
+  // repeated here so the page is safe even if that check ever regresses.
+  function safeRedirectUrl(candidate) {
+    if (typeof candidate !== 'string' || candidate.trim() === '') return '/';
+    try {
+      var url = new URL(candidate, window.location.origin);
+      if ((url.protocol === 'http:' || url.protocol === 'https:') && url.origin === window.location.origin) {
+        return url.pathname + url.search + url.hash;
+      }
+    } catch (_) {}
+    return '/';
+  }
+
   // Automated-browser leakage detection. Real, human-driven browsers expose
   // none of these; Selenium/Puppeteer/Playwright/PhantomJS and headless Chrome
   // (OWASP ZAP's browser mode) leak at least one by default. The tokens must
@@ -268,7 +281,7 @@
       if (resp.ok) {
         setState('ok', 'Verification successful');
         hint.textContent = 'Redirecting…';
-        setTimeout(function () { window.location.href = cfg.redirect || '/'; }, 400);
+        setTimeout(function () { window.location.href = safeRedirectUrl(cfg.redirect); }, 400);
       } else {
         setState('fail', 'Verification failed');
         hint.textContent = 'Your browser could not be verified. Refresh the page to try again.';
