@@ -14,16 +14,11 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+## [2.5.3] - 2026-10-15
+
 ### Security
 
 - The bot-challenge page now also checks its post-solve redirect in the browser and only follows same-origin `http(s)` paths, falling back to `/`. The server has filtered this value since v2.2.4, so this is defense in depth and closes CodeQL alert `js/xss-through-dom`.
 
-## [2.5.2] - 2026-10-15
-
-### Changed
-
-- The installer's version pin is now `PALISADE_VERSION` (e.g. `curl -fsSL ... | sudo PALISADE_VERSION=v2.5.1 bash`).
-- The installer only installs v2.5.1 and later: it no longer migrates a pre-2.5.0 `coraza-waf-mod` install, falls back to the old `coraza-waf-mod-*` release asset names, or reads `CORAZA_VERSION`.
-
-[Unreleased]: https://github.com/sinhaparth5/palisade-waf/compare/v2.5.2...main
-[2.5.2]: https://github.com/sinhaparth5/palisade-waf/compare/v2.5.1...v2.5.2
+[Unreleased]: https://github.com/sinhaparth5/palisade-waf/compare/v2.5.3...main
+[2.5.3]: https://github.com/sinhaparth5/palisade-waf/compare/v2.5.2...v2.5.3
