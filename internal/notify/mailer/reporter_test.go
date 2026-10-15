@@ -23,6 +23,9 @@ func (f *fakeStore) GetDailyReport(from, to time.Time) (storage.DailyReport, err
 	f.from, f.to = from, to
 	return f.report, nil
 }
+func (f *fakeStore) GetReportDetails(time.Time, time.Time, int) (storage.ReportDetails, error) {
+	return storage.ReportDetails{}, nil
+}
 func (f *fakeStore) GetEmailReportSentFor() (string, error) { return f.sentFor, nil }
 func (f *fakeStore) SetEmailReportSentFor(day string) error { f.sentFor = day; return nil }
 
@@ -179,15 +182,27 @@ func TestComposeBanAlertIncludesIPAndReason(t *testing.T) {
 }
 
 func TestComposeReportIncludesCounts(t *testing.T) {
+	hourly := make([]storage.HourlyPoint, 24)
+	for i := range hourly {
+		hourly[i].Hour = time.Date(2026, 7, 1, i, 0, 0, 0, time.UTC)
+	}
+	hourly[14] = storage.HourlyPoint{Hour: hourly[14].Hour, Total: 700, Blocked: 30}
 	subject, text, html := composeReport("2026-07-01", storage.DailyReport{
 		Total: 1234, Blocked: 56, Status403: 44, UniqueBlockedIPs: 9,
 		WAFBlocked: 20, IPBlocked: 15, GeoBlocked: 10, RateLimited: 11, BotChallenged: 3,
+	}, storage.DailyReport{Total: 1000, Blocked: 80}, storage.ReportDetails{
+		Hourly:   hourly,
+		TopIPs:   []storage.LabelCount{{Label: "<b>203.0.113.7", Count: 12}},
+		TopRules: []storage.LabelCount{{Label: "941100", Count: 20}},
 	})
+	if strings.Contains(html, "<b>203") || !strings.Contains(html, "▼ 30% vs prior day") {
+		t.Errorf("html: unescaped label or missing blocked delta")
+	}
 	if !strings.Contains(subject, "56 blocked") || !strings.Contains(subject, "44 × 403") {
 		t.Errorf("subject missing headline counts: %q", subject)
 	}
 	for _, body := range []string{text, html} {
-		for _, want := range []string{"1234", "56", "44", "9", "2026-07-01"} {
+		for _, want := range []string{"1234", "56", "44", "9", "2026-07-01", "941100", "14:00", "▲ 23% vs prior day"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("body missing %q:\n%s", want, body)
 			}

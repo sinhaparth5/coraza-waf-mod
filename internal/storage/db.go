@@ -3222,6 +3222,79 @@ func (db *DB) GetDailyReport(from, to time.Time) (DailyReport, error) {
 	return rep, err
 }
 
+// LabelCount is one row of a top-N breakdown.
+type LabelCount struct {
+	Label string
+	Count int
+}
+
+// ReportDetails is the chart and top-N data behind the daily report email.
+// Kept apart from DailyReport so the dashboard, which also reads
+// DailyReport, doesn't pay for these queries.
+type ReportDetails struct {
+	Hourly       []HourlyPoint // one bucket per hour of [from, to), gaps zero-filled
+	TopCountries []LabelCount  // blocked requests by country
+	TopIPs       []LabelCount  // blocked requests by client IP
+	TopRules     []LabelCount  // blocked requests by WAF rule ID
+}
+
+// GetReportDetails buckets [from, to) by hour (in Go, see GetHourlyTraffic)
+// and returns the top `limit` blocked countries, IPs and WAF rules.
+func (db *DB) GetReportDetails(from, to time.Time, limit int) (ReportDetails, error) {
+	var d ReportDetails
+	d.Hourly = make([]HourlyPoint, int(to.Sub(from)/time.Hour))
+	for i := range d.Hourly {
+		d.Hourly[i].Hour = from.Add(time.Duration(i) * time.Hour)
+	}
+	rows, err := db.query(`SELECT ts, blocked FROM requests WHERE ts >= ? AND ts < ?`, from.UTC(), to.UTC())
+	if err != nil {
+		return d, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var ts time.Time
+		var blocked int
+		if err := rows.Scan(&ts, &blocked); err != nil {
+			return d, err
+		}
+		if i := int(ts.Sub(from) / time.Hour); i >= 0 && i < len(d.Hourly) {
+			d.Hourly[i].Total++
+			d.Hourly[i].Blocked += blocked
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return d, err
+	}
+
+	// col is one of three fixed literals below, never caller input.
+	top := func(col, cond string) ([]LabelCount, error) {
+		rows, err := db.query(`SELECT `+col+`, COUNT(*) AS c FROM requests
+			WHERE blocked = 1 AND ts >= ? AND ts < ? AND `+cond+`
+			GROUP BY `+col+` ORDER BY c DESC LIMIT ?`, from.UTC(), to.UTC(), limit)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		var out []LabelCount
+		for rows.Next() {
+			var lc LabelCount
+			if err := rows.Scan(&lc.Label, &lc.Count); err != nil {
+				return nil, err
+			}
+			out = append(out, lc)
+		}
+		return out, rows.Err()
+	}
+	if d.TopCountries, err = top("country", "country != ''"); err != nil {
+		return d, err
+	}
+	if d.TopIPs, err = top("real_ip", "real_ip != ''"); err != nil {
+		return d, err
+	}
+	d.TopRules, err = top("rule_id", "rule_id > 0")
+	return d, err
+}
+
 // ── Export ────────────────────────────────────────────────────────────────────
 
 // ExportRequests streams all matching request logs through fn. fn returns false

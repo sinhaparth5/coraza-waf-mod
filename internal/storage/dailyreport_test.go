@@ -45,3 +45,37 @@ func TestGetDailyReport(t *testing.T) {
 		t.Errorf("GetDailyReport = %+v, want %+v", rep, want)
 	}
 }
+
+func TestGetReportDetails(t *testing.T) {
+	db := openTestDB(t)
+	day := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	for _, r := range []RequestLog{
+		{Timestamp: day.Add(2 * time.Hour), RealIP: "2.2.2.2", Country: "CN", Blocked: true, RuleID: 941100},
+		{Timestamp: day.Add(2*time.Hour + time.Minute), RealIP: "2.2.2.2", Country: "CN", Blocked: true, RuleID: 941100},
+		{Timestamp: day.Add(5 * time.Hour), RealIP: "3.3.3.3", Country: "RU", Blocked: true},
+		{Timestamp: day.Add(5 * time.Hour), RealIP: "1.1.1.1", Country: "US"},
+		{Timestamp: day.Add(-time.Hour), RealIP: "9.9.9.9", Country: "CN", Blocked: true}, // before window
+	} {
+		r.AppName, r.Method, r.Host, r.Path = "app", "GET", "h", "/"
+		if _, err := db.InsertRequest(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	d, err := db.GetReportDetails(day, day.AddDate(0, 0, 1), 5)
+	if err != nil {
+		t.Fatalf("GetReportDetails: %v", err)
+	}
+	if len(d.Hourly) != 24 || d.Hourly[2] != (HourlyPoint{day.Add(2 * time.Hour), 2, 2}) || d.Hourly[5].Total != 2 || d.Hourly[5].Blocked != 1 {
+		t.Errorf("hourly = %+v", d.Hourly)
+	}
+	if len(d.TopCountries) != 2 || d.TopCountries[0] != (LabelCount{"CN", 2}) {
+		t.Errorf("countries = %+v", d.TopCountries)
+	}
+	if len(d.TopIPs) != 2 || d.TopIPs[0] != (LabelCount{"2.2.2.2", 2}) {
+		t.Errorf("ips = %+v", d.TopIPs)
+	}
+	if len(d.TopRules) != 1 || d.TopRules[0] != (LabelCount{"941100", 2}) {
+		t.Errorf("rules = %+v", d.TopRules)
+	}
+}
