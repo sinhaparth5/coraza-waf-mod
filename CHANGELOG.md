@@ -14,6 +14,11 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Changed
+
+- The installer's version pin is now `PALISADE_VERSION` (e.g. `curl -fsSL ... | sudo PALISADE_VERSION=v2.5.1 bash`).
+- The installer only installs v2.5.1 and later: it no longer migrates a pre-2.5.0 `coraza-waf-mod` install, falls back to the old `coraza-waf-mod-*` release asset names, or reads `CORAZA_VERSION`.
+
 ## [2.5.1] - 2026-10-15
 
 ### Added

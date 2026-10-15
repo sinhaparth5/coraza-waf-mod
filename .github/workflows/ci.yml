@@ -261,7 +261,7 @@ jobs:
 
           Pin to this exact version:
           \`\`\`bash
-          curl -fsSL https://waf-install.astrareconslabs.com/palisade-waf/install.sh | sudo CORAZA_VERSION=${GITHUB_REF_NAME} bash
+          curl -fsSL https://waf-install.astrareconslabs.com/palisade-waf/install.sh | sudo PALISADE_VERSION=${GITHUB_REF_NAME} bash
           \`\`\`
 
           Re-running the installer is safe. It upgrades the binary and restarts the service without touching your existing config or database.

@@ -5,7 +5,7 @@
 #   curl -fsSL https://waf-install.astrareconslabs.com/palisade-waf/install.sh | sudo bash
 #
 # Pin to a specific version:
-#   curl -fsSL ... | sudo CORAZA_VERSION=v1.0.0 bash
+#   curl -fsSL ... | sudo PALISADE_VERSION=v1.0.0 bash
 #
 # Private project — pass a personal access token:
 #   curl -fsSL ... | sudo GITHUB_TOKEN=ghp_xxxx bash
@@ -49,14 +49,11 @@ GITHUB_REPO="sinhaparth5/palisade-waf"
 
 DRY_RUN="${DRY_RUN:-0}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
-CORAZA_VERSION="${CORAZA_VERSION:-}"
+PALISADE_VERSION="${PALISADE_VERSION:-}"
 
 BINARY_NAME="palisade"
 SERVICE_USER="palisade"
 VAR_DIR="/var/lib/palisade"
-# Pre-2.5.0 name of this product (Coraza WAF Mod). Release assets are still
-# published under it, and an install found under it is migrated below.
-LEGACY_NAME="coraza-waf-mod"
 ASSET_NAME="palisade-waf"
 # nginx-combined access log for GoAccess/fail2ban; its directory is created by
 # the unit's LogsDirectory= (owned by the service user), so the name must match.
@@ -139,15 +136,8 @@ detect_public_ip() {
 # ── Detect existing install ───────────────────────────────────────────────────
 
 IS_UPGRADE=0
-# An install under the pre-2.5.0 name counts as an upgrade too; it is
-# migrated to the new names further down, once the new binary is in place.
-LEGACY_INSTALL=0
-LEGACY_UNIT_PATH="/etc/systemd/system/${LEGACY_NAME}.service"
 if [ -f "${INSTALL_PATH}" ]; then
 	IS_UPGRADE=1
-elif [ -f "/usr/local/bin/${LEGACY_NAME}" ]; then
-	IS_UPGRADE=1
-	LEGACY_INSTALL=1
 fi
 
 # ── Detect existing database backend (upgrade only) ──────────────────────────
@@ -161,39 +151,37 @@ fi
 # upgrades further down this script.
 EXISTING_DB_DRIVER=""
 EXISTING_DB_DSN=""
-EXISTING_UNIT_PATH="${UNIT_PATH}"
-[ "$LEGACY_INSTALL" = "1" ] && EXISTING_UNIT_PATH="${LEGACY_UNIT_PATH}"
-if [ "$IS_UPGRADE" = "1" ] && [ -f "${EXISTING_UNIT_PATH}" ]; then
-	EXISTING_EXEC_LINE="$(grep '^ExecStart=' "${EXISTING_UNIT_PATH}" | head -1)"
+if [ "$IS_UPGRADE" = "1" ] && [ -f "${UNIT_PATH}" ]; then
+	EXISTING_EXEC_LINE="$(grep '^ExecStart=' "${UNIT_PATH}" | head -1)"
 	EXISTING_DB_DRIVER="$(printf '%s' "$EXISTING_EXEC_LINE" | sed -n "s/.*--db-driver  *\([^ ]*\).*/\1/p")"
 	EXISTING_DB_DSN="$(printf '%s' "$EXISTING_EXEC_LINE" | sed -n "s/.*--db  *'\([^']*\)'.*/\1/p")"
 fi
 
 # ── Detect latest release version ────────────────────────────────────────────
 
-if [ -z "$CORAZA_VERSION" ]; then
+if [ -z "$PALISADE_VERSION" ]; then
 	step "Detecting latest release..."
-	CORAZA_VERSION=$(
+	PALISADE_VERSION=$(
 		curl_get "${API_BASE}/releases/latest" \
 		| grep -o '"tag_name":[[:space:]]*"[^"]*"' \
 		| head -1 \
 		| sed 's/"tag_name":[[:space:]]*"\([^"]*\)"/\1/'
 	)
-	if [ -z "$CORAZA_VERSION" ]; then
+	if [ -z "$PALISADE_VERSION" ]; then
 		err "Could not detect the latest release from GitHub."
-		printf '  Set CORAZA_VERSION manually: CORAZA_VERSION=v1.0.0 bash install.sh\n' >&2
+		printf '  Set PALISADE_VERSION manually: PALISADE_VERSION=v1.0.0 bash install.sh\n' >&2
 		exit 1
 	fi
-	printf '    Latest: %s%s%s\n' "$C_BOLD" "$CORAZA_VERSION" "$C_RESET"
+	printf '    Latest: %s%s%s\n' "$C_BOLD" "$PALISADE_VERSION" "$C_RESET"
 fi
 
 ASSET="${ASSET_NAME}-linux-${ARCH}"
-DOWNLOAD_BASE="https://github.com/${GITHUB_REPO}/releases/download/${CORAZA_VERSION}"
+DOWNLOAD_BASE="https://github.com/${GITHUB_REPO}/releases/download/${PALISADE_VERSION}"
 
 if [ "$IS_UPGRADE" = "1" ]; then
-	step "Upgrading ${BINARY_NAME} to ${CORAZA_VERSION} (linux/${ARCH})"
+	step "Upgrading ${BINARY_NAME} to ${PALISADE_VERSION} (linux/${ARCH})"
 else
-	step "Installing ${BINARY_NAME} ${CORAZA_VERSION} (linux/${ARCH})"
+	step "Installing ${BINARY_NAME} ${PALISADE_VERSION} (linux/${ARCH})"
 fi
 echo
 
@@ -326,11 +314,6 @@ else
 	trap 'rm -rf "$WORKDIR"' EXIT
 
 	curl_get "${DOWNLOAD_BASE}/checksums.txt" -o "${WORKDIR}/checksums.txt"
-	# Releases up to v2.5.0 published assets as coraza-waf-mod-*; a pinned
-	# CORAZA_VERSION from then must still resolve.
-	if ! grep -q " ${ASSET}\$" "${WORKDIR}/checksums.txt"; then
-		ASSET="${LEGACY_NAME}-linux-${ARCH}"
-	fi
 	step "Downloading ${ASSET}"
 	curl_get "${DOWNLOAD_BASE}/${ASSET}" -o "${WORKDIR}/${ASSET}"
 
@@ -370,34 +353,6 @@ elif [ "$DRY_RUN" = "1" ] && [ "$DB_DRIVER" != "sqlite" ]; then
 	DB_DSN="<built-from-prompted-values>"
 else
 	DB_DSN="${VAR_DIR}/waf.db"
-fi
-
-# ── Migrate a pre-2.5.0 (coraza-waf-mod) install to the Palisade names ───────
-# Stops the old service, moves its data/key/log directories, renames the
-# service user and group in place (same uid, so file ownership carries over),
-# and removes the old binary and units. The database and encryption key move
-# untouched, so nothing is re-seeded and no secret is orphaned.
-if [ "$LEGACY_INSTALL" = "1" ]; then
-	step "Migrating ${LEGACY_NAME} -> ${BINARY_NAME}"
-	run systemctl disable --now "${LEGACY_NAME}.service" "${LEGACY_NAME}-prune.timer" || true
-	for pair in "/var/lib/${LEGACY_NAME}:${VAR_DIR}" "/etc/${LEGACY_NAME}:/etc/${BINARY_NAME}" "/var/log/coraza:/var/log/${BINARY_NAME}"; do
-		old="${pair%%:*}"; new="${pair#*:}"
-		if [ -d "$old" ] && [ ! -e "$new" ]; then
-			run mv "$old" "$new"
-			detail "Moved ${old} -> ${new}"
-		fi
-	done
-	if id "${LEGACY_NAME}" >/dev/null 2>&1 && ! id "${SERVICE_USER}" >/dev/null 2>&1; then
-		run usermod -l "${SERVICE_USER}" -d "${VAR_DIR}" "${LEGACY_NAME}"
-		run groupmod -n "${SERVICE_USER}" "${LEGACY_NAME}" || true
-		detail "Renamed user ${LEGACY_NAME} -> ${SERVICE_USER}"
-	fi
-	run rm -f "/usr/local/bin/${LEGACY_NAME}" "${LEGACY_UNIT_PATH}" \
-		"/etc/systemd/system/${LEGACY_NAME}-prune.service" \
-		"/etc/systemd/system/${LEGACY_NAME}-prune.timer" \
-		"/etc/systemd/system/varnish.service.d/coraza.conf"
-	run rm -f "/etc/systemd/system/multi-user.target.wants/${LEGACY_NAME}.service"
-	ok "Migrated. Anything of yours that points at /var/log/coraza/access.log (fail2ban, log shippers) now needs /var/log/${BINARY_NAME}/access.log."
 fi
 
 # ── System user ───────────────────────────────────────────────────────────────
@@ -591,7 +546,7 @@ if [ "$DRY_RUN" = "1" ] || command -v varnishd >/dev/null 2>&1; then
 
 	# Never clobber a hand-written VCL silently: anything not created by this
 	# installer (including the stock package example) is backed up first.
-	if [ "$DRY_RUN" != "1" ] && [ -f "$VARNISH_VCL_PATH" ] && ! grep -qE "palisade|coraza-waf-mod" "$VARNISH_VCL_PATH"; then
+	if [ "$DRY_RUN" != "1" ] && [ -f "$VARNISH_VCL_PATH" ] && ! grep -q "palisade" "$VARNISH_VCL_PATH"; then
 		detail "Backing up existing VCL to ${VARNISH_VCL_PATH}.pre-palisade"
 		run cp "$VARNISH_VCL_PATH" "${VARNISH_VCL_PATH}.pre-palisade"
 	fi
@@ -897,7 +852,7 @@ echo
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 
-INSTALLED_VERSION="$("${INSTALL_PATH}" --version 2>/dev/null || echo "${CORAZA_VERSION}")"
+INSTALLED_VERSION="$("${INSTALL_PATH}" --version 2>/dev/null || echo "${PALISADE_VERSION}")"
 
 if [ "$USE_ACME" = "1" ]; then
 	DASHBOARD_URL="https://${DOMAIN}/admin"

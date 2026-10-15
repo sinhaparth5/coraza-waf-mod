@@ -55,9 +55,9 @@ Re-run the same command:
 curl -fsSL https://waf-install.astrareconslabs.com/palisade-waf/install.sh | sudo bash
 ```
 
-The installer detects the existing binary at `/usr/local/bin/palisade` and switches to upgrade mode. It downloads and verifies the latest release, replaces the binary, rewrites the systemd units, and restarts the service. It skips the interactive prompts. Admin credentials and TLS certificates are never touched on upgrade. Pin a specific version with `curl -fsSL ... | sudo CORAZA_VERSION=v1.2.3 bash`.
+The installer detects the existing binary at `/usr/local/bin/palisade` and switches to upgrade mode. It downloads and verifies the latest release, replaces the binary, rewrites the systemd units, and restarts the service. It skips the interactive prompts. Admin credentials and TLS certificates are never touched on upgrade. Pin a specific version with `curl -fsSL ... | sudo PALISADE_VERSION=v2.5.1 bash`.
 
-**Upgrading from 2.4.x or earlier (Coraza WAF Mod):** the same command migrates automatically. It stops the old `coraza-waf-mod` service, moves `/var/lib/coraza-waf-mod`, `/etc/coraza-waf-mod` and `/var/log/coraza` to `/var/lib/palisade`, `/etc/palisade` and `/var/log/palisade`, renames the service user, and installs the `palisade` binary and `palisade` systemd units. Your database, admin account, certificates and encryption key carry over unchanged. Update anything that references the old access-log path (fail2ban, log shippers).
+**Versions before v2.5.1 are deprecated.** The installer only installs v2.5.1 or later, and it no longer migrates old Coraza WAF Mod (`coraza-waf-mod`) installs. To move one of those to Palisade, run the v2.5.1 installer once: `curl -fsSL https://raw.githubusercontent.com/sinhaparth5/palisade-waf/v2.5.1/deploy/install.sh | sudo bash`.
 
 ### Option B: build from source
 
