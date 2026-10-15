@@ -1,14 +1,14 @@
 <div align="center">
   <img src="static/imgs/readme-logo.svg" alt="Palisade" width="480">
 
-  <br><br>
+<br><br>
 
-  [![Release](https://img.shields.io/github/v/release/sinhaparth5/palisade-waf?label=release&color=2A9D8F)](https://github.com/sinhaparth5/palisade-waf/releases/latest)
-  [![CI](https://img.shields.io/github/actions/workflow/status/sinhaparth5/palisade-waf/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white&color=2A9D8F)](https://github.com/sinhaparth5/palisade-waf/actions/workflows/ci.yml)
-  [![codecov](https://codecov.io/gh/sinhaparth5/palisade-waf/graph/badge.svg)](https://codecov.io/gh/sinhaparth5/palisade-waf)
-  [![CodeQL](https://img.shields.io/github/actions/workflow/status/sinhaparth5/palisade-waf/codeql.yml?branch=main&label=CodeQL&logo=github&logoColor=white&color=2A9D8F)](https://github.com/sinhaparth5/palisade-waf/actions/workflows/codeql.yml)
-  [![Go Version](https://img.shields.io/github/go-mod/go-version/sinhaparth5/palisade-waf?label=go&logo=go&logoColor=white&color=00ADD8)](go.mod)
-  [![License](https://img.shields.io/github/license/sinhaparth5/palisade-waf?label=license&color=76C893)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/sinhaparth5/palisade-waf?label=release&color=2A9D8F)](https://github.com/sinhaparth5/palisade-waf/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/sinhaparth5/palisade-waf/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white&color=2A9D8F)](https://github.com/sinhaparth5/palisade-waf/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/github/sinhaparth5/palisade-waf/graph/badge.svg?token=Z4RGUZSPZF)](https://codecov.io/github/sinhaparth5/palisade-waf)
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/sinhaparth5/palisade-waf/codeql.yml?branch=main&label=CodeQL&logo=github&logoColor=white&color=2A9D8F)](https://github.com/sinhaparth5/palisade-waf/actions/workflows/codeql.yml)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/sinhaparth5/palisade-waf?label=go&logo=go&logoColor=white&color=00ADD8)](go.mod)
+[![License](https://img.shields.io/github/license/sinhaparth5/palisade-waf?label=license&color=76C893)](LICENSE)
 </div>
 
 **Palisade** is a web application firewall you can `scp` to a server: a WAF and reverse proxy in a single Go binary, built on [OWASP Coraza](https://github.com/corazawaf/coraza) and the OWASP Core Rule Set, with a built-in admin dashboard. It uses one binary, one SQLite file, CLI flags for bootstrap settings, and dashboard-managed runtime settings. There is no config file, external database, or Node toolchain. Docker is available for local development but is not required.
