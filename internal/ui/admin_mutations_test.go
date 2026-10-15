@@ -248,6 +248,7 @@ func TestServiceSettingHandlers(t *testing.T) {
 		{"/admin/services/http3/x", nil, 400},
 		{"/admin/services/compress/" + id, []string{"enabled", "1"}, 200},
 		{"/admin/services/compress/x", nil, 400},
+		{"/admin/services/backends/" + id, []string{"backends", "http://127.0.0.1:9001\nhttp://127.0.0.1:9002", "lb_policy", "least_conn", "health_path", "/healthz", "health_interval", "30"}, 200},
 		{"/admin/services/schema/" + id, []string{"mode", "enforce", "schema", `{"type":"object"}`}, 200},
 		{"/admin/services/schema/" + id, []string{"mode", "log", "schema", `{"type":`}, 400},
 		{"/admin/services/schema/x", nil, 400},
@@ -268,8 +269,14 @@ func TestServiceSettingHandlers(t *testing.T) {
 		wantCode(t, tc.path+" "+strings.Join(tc.f, "="), rec.Code, tc.want, rec.Body.String())
 	}
 
+	// Backend list errors land in the tab's error box, escaped.
+	rec := env.do("POST", "/admin/services/backends/"+id, form("backends", "http://127.0.0.1:1/<b>\nhttp://127.0.0.2:1/"))
+	if rec.Header().Get("HX-Retarget") != "#svc-backends-error" || strings.Contains(rec.Body.String(), "<b>") {
+		t.Errorf("backends error = %q (retarget %q)", rec.Body.String(), rec.Header().Get("HX-Retarget"))
+	}
+
 	got, _ := env.db.GetService(svc.ID)
-	if got.BotMode != "always" || !got.AllowLargeJSUploads || !got.HTTP3Enabled || !got.CompressEnabled || got.SchemaMode != "enforce" || !got.CacheEnabled ||
+	if got.BotMode != "always" || !got.AllowLargeJSUploads || !got.HTTP3Enabled || !got.CompressEnabled || len(got.ExtraBackends) != 1 || got.LBPolicy != "least_conn" || got.HealthPath != "/healthz" || got.SchemaMode != "enforce" || !got.CacheEnabled ||
 		!got.CacheBySession || got.SessionCookieName != "sid" || got.CacheTTLFloor != 60 || got.CacheTTLCeiling != 600 || got.CacheGrace != 10 {
 		t.Errorf("service = %+v", got)
 	}

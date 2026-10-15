@@ -188,12 +188,18 @@ func (h *Handler) APIPurgeService(c echo.Context) error {
 // apiCreateServiceRequest mirrors the fields accepted by the admin UI's
 // service-add wizard (see AddService, ui/handlers.go).
 type apiCreateServiceRequest struct {
-	Name       string  `json:"name"`
-	MatchType  string  `json:"match_type"` // "host" | "prefix"
-	MatchValue string  `json:"match_value"`
-	Backend    string  `json:"backend"`
-	RPS        float64 `json:"rate_limit_rps"`
-	Burst      int     `json:"rate_limit_burst"`
+	Name       string `json:"name"`
+	MatchType  string `json:"match_type"` // "host" | "prefix"
+	MatchValue string `json:"match_value"`
+	Backend    string `json:"backend"`
+	// Optional: several backends to balance across (first = primary),
+	// replacing Backend, with the balancing policy and active health check.
+	Backends       []string `json:"backends"`
+	LBPolicy       string   `json:"lb_policy"` // "round_robin" (default) | "least_conn"
+	HealthPath     string   `json:"health_path"`
+	HealthInterval int      `json:"health_interval"`
+	RPS            float64  `json:"rate_limit_rps"`
+	Burst          int      `json:"rate_limit_burst"`
 }
 
 func (h *Handler) APICreateService(c echo.Context) error {
@@ -204,15 +210,23 @@ func (h *Handler) APICreateService(c echo.Context) error {
 	req.Name = strings.TrimSpace(req.Name)
 	req.MatchValue = strings.TrimSpace(req.MatchValue)
 	req.Backend = strings.TrimSpace(req.Backend)
-
-	if req.Name == "" || req.MatchValue == "" || (req.MatchType != "host" && req.MatchType != "prefix") {
-		return apiError(c, http.StatusBadRequest, "name, backend, match_type (host|prefix), and match_value are required")
+	if len(req.Backends) == 0 && req.Backend != "" {
+		req.Backends = []string{req.Backend}
 	}
-	if err := services.Validate(req.Backend); err != nil {
+	for i := range req.Backends {
+		req.Backends[i] = strings.TrimSpace(req.Backends[i])
+	}
+
+	if req.Name == "" || req.MatchValue == "" || len(req.Backends) == 0 || (req.MatchType != "host" && req.MatchType != "prefix") {
+		return apiError(c, http.StatusBadRequest, "name, backend (or backends), match_type (host|prefix), and match_value are required")
+	}
+	if err := services.ValidateBackends(req.Backends, req.HealthPath, req.HealthInterval); err != nil {
 		return apiError(c, http.StatusBadRequest, err.Error())
 	}
-	if err := services.Probe(req.Backend); err != nil {
-		return apiError(c, http.StatusBadRequest, err.Error()+". Fix the backend and try again.")
+	for _, b := range req.Backends {
+		if err := services.Probe(b); err != nil {
+			return apiError(c, http.StatusBadRequest, b+": "+err.Error()+". Fix the backend and try again.")
+		}
 	}
 	if req.RPS < 0 {
 		req.RPS = 0
@@ -228,8 +242,21 @@ func (h *Handler) APICreateService(c echo.Context) error {
 		prefix = req.MatchValue
 	}
 
-	if err := h.db.AddService(req.Name, host, prefix, req.Backend, req.RPS, req.Burst); err != nil {
+	if err := h.db.AddService(req.Name, host, prefix, req.Backends[0], req.RPS, req.Burst); err != nil {
 		return apiError(c, http.StatusInternalServerError, err.Error())
+	}
+	if len(req.Backends) > 1 || req.LBPolicy != "" || req.HealthPath != "" {
+		list, err := h.db.ListServices()
+		if err != nil {
+			return apiError(c, http.StatusInternalServerError, err.Error())
+		}
+		for _, svc := range list {
+			if svc.Name == req.Name {
+				if err := h.db.SetServiceBackends(svc.ID, req.Backends, req.LBPolicy, req.HealthPath, req.HealthInterval); err != nil {
+					return apiError(c, http.StatusInternalServerError, err.Error())
+				}
+			}
+		}
 	}
 	if err := h.registry.Reload(h.db); err != nil {
 		return apiError(c, http.StatusInternalServerError, err.Error())
@@ -251,6 +278,10 @@ type apiUpdateServiceRequest struct {
 	Host                *string  `json:"host"`
 	Prefix              *string  `json:"prefix"`
 	Backend             *string  `json:"backend"`
+	Backends            []string `json:"backends"` // replaces the whole list, first = primary
+	LBPolicy            *string  `json:"lb_policy"`
+	HealthPath          *string  `json:"health_path"`
+	HealthInterval      *int     `json:"health_interval"`
 	RPS                 *float64 `json:"rate_limit_rps"`
 	Burst               *int     `json:"rate_limit_burst"`
 	BotMode             *string  `json:"bot_mode"` // "inherit" | "always" | "off"
@@ -298,6 +329,31 @@ func (h *Handler) APIUpdateService(c echo.Context) error {
 
 	if err := h.db.UpdateService(id, name, host, prefix, backend); err != nil {
 		return apiError(c, http.StatusInternalServerError, err.Error())
+	}
+	if req.Backend != nil || req.Backends != nil || req.LBPolicy != nil || req.HealthPath != nil || req.HealthInterval != nil {
+		backends := append([]string{backend}, existing.ExtraBackends...)
+		policy, healthPath, interval := existing.LBPolicy, existing.HealthPath, existing.HealthInterval
+		if req.Backends != nil {
+			backends = backends[:0]
+			for _, b := range req.Backends {
+				backends = append(backends, strings.TrimSpace(b))
+			}
+		}
+		if req.LBPolicy != nil {
+			policy = *req.LBPolicy
+		}
+		if req.HealthPath != nil {
+			healthPath = strings.TrimSpace(*req.HealthPath)
+		}
+		if req.HealthInterval != nil {
+			interval = *req.HealthInterval
+		}
+		if err := services.ValidateBackends(backends, healthPath, interval); err != nil {
+			return apiError(c, http.StatusBadRequest, err.Error())
+		}
+		if err := h.db.SetServiceBackends(id, backends, policy, healthPath, interval); err != nil {
+			return apiError(c, http.StatusInternalServerError, err.Error())
+		}
 	}
 	if req.RPS != nil || req.Burst != nil {
 		rps, burst := existing.RateLimitRPS, existing.RateLimitBurst

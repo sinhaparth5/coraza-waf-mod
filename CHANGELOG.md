@@ -17,6 +17,7 @@ rather than growing this file forever.
 ### Added
 
 - Response compression, opt-in per service. Turn on **Compress responses** in a service's Cache tab (or set `compress_enabled` through the API) and Palisade compresses text responses over 1 KB (HTML, CSS, JavaScript, JSON, SVG and similar) with zstd or gzip, whichever the browser supports, when the backend didn't already compress them. Images, video, live event streams (SSE) and WebSockets pass through unchanged, streamed responses still arrive chunk by chunk, and responses carry `Vary: Accept-Encoding` so caches keep the variants apart. It doesn't need Varnish.
+- Several backends per service, with load balancing. In a service's new **Backends** tab, list one backend URL per line and choose round robin or least connections. A backend that stops answering leaves the rotation, and GET and HEAD requests that hit it are retried once on another backend, so stopping one of two backends causes no failed page loads. Optionally set a health check path and interval: each backend is then checked on that path and only rejoins once it answers again. Without one, a failed backend sits out for 10 seconds before getting traffic again. Each backend's health shows on the Services page and as `palisade_backend_up` in Prometheus, and the API accepts `backends`, `lb_policy`, `health_path` and `health_interval`.
 
 ### Changed
 

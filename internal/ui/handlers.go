@@ -375,6 +375,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/services/uploads/:id", h.SetServiceLargeJSUploads)
 	g.POST("/services/http3/:id", h.SetServiceHTTP3)
 	g.POST("/services/compress/:id", h.SetServiceCompress)
+	g.POST("/services/backends/:id", h.SetServiceBackends)
 	g.POST("/services/schema/:id", h.SetServiceSchema)
 	g.POST("/services/cache/:id", h.SetServiceCache)
 	g.POST("/services/cache-session/:id", h.SetServiceCacheSession)
@@ -1709,6 +1710,7 @@ type ServiceView struct {
 	Healthy  bool
 	Known    bool
 	CertName string // pool cert name when CertID > 0, otherwise ""
+	Health   []services.BackendStatus
 }
 
 func (h *Handler) serviceViews() []ServiceView {
@@ -1722,7 +1724,7 @@ func (h *Handler) serviceViews() []ServiceView {
 	out := make([]ServiceView, len(list))
 	for i, s := range list {
 		healthy, known := h.registry.IsHealthy(s.Name)
-		out[i] = ServiceView{Service: s, Healthy: healthy, Known: known, CertName: certMap[s.CertID]}
+		out[i] = ServiceView{Service: s, Healthy: healthy, Known: known, CertName: certMap[s.CertID], Health: h.registry.BackendHealth(s.Name)}
 	}
 	return out
 }
@@ -2444,6 +2446,46 @@ func (h *Handler) SetServiceHTTP3(c echo.Context) error {
 	w := c.Response().Writer
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	return h.tmpls["services"].ExecuteTemplate(w, "services-rows", h.serviceViews())
+}
+
+// SetServiceBackends saves a service's backend list (one URL per line, the
+// first is the primary), balancing policy and active health check. Errors
+// are swapped into the tab's error box; success fires backends-saved, which
+// closes the modal.
+func (h *Handler) SetServiceBackends(c echo.Context) error {
+	fail := func(msg string) error {
+		c.Response().Header().Set("HX-Retarget", "#svc-backends-error")
+		c.Response().Header().Set("HX-Reswap", "innerHTML")
+		return c.String(http.StatusOK, html.EscapeString(msg))
+	}
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		return fail("invalid service id")
+	}
+	var backends []string
+	for _, line := range strings.Split(c.FormValue("backends"), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			backends = append(backends, line)
+		}
+	}
+	healthPath := strings.TrimSpace(c.FormValue("health_path"))
+	interval := 0
+	if v := strings.TrimSpace(c.FormValue("health_interval")); v != "" {
+		if interval, err = strconv.Atoi(v); err != nil {
+			return fail("Health check interval must be a whole number of seconds.")
+		}
+	}
+	if err := services.ValidateBackends(backends, healthPath, interval); err != nil {
+		return fail(err.Error())
+	}
+	if err := h.db.SetServiceBackends(id, backends, c.FormValue("lb_policy"), healthPath, interval); err != nil {
+		return fail(err.Error())
+	}
+	if err := h.registry.Reload(h.db); err != nil {
+		return fail(err.Error())
+	}
+	c.Response().Header().Set("HX-Trigger", "backends-saved")
+	return h.renderPartial(c, "services", "services-rows", h.serviceViews())
 }
 
 // SetServiceCompress turns response compression on or off for one service.
