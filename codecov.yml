@@ -16,6 +16,46 @@ ignore:
   - "assets.go"
   - "tools/**"
 
+# Components slice the single upload by package group, so the PR comment
+# shows coverage per subsystem. Their statuses are informational: they report
+# per-component movement without blocking a merge (the project/patch statuses
+# above still do).
+component_management:
+  default_rules:
+    statuses:
+      - type: project
+        target: auto
+        informational: true
+  individual_components:
+    - component_id: proxy
+      name: proxy
+      paths:
+        - internal/proxy/**
+    - component_id: services
+      name: services
+      paths:
+        - internal/services/**
+    - component_id: security
+      name: security
+      paths:
+        - internal/security/**
+    - component_id: storage
+      name: storage
+      paths:
+        - internal/storage/**
+    - component_id: ui
+      name: admin ui
+      paths:
+        - internal/ui/**
+    - component_id: notify
+      name: notify
+      paths:
+        - internal/notify/**
+    - component_id: config
+      name: config
+      paths:
+        - internal/config/**
+
 comment:
-  layout: "condensed_header, diff, flags, files"
+  layout: "condensed_header, diff, flags, components, files"
   require_changes: true
