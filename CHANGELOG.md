@@ -16,7 +16,11 @@ rather than growing this file forever.
 
 ### Added
 
-- Codecov coverage reporting in CI. The unit run uses `-coverpkg=./...` so code is credited wherever it executes, the MySQL/Postgres storage runs upload as separate flags and merge in, and a Redis service backs the previously untested Redis rate-limit and cluster-sync paths. README carries a coverage badge. Coverage is about 90%, up from 56%; new tests cover every admin UI route through the real middleware stack, the storage CRUD/query layer on all three database backends, and the previously untested config, bot, JA3, blocklist, threat-intel, metrics and passkey packages.
+- Codecov coverage reporting in CI. The unit run uses `-coverpkg=./...` so code is credited wherever it executes, the MySQL/Postgres storage runs upload as separate flags and merge in, and a Redis service backs the previously untested Redis rate-limit and cluster-sync paths. README carries a coverage badge. Test results are uploaded too (via `gotestsum` JUnit output) for Codecov Test Analytics. Coverage is about 90%, up from 56%; new tests cover every admin UI route through the real middleware stack, the storage CRUD/query layer on all three database backends, and the previously untested config, bot, JA3, blocklist, threat-intel, metrics and passkey packages.
+
+### Changed
+
+- The GitHub repository is now `sinhaparth5/palisade-waf` (old URLs redirect). Release assets are published as `palisade-waf-linux-amd64`/`-arm64`/`-windows-amd64.exe`, Docker images as `ghcr.io/sinhaparth5/palisade-waf` and `palisade-waf` on Docker Hub, and the installer moved to `https://waf-install.astrareconslabs.com/palisade-waf/install.sh`. The new installer still installs pre-rename versions pinned with `CORAZA_VERSION`. Images already published under `coraza-waf-mod` stay there and get no new tags.
 
 ### Fixed
 
@@ -31,5 +35,5 @@ rather than growing this file forever.
 - Prometheus metrics are renamed from `coraza_*` to `palisade_*` (update dashboards and alerts), the `X-WAF-Engine` header now reads `Palisade`, the Go module is `palisade`, the cluster blocklist channel is `palisade:ipblocklist:reload` (mixed-version clusters won't sync blocklist reloads during a rolling upgrade), backups download as `palisade-YYYY-MM-DD.db`, and the threat-intel User-Agent is `palisade/threat-intel`.
 - Admin UI redesigned as a field-notes notebook: warm paper and ink palette (with a dark mode), Calistoga/DM Sans/JetBrains Mono/Caveat type, green = allowed, red = blocked, lime = highlight.
 
-[Unreleased]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.5.0...main
-[2.5.0]: https://github.com/sinhaparth5/coraza-waf-mod/compare/v2.4.1...v2.5.0
+[Unreleased]: https://github.com/sinhaparth5/palisade-waf/compare/v2.5.0...main
+[2.5.0]: https://github.com/sinhaparth5/palisade-waf/compare/v2.4.1...v2.5.0

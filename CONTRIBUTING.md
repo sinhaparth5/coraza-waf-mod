@@ -19,8 +19,8 @@ project's [Apache License 2.0](LICENSE), and to abide by the project's
 ## Getting started
 
 ```bash
-git clone https://github.com/sinhaparth5/coraza-waf-mod.git
-cd coraza-waf-mod
+git clone https://github.com/sinhaparth5/palisade-waf.git
+cd palisade-waf
 make build      # go generate (minifies JS) + go build -> ./palisade
 make test       # go test ./...
 make lint       # golangci-lint run ./... (config: .golangci.yml)

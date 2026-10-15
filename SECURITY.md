@@ -22,7 +22,7 @@ discussions, pull requests, or social channels.
 Report vulnerabilities privately through GitHub Security Advisories for this
 repository:
 
-https://github.com/sinhaparth5/coraza-waf-mod/security/advisories/new
+https://github.com/sinhaparth5/palisade-waf/security/advisories/new
 
 Include enough detail for the issue to be reproduced and assessed:
 

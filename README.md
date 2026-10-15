@@ -3,13 +3,12 @@
 
   <br><br>
 
-  [![Release](https://img.shields.io/github/v/release/sinhaparth5/coraza-waf-mod?label=release&color=2A9D8F)](https://github.com/sinhaparth5/coraza-waf-mod/releases/latest)
-  [![CI](https://img.shields.io/github/actions/workflow/status/sinhaparth5/coraza-waf-mod/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white&color=2A9D8F)](https://github.com/sinhaparth5/coraza-waf-mod/actions/workflows/ci.yml)
-  [![codecov](https://codecov.io/gh/sinhaparth5/coraza-waf-mod/graph/badge.svg)](https://codecov.io/gh/sinhaparth5/coraza-waf-mod)
-  [![CodeQL](https://img.shields.io/github/actions/workflow/status/sinhaparth5/coraza-waf-mod/codeql.yml?branch=main&label=CodeQL&logo=github&logoColor=white&color=2A9D8F)](https://github.com/sinhaparth5/coraza-waf-mod/actions/workflows/codeql.yml)
-  [![Go Version](https://img.shields.io/github/go-mod/go-version/sinhaparth5/coraza-waf-mod?label=go&logo=go&logoColor=white&color=00ADD8)](go.mod)
-  [![License](https://img.shields.io/github/license/sinhaparth5/coraza-waf-mod?label=license&color=76C893)](LICENSE)
-  [![Go Report Card](https://goreportcard.com/badge/github.com/sinhaparth5/coraza-waf-mod)](https://goreportcard.com/report/github.com/sinhaparth5/coraza-waf-mod)
+  [![Release](https://img.shields.io/github/v/release/sinhaparth5/palisade-waf?label=release&color=2A9D8F)](https://github.com/sinhaparth5/palisade-waf/releases/latest)
+  [![CI](https://img.shields.io/github/actions/workflow/status/sinhaparth5/palisade-waf/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white&color=2A9D8F)](https://github.com/sinhaparth5/palisade-waf/actions/workflows/ci.yml)
+  [![codecov](https://codecov.io/gh/sinhaparth5/palisade-waf/graph/badge.svg)](https://codecov.io/gh/sinhaparth5/palisade-waf)
+  [![CodeQL](https://img.shields.io/github/actions/workflow/status/sinhaparth5/palisade-waf/codeql.yml?branch=main&label=CodeQL&logo=github&logoColor=white&color=2A9D8F)](https://github.com/sinhaparth5/palisade-waf/actions/workflows/codeql.yml)
+  [![Go Version](https://img.shields.io/github/go-mod/go-version/sinhaparth5/palisade-waf?label=go&logo=go&logoColor=white&color=00ADD8)](go.mod)
+  [![License](https://img.shields.io/github/license/sinhaparth5/palisade-waf?label=license&color=76C893)](LICENSE)
 </div>
 
 **Palisade** is a web application firewall you can `scp` to a server: a WAF and reverse proxy in a single Go binary, built on [OWASP Coraza](https://github.com/corazawaf/coraza) and the OWASP Core Rule Set, with a built-in admin dashboard. It uses one binary, one SQLite file, CLI flags for bootstrap settings, and dashboard-managed runtime settings. There is no config file, external database, or Node toolchain. Docker is available for local development but is not required.
@@ -34,7 +33,7 @@
 ### Option A: native binary
 
 ```bash
-curl -fsSL https://waf-install.astrareconslabs.com/coraza-waf-mod/install.sh | sudo bash
+curl -fsSL https://waf-install.astrareconslabs.com/palisade-waf/install.sh | sudo bash
 ```
 
 This downloads the release binary for your architecture (amd64/arm64), verifies its SHA256 checksum, creates a dedicated non-root system user, installs a systemd unit, and starts the service. The user is named `palisade` and is granted only `CAP_NET_BIND_SERVICE`, so it can bind ports 80/443 without running as root. The installer prompts for an admin email and password, or generates credentials, then seeds them into the database with `palisade setup`.
@@ -53,7 +52,7 @@ There is no config file to edit. Installer settings are either flags in the syst
 Re-run the same command:
 
 ```bash
-curl -fsSL https://waf-install.astrareconslabs.com/coraza-waf-mod/install.sh | sudo bash
+curl -fsSL https://waf-install.astrareconslabs.com/palisade-waf/install.sh | sudo bash
 ```
 
 The installer detects the existing binary at `/usr/local/bin/palisade` and switches to upgrade mode. It downloads and verifies the latest release, replaces the binary, rewrites the systemd units, and restarts the service. It skips the interactive prompts. Admin credentials and TLS certificates are never touched on upgrade. Pin a specific version with `curl -fsSL ... | sudo CORAZA_VERSION=v1.2.3 bash`.
@@ -65,8 +64,8 @@ The installer detects the existing binary at `/usr/local/bin/palisade` and switc
 Requires Go 1.27+.
 
 ```bash
-git clone https://github.com/sinhaparth5/coraza-waf-mod.git
-cd coraza-waf-mod
+git clone https://github.com/sinhaparth5/palisade-waf.git
+cd palisade-waf
 make build      # go generate (minifies JS) + go build -> ./palisade
 
 # Seed an admin account (password is read from stdin, not a flag):

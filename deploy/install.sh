@@ -2,7 +2,7 @@
 # Palisade — single-line installer
 #
 # Usage (always installs the latest release):
-#   curl -fsSL https://waf-install.astrareconslabs.com/coraza-waf-mod/install.sh | sudo bash
+#   curl -fsSL https://waf-install.astrareconslabs.com/palisade-waf/install.sh | sudo bash
 #
 # Pin to a specific version:
 #   curl -fsSL ... | sudo CORAZA_VERSION=v1.0.0 bash
@@ -44,7 +44,7 @@ err()    { printf '%s%sERROR:%s %s\n' "$C_BOLD" "$C_RED" "$C_RESET" "$*" >&2; }
 
 # ── Project config ────────────────────────────────────────────────────────────
 GITHUB_API="https://api.github.com"
-GITHUB_REPO="sinhaparth5/coraza-waf-mod"
+GITHUB_REPO="sinhaparth5/palisade-waf"
 # ─────────────────────────────────────────────────────────────────────────────
 
 DRY_RUN="${DRY_RUN:-0}"
@@ -57,7 +57,7 @@ VAR_DIR="/var/lib/palisade"
 # Pre-2.5.0 name of this product (Coraza WAF Mod). Release assets are still
 # published under it, and an install found under it is migrated below.
 LEGACY_NAME="coraza-waf-mod"
-ASSET_NAME="coraza-waf-mod"
+ASSET_NAME="palisade-waf"
 # nginx-combined access log for GoAccess/fail2ban; its directory is created by
 # the unit's LogsDirectory= (owned by the service user), so the name must match.
 ACCESS_LOG_PATH="/var/log/palisade/access.log"
@@ -325,9 +325,14 @@ else
 	WORKDIR="$(mktemp -d)"
 	trap 'rm -rf "$WORKDIR"' EXIT
 
+	curl_get "${DOWNLOAD_BASE}/checksums.txt" -o "${WORKDIR}/checksums.txt"
+	# Releases up to v2.5.0 published assets as coraza-waf-mod-*; a pinned
+	# CORAZA_VERSION from then must still resolve.
+	if ! grep -q " ${ASSET}\$" "${WORKDIR}/checksums.txt"; then
+		ASSET="${LEGACY_NAME}-linux-${ARCH}"
+	fi
 	step "Downloading ${ASSET}"
 	curl_get "${DOWNLOAD_BASE}/${ASSET}" -o "${WORKDIR}/${ASSET}"
-	curl_get "${DOWNLOAD_BASE}/checksums.txt" -o "${WORKDIR}/checksums.txt"
 
 	step "Verifying SHA256"
 	(cd "$WORKDIR" && sha256sum --check --ignore-missing checksums.txt)
@@ -489,7 +494,7 @@ step "Installing systemd units"
 write_file "${UNIT_PATH}" <<UNIT
 [Unit]
 Description=Palisade (WAF + reverse proxy)
-Documentation=https://github.com/sinhaparth5/coraza-waf-mod
+Documentation=https://github.com/sinhaparth5/palisade-waf
 After=network.target
 
 [Service]

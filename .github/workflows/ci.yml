@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 env:
-  PACKAGE_NAME: coraza-waf-mod
+  PACKAGE_NAME: palisade-waf
   GO_VERSION: '1.27.x'
   GOLANGCI_LINT_VERSION: 'v2.14.0'
 
@@ -82,15 +82,17 @@ jobs:
           files: coverage.out
           flags: unit
           token: ${{ secrets.CODECOV_TOKEN }}
-          slug: sinhaparth5/coraza-waf-mod
+          slug: sinhaparth5/palisade-waf
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
+          report_type: test_results
           files: junit.xml
           flags: unit
           token: ${{ secrets.CODECOV_TOKEN }}
+          slug: sinhaparth5/palisade-waf
 
   test-external-db:
     name: Test (${{ matrix.driver }})
@@ -165,15 +167,17 @@ jobs:
           files: coverage.out
           flags: ${{ matrix.driver }}
           token: ${{ secrets.CODECOV_TOKEN }}
-          slug: sinhaparth5/coraza-waf-mod
+          slug: sinhaparth5/palisade-waf
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
+          report_type: test_results
           files: junit.xml
           flags: ${{ matrix.driver }}
           token: ${{ secrets.CODECOV_TOKEN }}
+          slug: sinhaparth5/palisade-waf
 
   release:
     name: Release
@@ -252,12 +256,12 @@ jobs:
           ## Install (Linux)
 
           \`\`\`bash
-          curl -fsSL https://waf-install.astrareconslabs.com/coraza-waf-mod/install.sh | sudo bash
+          curl -fsSL https://waf-install.astrareconslabs.com/palisade-waf/install.sh | sudo bash
           \`\`\`
 
           Pin to this exact version:
           \`\`\`bash
-          curl -fsSL https://waf-install.astrareconslabs.com/coraza-waf-mod/install.sh | sudo CORAZA_VERSION=${GITHUB_REF_NAME} bash
+          curl -fsSL https://waf-install.astrareconslabs.com/palisade-waf/install.sh | sudo CORAZA_VERSION=${GITHUB_REF_NAME} bash
           \`\`\`
 
           Re-running the installer is safe. It upgrades the binary and restarts the service without touching your existing config or database.

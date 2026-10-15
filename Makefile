@@ -1,7 +1,7 @@
 BINARY  := palisade
 # Release asset name: unchanged from the pre-Palisade releases so the installer
 # and every already-published download link keep working.
-ASSET   := coraza-waf-mod
+ASSET   := palisade-waf
 DIST    := dist
 
 # Version is the nearest git tag; falls back to the commit hash if no tag exists.
@@ -112,4 +112,4 @@ tag:
 	git push origin HEAD
 	git push origin $(VERSION)
 	@echo "==> GitHub Actions release workflow started — watch it at:"
-	@echo "    https://github.com/sinhaparth5/coraza-waf-mod/actions"
+	@echo "    https://github.com/sinhaparth5/palisade-waf/actions"
