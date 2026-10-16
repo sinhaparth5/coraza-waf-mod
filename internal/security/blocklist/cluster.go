@@ -6,6 +6,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"palisade/internal/security/ratelimit"
 	"palisade/internal/storage"
 )
 
@@ -25,7 +26,11 @@ const clusterChannel = "palisade:ipblocklist:reload"
 // a configured Redis instance is already this project's existing signal for
 // "this is a multi-node deployment".
 func (bl *IPBlocklist) EnableClusterSync(ctx context.Context, addr, password string, db *storage.DB) error {
-	client := redis.NewClient(&redis.Options{Addr: addr, Password: password})
+	opts, err := ratelimit.RedisOptions(addr, password)
+	if err != nil {
+		return err
+	}
+	client := redis.NewClient(opts)
 	if err := client.Ping(ctx).Err(); err != nil {
 		client.Close()
 		return err

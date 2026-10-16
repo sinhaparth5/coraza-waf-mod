@@ -336,6 +336,10 @@ func (h *Handler) APIUpdateService(c echo.Context) error {
 	if name == "" || backend == "" {
 		return apiError(c, http.StatusBadRequest, "name and backend cannot be empty")
 	}
+	if name != existing.Name && existing.RedisMode != "" {
+		// The Redis user, password and key prefix are all derived from the name.
+		return apiError(c, http.StatusBadRequest, "turn off this service's Redis namespace before renaming it")
+	}
 	aliases, canonical := existing.HostAliases, existing.CanonicalHost
 	if req.HostAliases != nil {
 		aliases = req.HostAliases
@@ -458,6 +462,7 @@ func (h *Handler) APIDeleteService(c echo.Context) error {
 	if err != nil {
 		return apiError(c, http.StatusBadRequest, "invalid id")
 	}
+	h.dropRedisUser(id)
 	if err := h.db.RemoveService(id); err != nil {
 		return apiError(c, http.StatusInternalServerError, err.Error())
 	}

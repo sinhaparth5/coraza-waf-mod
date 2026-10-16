@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -69,14 +70,12 @@ func NewRedisBackend(addr, password string, rate float64, burst int) (*RedisBack
 	if addr == "" {
 		return nil, fmt.Errorf("redis address must not be empty")
 	}
-	client := redis.NewClient(&redis.Options{
-		Addr:         addr,
-		Password:     password,
-		DB:           0,
-		DialTimeout:  3 * time.Second,
-		ReadTimeout:  2 * time.Second,
-		WriteTimeout: 2 * time.Second,
-	})
+	opts, err := RedisOptions(addr, password)
+	if err != nil {
+		return nil, err
+	}
+	opts.DialTimeout, opts.ReadTimeout, opts.WriteTimeout = 3*time.Second, 2*time.Second, 2*time.Second
+	client := redis.NewClient(opts)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := client.Ping(ctx).Err(); err != nil {
@@ -161,14 +160,32 @@ func (r *RedisBackend) Ping() error {
 	return r.client.Ping(ctx).Err()
 }
 
+// RedisOptions builds client options from a stored Redis connection: a
+// redis:// or rediss:// URL (TLS, username, DB number) or a bare host:port.
+// A non-empty password overrides any in the URL.
+func RedisOptions(addr, password string) (*redis.Options, error) {
+	opts := &redis.Options{Addr: addr}
+	if strings.Contains(addr, "://") {
+		var err error
+		if opts, err = redis.ParseURL(addr); err != nil {
+			return nil, err
+		}
+	}
+	if password != "" {
+		opts.Password = password
+	}
+	return opts, nil
+}
+
 // PingRedis opens a one-shot connection to verify addr+password without
 // creating a persistent backend. Returns nil on success.
 func PingRedis(addr, password string) error {
-	c := redis.NewClient(&redis.Options{
-		Addr:        addr,
-		Password:    password,
-		DialTimeout: 3 * time.Second,
-	})
+	opts, err := RedisOptions(addr, password)
+	if err != nil {
+		return err
+	}
+	opts.DialTimeout = 3 * time.Second
+	c := redis.NewClient(opts)
 	defer c.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

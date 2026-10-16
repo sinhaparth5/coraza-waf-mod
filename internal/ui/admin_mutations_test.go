@@ -515,8 +515,7 @@ func TestSettingsCards(t *testing.T) {
 		wantErr string
 	}{
 		{[]string{"rl_enabled", "1", "rl_rps", "0", "rl_burst", "5"}, "positive numbers"},
-		{[]string{"rl_enabled", "1", "rl_rps", "5", "rl_burst", "10", "rl_backend", "redis"}, "must not be empty"},
-		{[]string{"rl_enabled", "1", "rl_rps", "5", "rl_burst", "10", "rl_backend", "redis", "rl_redis_addr", "127.0.0.1:1"}, "connection failed"},
+		{[]string{"rl_enabled", "1", "rl_rps", "5", "rl_burst", "10", "rl_backend", "redis"}, "Redis connection in the Redis card first"},
 		{[]string{"rl_enabled", "1", "rl_rps", "5", "rl_burst", "10", "rl_backend", "memory"}, ""},
 		{[]string{"rl_backend", "memory"}, ""}, // disabled with blank numbers keeps stored ones
 	} {
@@ -531,18 +530,27 @@ func TestSettingsCards(t *testing.T) {
 	if env.count("ratelimit") != 2 {
 		t.Errorf("ratelimit reloads = %d", env.count("ratelimit"))
 	}
-	for addr, want := range map[string]string{"": "Address is required", "127.0.0.1:1": "Connection failed"} {
-		if rec := env.do("POST", "/admin/settings/ratelimit/test", form("rl_redis_addr", addr)); !strings.Contains(rec.Body.String(), want) {
+	for addr, want := range map[string]string{"": "Address is required", "127.0.0.1:1": "Connection failed", "redis://bad url": "Connection failed"} {
+		if rec := env.do("POST", "/admin/settings/redis/test", form("redis_addr", addr)); !strings.Contains(rec.Body.String(), want) {
 			t.Errorf("redis test %q: %s", addr, rec.Body)
 		}
 	}
+
+	// Redis connection card: an unreachable server is never saved.
+	if rec := env.do("POST", "/admin/settings/redis", form("redis_addr", "127.0.0.1:1")); !strings.Contains(rec.Body.String(), "connection failed") {
+		t.Errorf("redis save unreachable: %s", rec.Body)
+	}
+	if got, _, _ := env.db.GetRedisConfig(); got != "" {
+		t.Errorf("unreachable redis saved: %q", got)
+	}
 	if addr := os.Getenv("TEST_REDIS_ADDR"); addr != "" {
-		if rec := env.do("POST", "/admin/settings/ratelimit/test", form("rl_redis_addr", addr)); !strings.Contains(rec.Body.String(), "Connected") {
+		if rec := env.do("POST", "/admin/settings/redis/test", form("redis_addr", addr)); !strings.Contains(rec.Body.String(), "Connected") {
 			t.Errorf("redis test live: %s", rec.Body)
 		}
-		env.do("POST", "/admin/settings/ratelimit", form("rl_enabled", "1", "rl_rps", "5", "rl_burst", "10", "rl_backend", "redis", "rl_redis_addr", addr))
-		if got, _, _ := env.db.GetRedisConfig(); got != addr {
-			t.Errorf("redis addr = %q", got)
+		env.do("POST", "/admin/settings/redis", form("redis_addr", addr))
+		env.do("POST", "/admin/settings/ratelimit", form("rl_enabled", "1", "rl_rps", "5", "rl_burst", "10", "rl_backend", "redis"))
+		if got, _, _ := env.db.RateLimitRedis(); got != addr {
+			t.Errorf("rate limit redis addr = %q", got)
 		}
 	}
 

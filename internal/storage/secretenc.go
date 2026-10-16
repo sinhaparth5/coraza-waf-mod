@@ -46,6 +46,7 @@ var secretMetaKeys = []string{
 	"admin_totp_secret",
 	"admin_totp_pending_secret",
 	"redis_password",
+	"redis_ns_key",
 	"email_token",
 	"db_conn_password",
 	"db_conn_dsn",

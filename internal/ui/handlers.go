@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -377,6 +378,8 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/services/compress/:id", h.SetServiceCompress)
 	g.POST("/services/backends/:id", h.SetServiceBackends)
 	g.POST("/services/hosts/:id", h.SetServiceHosts)
+	g.GET("/services/redis/:id", h.ServiceRedisPanel)
+	g.POST("/services/redis/:id", h.SetServiceRedis)
 	g.POST("/services/schema/:id", h.SetServiceSchema)
 	g.POST("/services/cache/:id", h.SetServiceCache)
 	g.POST("/services/cache-session/:id", h.SetServiceCacheSession)
@@ -387,7 +390,8 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/settings/acme-email", h.SaveAcmeEmail)
 	g.POST("/settings/bot", h.SaveBotSettings)
 	g.POST("/settings/ratelimit", h.SaveRateLimitConfig)
-	g.POST("/settings/ratelimit/test", h.TestRedisConnection)
+	g.POST("/settings/redis", h.SaveRedisConfig)
+	g.POST("/settings/redis/test", h.TestRedisConnection)
 	g.POST("/settings/webhook", h.SaveWebhookConfig)
 	g.POST("/settings/webhook/test", h.TestWebhook)
 	g.POST("/settings/email", h.SaveEmailSettings)
@@ -1845,6 +1849,7 @@ func (h *Handler) DeleteService(c echo.Context) error {
 	if err != nil {
 		return c.String(http.StatusBadRequest, "invalid id")
 	}
+	h.dropRedisUser(id)
 	if err := h.db.RemoveService(id); err != nil {
 		return err
 	}
@@ -2198,9 +2203,9 @@ func (h *Handler) SetServiceRateLimit(c echo.Context) error {
 func (h *Handler) SettingsPage(c echo.Context) error {
 	email, _ := h.db.GetAdminEmail()
 	botEnabled, botThreshold, botTTL, _ := h.db.GetBotSettings()
-	redisAddr, _, _ := h.db.GetRedisConfig()
+	redisAddr, redisPwd, _ := h.db.GetRedisConfig()
 	rlBackend := "memory"
-	if redisAddr != "" {
+	if a, _, _ := h.db.RateLimitRedis(); a != "" {
 		rlBackend = "redis"
 	}
 	rlEnabled, rlRPS, rlBurst, _ := h.db.GetRateLimitSettings()
@@ -2233,7 +2238,8 @@ func (h *Handler) SettingsPage(c echo.Context) error {
 		"BotThreshold":           botThreshold,
 		"BotTTL":                 botTTL,
 		"RLBackend":              rlBackend,
-		"RLRedisAddr":            redisAddr,
+		"RedisAddr":              redisAddr,
+		"RedisPasswordSet":       redisPwd != "",
 		"RLEnabled":              rlEnabled,
 		"RLRPS":                  rlRPS,
 		"RLBurst":                rlBurst,
@@ -2530,6 +2536,99 @@ func (h *Handler) SetServiceHosts(c echo.Context) error {
 	return h.renderPartial(c, "services", "services-rows", h.serviceViews())
 }
 
+// dropRedisUser removes a deleted service's ACL user, best-effort: a Redis
+// that is down must not block deleting the service.
+func (h *Handler) dropRedisUser(id int) {
+	svc, err := h.db.GetService(id)
+	if err != nil || svc.RedisMode != services.RedisModeACL {
+		return
+	}
+	addr, password, _ := h.db.GetRedisConfig()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := services.DeprovisionRedis(ctx, addr, password, svc.Name); err != nil {
+		log.Printf("redis namespace [%s]: remove ACL user: %v", svc.Name, err)
+	}
+}
+
+// renderRedisPanel renders the service modal's Redis tab body.
+func (h *Handler) renderRedisPanel(c echo.Context, svc storage.Service, errMsg string) error {
+	addr, password, _ := h.db.GetRedisConfig()
+	data := map[string]any{"AdminPath": h.cfg.Admin.Path, "ID": svc.ID, "Configured": addr != "", "Mode": svc.RedisMode, "Error": errMsg}
+	if svc.RedisMode != "" && addr != "" {
+		key, err := h.db.GetOrCreateRedisNamespaceKey()
+		if err == nil {
+			var ns services.RedisNamespace
+			if ns, err = services.Namespace(addr, password, key, svc.Name, svc.RedisMode); err == nil {
+				data["URL"], data["Prefix"] = ns.URL, ns.Prefix
+			}
+		}
+		if err != nil && errMsg == "" {
+			data["Error"] = err.Error()
+		}
+	}
+	return h.renderPartial(c, "services", "svc-redis-panel", data)
+}
+
+// ServiceRedisPanel loads the Redis tab when the service modal opens. It is
+// fetched, not baked into the row, so connection URLs (which carry the
+// derived password) never sit in the services page HTML.
+func (h *Handler) ServiceRedisPanel(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		return c.String(http.StatusBadRequest, "invalid id")
+	}
+	svc, err := h.db.GetService(id)
+	if err != nil {
+		return c.String(http.StatusNotFound, "service not found")
+	}
+	return h.renderRedisPanel(c, svc, "")
+}
+
+// SetServiceRedis turns a service's Redis namespace on (enabled=1) or off.
+// Errors render inside the panel, so the tab always shows the stored state.
+func (h *Handler) SetServiceRedis(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		return c.String(http.StatusBadRequest, "invalid id")
+	}
+	svc, err := h.db.GetService(id)
+	if err != nil {
+		return c.String(http.StatusNotFound, "service not found")
+	}
+	addr, password, _ := h.db.GetRedisConfig()
+	if addr == "" {
+		return h.renderRedisPanel(c, svc, "")
+	}
+	ctx, cancel := context.WithTimeout(c.Request().Context(), 5*time.Second)
+	defer cancel()
+
+	mode := ""
+	if c.FormValue("enabled") == "1" {
+		key, err := h.db.GetOrCreateRedisNamespaceKey()
+		if err == nil {
+			mode, err = services.ProvisionRedis(ctx, addr, password, key, svc.Name)
+		}
+		if err != nil {
+			return h.renderRedisPanel(c, svc, err.Error())
+		}
+	} else if svc.RedisMode == services.RedisModeACL {
+		// Keep the namespace on if the user can't be removed: turning it
+		// off would leave a live login nobody is shown anymore.
+		if err := services.DeprovisionRedis(ctx, addr, password, svc.Name); err != nil {
+			return h.renderRedisPanel(c, svc, "Couldn't remove the Redis user: "+err.Error())
+		}
+	}
+	if err := h.db.SetServiceRedisMode(id, mode); err != nil {
+		return h.renderRedisPanel(c, svc, err.Error())
+	}
+	if err := h.registry.Reload(h.db); err != nil {
+		return h.renderRedisPanel(c, svc, err.Error())
+	}
+	svc.RedisMode = mode
+	return h.renderRedisPanel(c, svc, "")
+}
+
 // SetServiceCompress turns response compression on or off for one service.
 func (h *Handler) SetServiceCompress(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
@@ -2808,8 +2907,6 @@ func (h *Handler) SaveVarnishConfig(c echo.Context) error {
 // the active backend in the proxy handler.
 func (h *Handler) SaveRateLimitConfig(c echo.Context) error {
 	backend := c.FormValue("rl_backend")
-	addr := strings.TrimSpace(c.FormValue("rl_redis_addr"))
-	password := c.FormValue("rl_redis_password")
 	enabled := c.FormValue("rl_enabled") == "1"
 	rps, _ := strconv.ParseFloat(strings.TrimSpace(c.FormValue("rl_rps")), 64)
 	burst, _ := strconv.Atoi(strings.TrimSpace(c.FormValue("rl_burst")))
@@ -2834,19 +2931,16 @@ func (h *Handler) SaveRateLimitConfig(c echo.Context) error {
 			rlErr = "Failed to save: " + err.Error()
 		}
 	}
+	if rlErr == "" && backend == "redis" {
+		if addr, password, _ := h.db.GetRedisConfig(); addr == "" {
+			rlErr = "Set up the Redis connection in the Redis card first."
+		} else if err := ratelimit.PingRedis(addr, password); err != nil {
+			rlErr = "Redis connection failed: " + err.Error()
+		}
+	}
 	if rlErr == "" {
-		if backend == "redis" {
-			if addr == "" {
-				rlErr = "Redis address must not be empty."
-			} else if err := ratelimit.PingRedis(addr, password); err != nil {
-				rlErr = "Redis connection failed: " + err.Error()
-			} else if err := h.db.SetRedisConfig(addr, password); err != nil {
-				rlErr = "Failed to save: " + err.Error()
-			}
-		} else {
-			if err := h.db.SetRedisConfig("", ""); err != nil {
-				rlErr = "Failed to save: " + err.Error()
-			}
+		if err := h.db.SetRateLimitBackend(backend); err != nil {
+			rlErr = "Failed to save: " + err.Error()
 		}
 	}
 
@@ -2854,25 +2948,23 @@ func (h *Handler) SaveRateLimitConfig(c echo.Context) error {
 		h.reloadRateLimit()
 	}
 
-	rlBackend, rlAddr, rlEnabled, rlRPS, rlBurst := backend, addr, enabled, rps, burst
+	rlBackend, rlEnabled, rlRPS, rlBurst := backend, enabled, rps, burst
 	if rlErr != "" {
 		// Revert display to the stored config on error.
 		rlEnabled, rlRPS, rlBurst, _ = h.db.GetRateLimitSettings()
-		if storedAddr, _, _ := h.db.GetRedisConfig(); storedAddr != "" {
-			rlBackend, rlAddr = "redis", storedAddr
-		} else {
-			rlBackend, rlAddr = "memory", ""
+		rlBackend = "memory"
+		if a, _, _ := h.db.RateLimitRedis(); a != "" {
+			rlBackend = "redis"
 		}
 	}
 	return h.renderPartial(c, "settings", "ratelimit-card", map[string]any{
-		"AdminPath":   h.cfg.Admin.Path,
-		"RLBackend":   rlBackend,
-		"RLRedisAddr": rlAddr,
-		"RLEnabled":   rlEnabled,
-		"RLRPS":       rlRPS,
-		"RLBurst":     rlBurst,
-		"RLSaveOK":    rlErr == "",
-		"RLError":     rlErr,
+		"AdminPath": h.cfg.Admin.Path,
+		"RLBackend": rlBackend,
+		"RLEnabled": rlEnabled,
+		"RLRPS":     rlRPS,
+		"RLBurst":   rlBurst,
+		"RLSaveOK":  rlErr == "",
+		"RLError":   rlErr,
 	})
 }
 
@@ -3063,11 +3155,66 @@ func (h *Handler) ExportLogs(c echo.Context) error {
 	return nil
 }
 
+// SaveRedisConfig stores the Redis connection used by the global rate
+// limiter (when set to Redis) and by per-service Redis namespaces. A blank
+// password keeps the saved one, since the field is never pre-filled.
+func (h *Handler) SaveRedisConfig(c echo.Context) error {
+	addr := strings.TrimSpace(c.FormValue("redis_addr"))
+	password := c.FormValue("redis_password")
+	storedAddr, storedPwd, _ := h.db.GetRedisConfig()
+	if password == "" {
+		password = storedPwd
+	}
+	redisErr := ""
+	if addr == "" {
+		var using []string
+		for _, s := range h.registry.List() {
+			if s.RedisMode != "" {
+				using = append(using, s.Name)
+			}
+		}
+		if len(using) > 0 {
+			redisErr = "Turn off Redis on these services first: " + strings.Join(using, ", ") + "."
+		} else {
+			password = ""
+		}
+	} else if err := ratelimit.PingRedis(addr, password); err != nil {
+		redisErr = "Redis connection failed: " + err.Error()
+	}
+	if redisErr == "" {
+		if err := h.db.SetRedisConfig(addr, password); err != nil {
+			redisErr = "Failed to save: " + err.Error()
+		}
+	}
+	if redisErr == "" {
+		if h.reloadRateLimit != nil {
+			h.reloadRateLimit()
+		}
+		// A new server has none of the services' ACL users yet.
+		go func() {
+			if err := services.ReconcileRedis(context.Background(), h.db); err != nil {
+				log.Printf("redis namespaces: %v", err)
+			}
+		}()
+		storedAddr, storedPwd, _ = h.db.GetRedisConfig()
+	}
+	return h.renderPartial(c, "settings", "redis-card", map[string]any{
+		"AdminPath":        h.cfg.Admin.Path,
+		"RedisAddr":        storedAddr,
+		"RedisPasswordSet": storedPwd != "",
+		"RedisSaveOK":      redisErr == "",
+		"RedisError":       redisErr,
+	})
+}
+
 // TestRedisConnection tests reachability of a Redis server without saving anything.
 // Returns a small HTML fragment consumed by HTMX to show inline status.
 func (h *Handler) TestRedisConnection(c echo.Context) error {
-	addr := strings.TrimSpace(c.FormValue("rl_redis_addr"))
-	password := c.FormValue("rl_redis_password")
+	addr := strings.TrimSpace(c.FormValue("redis_addr"))
+	password := c.FormValue("redis_password")
+	if storedAddr, storedPwd, _ := h.db.GetRedisConfig(); password == "" && addr == storedAddr {
+		password = storedPwd // the field is never pre-filled, blank means "the saved one"
+	}
 	if addr == "" {
 		return c.HTML(http.StatusOK,
 			`<span class="text-red-600 text-[13px]">Address is required.</span>`)

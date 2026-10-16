@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -338,6 +339,7 @@ var schemaMigrations = []struct{ table, columnDef string }{
 	{"services", "health_interval INTEGER NOT NULL DEFAULT 0"},
 	{"services", "host_aliases TEXT NOT NULL DEFAULT ''"},
 	{"services", "canonical_host TEXT NOT NULL DEFAULT ''"},
+	{"services", "redis_mode TEXT NOT NULL DEFAULT ''"},
 }
 
 func (db *DB) migrate() error {
@@ -797,6 +799,7 @@ type Service struct {
 	// rollback reason as ExtraBackends.
 	HostAliases   []string
 	CanonicalHost string // "" = serve every name as-is; else Host or one alias, which the others 301 to
+	RedisMode     string // "" = no Redis namespace; "acl" | "prefix", see services.ProvisionRedis
 }
 
 // DefaultHealthInterval is the active health check interval used when a
@@ -1103,12 +1106,12 @@ func (db *DB) SetBotSettings(enabled bool, threshold, ttl int) error {
 
 // serviceColumns is shared by ListServices/GetService so their SELECT list
 // and Scan args can't drift out of sync as columns are added.
-const serviceColumns = `id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled, cache_by_session, session_cookie_name, cache_ttl_floor, cache_ttl_ceiling, cache_grace, cache_keep, allow_large_js_uploads, request_schema, schema_mode, http3_enabled, compress_enabled, extra_backends, lb_policy, health_path, health_interval, host_aliases, canonical_host`
+const serviceColumns = `id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled, cache_by_session, session_cookie_name, cache_ttl_floor, cache_ttl_ceiling, cache_grace, cache_keep, allow_large_js_uploads, request_schema, schema_mode, http3_enabled, compress_enabled, extra_backends, lb_policy, health_path, health_interval, host_aliases, canonical_host, redis_mode`
 
 func (db *DB) scanService(row interface{ Scan(...any) error }) (Service, error) {
 	var s Service
 	var extra, aliases string
-	err := row.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled, &s.CacheBySession, &s.SessionCookieName, &s.CacheTTLFloor, &s.CacheTTLCeiling, &s.CacheGrace, &s.CacheKeep, &s.AllowLargeJSUploads, &s.RequestSchema, &s.SchemaMode, &s.HTTP3Enabled, &s.CompressEnabled, &extra, &s.LBPolicy, &s.HealthPath, &s.HealthInterval, &aliases, &s.CanonicalHost)
+	err := row.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled, &s.CacheBySession, &s.SessionCookieName, &s.CacheTTLFloor, &s.CacheTTLCeiling, &s.CacheGrace, &s.CacheKeep, &s.AllowLargeJSUploads, &s.RequestSchema, &s.SchemaMode, &s.HTTP3Enabled, &s.CompressEnabled, &extra, &s.LBPolicy, &s.HealthPath, &s.HealthInterval, &aliases, &s.CanonicalHost, &s.RedisMode)
 	if extra != "" {
 		s.ExtraBackends = strings.Split(extra, "\n")
 	}
@@ -2532,8 +2535,9 @@ func (db *DB) PurgeRateLimitState(before time.Time) error {
 	return err
 }
 
-// GetRedisConfig returns the stored Redis address and password (both empty if
-// Redis is not configured and in-memory+SQLite persistence is active).
+// GetRedisConfig returns the stored Redis connection: a host:port address or
+// a redis:// / rediss:// URL (never carrying a password, see SetRedisConfig),
+// and the password. Both are empty when no Redis is configured.
 func (db *DB) GetRedisConfig() (addr, password string, err error) {
 	addr, err = db.getMeta("redis_addr")
 	if err != nil {
@@ -2543,13 +2547,84 @@ func (db *DB) GetRedisConfig() (addr, password string, err error) {
 	return
 }
 
-// SetRedisConfig persists the Redis backend address and password.
-// Pass empty strings to clear the Redis config and revert to in-memory+SQLite.
+// SetRedisConfig persists the Redis connection. A password embedded in a URL
+// is moved into the sealed redis_password key, so the plaintext redis_addr
+// key never holds a credential; an explicit password wins over the URL's.
+// Pass empty strings to clear it.
 func (db *DB) SetRedisConfig(addr, password string) error {
+	if strings.Contains(addr, "://") {
+		if u, err := url.Parse(addr); err == nil && u.User != nil {
+			if p, ok := u.User.Password(); ok {
+				if password == "" {
+					password = p
+				}
+				if name := u.User.Username(); name != "" {
+					u.User = url.User(name)
+				} else {
+					u.User = nil // url.User("") would render a stray "@"
+				}
+				addr = u.String()
+			}
+		}
+	}
 	if err := db.setMeta("redis_addr", addr); err != nil {
 		return err
 	}
 	return db.setSecretMeta("redis_password", password)
+}
+
+// RateLimitRedis returns the Redis connection when the global rate limiter
+// (and with it multi-node blocklist sync) is set to use Redis, else empty
+// strings. Before ratelimit_backend existed, a configured Redis address
+// meant exactly that, so an unset key falls back to it.
+func (db *DB) RateLimitRedis() (addr, password string, err error) {
+	addr, password, err = db.GetRedisConfig()
+	if err != nil || addr == "" {
+		return "", "", err
+	}
+	backend, err := db.getMeta("ratelimit_backend")
+	if err != nil || backend == "memory" {
+		return "", "", err
+	}
+	return addr, password, nil
+}
+
+// SetRateLimitBackend stores "memory" or "redis" as the global limiter's backend.
+func (db *DB) SetRateLimitBackend(backend string) error {
+	if backend != "redis" {
+		backend = "memory"
+	}
+	return db.setMeta("ratelimit_backend", backend)
+}
+
+// GetOrCreateRedisNamespaceKey returns the random key per-service Redis
+// passwords are derived from (see services.ProvisionRedis), generating it on
+// first use. Like the challenge secret, an unreadable stored key is an error,
+// never silently regenerated: that would change every service's password.
+func (db *DB) GetOrCreateRedisNamespaceKey() ([]byte, error) {
+	const key = "redis_ns_key"
+	secret, err := db.getSecretMeta(key)
+	if err != nil {
+		return nil, err
+	}
+	if secret == "" {
+		b := make([]byte, 32)
+		if _, err := rand.Read(b); err != nil {
+			return nil, fmt.Errorf("generate redis namespace key: %w", err)
+		}
+		secret = hex.EncodeToString(b)
+		if err := db.setSecretMeta(key, secret); err != nil {
+			return nil, err
+		}
+	}
+	return hex.DecodeString(secret)
+}
+
+// SetServiceRedisMode records how a service's Redis namespace is isolated:
+// "" (off), "acl" (enforced by a Redis ACL user) or "prefix" (convention).
+func (db *DB) SetServiceRedisMode(id int, mode string) error {
+	_, err := db.exec(`UPDATE services SET redis_mode = ? WHERE id = ?`, mode, id)
+	return err
 }
 
 // TypeSafeConfig holds the opt-in settings for TypeSafe-backed ASN/hosting

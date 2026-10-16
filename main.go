@@ -273,7 +273,7 @@ func main() {
 
 	// Choose rate-limit backend: Redis (multi-node) or in-process Limiter
 	// with SQLite write-back persistence (single-node, survives restarts).
-	redisAddr, redisPwd, _ := db.GetRedisConfig()
+	redisAddr, redisPwd, _ := db.RateLimitRedis()
 	rl := buildRateLimit(db, redisAddr, redisPwd)
 
 	// A configured Redis instance is this project's existing signal for a
@@ -311,6 +311,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("services registry: %v", err)
 	}
+	// Per-service Redis ACL users live only in Redis memory; re-create any a
+	// Redis restart dropped. A no-op without acl-mode services.
+	go services.RunRedisReconcile(db, time.Minute)
 
 	// Cache-return listener: the single static backend the Varnish VCL points
 	// at. Varnish fetches cache misses here and the registry routes them to
@@ -482,7 +485,7 @@ func main() {
 	// backend config changes. Reads the current DB config and hot-swaps
 	// the backend in the proxy handler — no restart needed.
 	reloadRateLimit := func() {
-		addr, pwd, _ := db.GetRedisConfig()
+		addr, pwd, _ := db.RateLimitRedis()
 		newBackend := buildRateLimit(db, addr, pwd)
 		h.ReloadRateLimit(newBackend)
 	}

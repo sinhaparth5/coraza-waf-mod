@@ -94,6 +94,7 @@
   <div class="flex flex-col gap-4 min-w-0">
   {{template "bot-card" .}}
   {{template "varnish-card" .}}
+  {{template "redis-card" .}}
   {{template "ratelimit-card" .}}
   {{template "webhook-card" .}}
   {{template "email-card" .}}
@@ -647,6 +648,47 @@
 </div>
 {{end}}
 
+{{define "redis-card"}}
+<div class="card p-5" id="redis-card">
+  <h2 class="text-[15px] font-bold text-slate-800 mb-1">Redis</h2>
+  <p class="text-[13px] text-slate-500 mb-5">One Redis server for this WAF: Docker, your own server or a hosted one. Rate limiting can use it below, and each service can get its own isolated area in it for app sessions (the Redis tab on <a href="{{.AdminPath}}/services" class="text-brand underline">Services</a>).</p>
+
+  {{if .RedisSaveOK}}
+  <div class="rounded-md bg-green-50 border border-green-200 text-green-700 text-[13px] px-4 py-3 mb-4">Saved. No restart needed.</div>
+  {{end}}
+  {{if .RedisError}}
+  <div class="rounded-md bg-red-50 border border-red-200 text-red-700 text-[13px] px-4 py-3 mb-4">{{.RedisError}}</div>
+  {{end}}
+
+  <form id="redis-form" hx-post="{{.AdminPath}}/settings/redis" hx-target="#redis-card" hx-swap="outerHTML" class="flex flex-col gap-4">
+    <div>
+      <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="redis_addr">Address or URL</label>
+      <input id="redis_addr" name="redis_addr" type="text" value="{{.RedisAddr}}" placeholder="localhost:6379 or rediss://default@host:6380/0" autocomplete="off"
+             class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"/>
+      <p class="text-[12px] text-slate-400 mt-1">Use <span class="font-mono">rediss://</span> for TLS, which most hosted Redis needs. Leave empty to remove the connection.</p>
+    </div>
+    <div>
+      <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="redis_password">Password <span class="font-normal text-slate-400">{{if .RedisPasswordSet}}(saved; leave blank to keep it){{else}}(leave blank if no auth){{end}}</span></label>
+      <input id="redis_password" name="redis_password" type="password" placeholder="Redis AUTH password" autocomplete="new-password"
+             class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition"/>
+    </div>
+    <div class="flex items-center gap-3">
+      <button type="submit" class="btn-primary px-6">Save</button>
+      <button type="button"
+              hx-post="{{.AdminPath}}/settings/redis/test"
+              hx-include="#redis-form"
+              hx-target="#redis-test-result"
+              hx-swap="innerHTML"
+              class="inline-flex items-center gap-2 rounded-md border border-line bg-surface text-slate-700 text-[13px] font-medium px-4 py-1.5 hover:bg-canvas transition-colors">
+        <i class="hgi hgi-stroke hgi-wifi-01 text-base"></i>
+        Test connection
+      </button>
+      <span id="redis-test-result" class="text-[13px]"></span>
+    </div>
+  </form>
+</div>
+{{end}}
+
 {{define "ratelimit-card"}}
 <div class="card p-5" id="ratelimit-card">
   <h2 class="text-[15px] font-bold text-slate-800 mb-1">Rate Limiting</h2>
@@ -688,8 +730,7 @@
       <label class="flex-1 flex items-start gap-3 rounded-md border p-4 cursor-pointer transition-colors
                     {{if ne .RLBackend "redis"}}border-brand bg-[#F0FBF4]{{else}}border-line bg-white hover:bg-surface{{end}}">
         <input type="radio" name="rl_backend" value="memory" class="mt-0.5 accent-brand"
-               {{if ne .RLBackend "redis"}}checked{{end}}
-               onchange="document.getElementById('redis-fields').classList.add('hidden')">
+               {{if ne .RLBackend "redis"}}checked{{end}}>
         <div>
           <p class="text-[13px] font-semibold text-slate-800">Memory + SQLite</p>
           <p class="text-[12px] text-slate-500 mt-0.5">In-process, state persisted to <code class="font-mono text-[11px]">waf.db</code> every 10 s. Single-node only.</p>
@@ -698,38 +739,12 @@
       <label class="flex-1 flex items-start gap-3 rounded-md border p-4 cursor-pointer transition-colors
                     {{if eq .RLBackend "redis"}}border-brand bg-[#F0FBF4]{{else}}border-line bg-white hover:bg-surface{{end}}">
         <input type="radio" name="rl_backend" value="redis" class="mt-0.5 accent-brand"
-               {{if eq .RLBackend "redis"}}checked{{end}}
-               onchange="document.getElementById('redis-fields').classList.remove('hidden')">
+               {{if eq .RLBackend "redis"}}checked{{end}}>
         <div>
           <p class="text-[13px] font-semibold text-slate-800">Redis</p>
-          <p class="text-[12px] text-slate-500 mt-0.5">Shared token buckets across multiple WAF instances. Requires a Redis 6+ server.</p>
+          <p class="text-[12px] text-slate-500 mt-0.5">Shared token buckets across multiple WAF instances, using the Redis connection above. Also syncs IP bans between instances.</p>
         </div>
       </label>
-    </div>
-
-    <div id="redis-fields" class="flex flex-col gap-4 {{if ne .RLBackend "redis"}}hidden{{end}}">
-      <div>
-        <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="rl_redis_addr">Redis address</label>
-        <input id="rl_redis_addr" name="rl_redis_addr" type="text" value="{{.RLRedisAddr}}" placeholder="localhost:6379"
-               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition font-mono"/>
-      </div>
-      <div>
-        <label class="block text-[13px] font-semibold text-slate-700 mb-1" for="rl_redis_password">Password <span class="font-normal text-slate-400">(leave blank if no auth)</span></label>
-        <input id="rl_redis_password" name="rl_redis_password" type="password" placeholder="Redis AUTH password"
-               class="w-full rounded-lg border border-line bg-white text-slate-800 text-[13px] px-3 py-2 outline-hidden focus-green focus:border-brand transition"/>
-      </div>
-      <div class="flex items-center gap-3">
-        <button type="button"
-                hx-post="{{.AdminPath}}/settings/ratelimit/test"
-                hx-include="#rl-form"
-                hx-target="#redis-test-result"
-                hx-swap="innerHTML"
-                class="inline-flex items-center gap-2 rounded-md border border-line bg-surface text-slate-700 text-[13px] font-medium px-4 py-1.5 hover:bg-canvas transition-colors">
-          <i class="hgi hgi-stroke hgi-wifi-01 text-base"></i>
-          Test connection
-        </button>
-        <span id="redis-test-result" class="text-[13px]"></span>
-      </div>
     </div>
 
     <div class="pt-1">

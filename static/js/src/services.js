@@ -219,6 +219,10 @@
     healthPathInput.value = d.healthPath || '';
     healthIntervalInput.value = parseInt(d.healthInterval) > 0 ? d.healthInterval : '';
 
+    var redisPanel = document.getElementById('svc-redis-panel');
+    redisPanel.textContent = '';
+    htmx.ajax('GET', adminPath + '/services/redis/' + d.id, { target: redisPanel, swap: 'innerHTML' });
+
     hostsForm.setAttribute('hx-post', adminPath + '/services/hosts/' + d.id);
     htmx.process(hostsForm);
     mainHost = (d.host || '').toLowerCase();

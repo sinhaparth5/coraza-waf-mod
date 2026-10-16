@@ -148,7 +148,8 @@ func (db *DB) schemaStatements() []string {
 			health_path      TEXT NOT NULL DEFAULT '',
 			health_interval  INTEGER NOT NULL DEFAULT 0,
 			host_aliases     TEXT NOT NULL DEFAULT '',
-			canonical_host   TEXT NOT NULL DEFAULT ''
+			canonical_host   TEXT NOT NULL DEFAULT '',
+			redis_mode       TEXT NOT NULL DEFAULT ''
 		)`, pk, ts),
 
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS certificates (
