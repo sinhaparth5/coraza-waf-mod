@@ -114,6 +114,7 @@ type Registry struct {
 	limiters  map[string]*ratelimit.Limiter // service name -> per-service limiter (nil if not configured)
 	certs     map[string]*tls.Certificate   // host (lowercase) -> uploaded custom cert
 	autoHosts map[string]bool               // host (lowercase) -> true if tls_mode == "auto"
+	hosts     map[string]int                // host or alias (lowercase) -> index into list
 	stopCheck chan struct{}                 // closed on Reload to stop the previous active health checks
 
 	healthMu sync.RWMutex
@@ -320,40 +321,25 @@ func (r *Registry) Reload(db *storage.DB) error {
 
 	certs := make(map[string]*tls.Certificate)
 	autoHosts := make(map[string]bool)
-	for _, s := range list {
-		if s.Host == "" {
-			continue // TLS only applies to Host-matched services (SNI needs a domain)
+	hosts := make(map[string]int)
+	for i, s := range list {
+		// TLS only applies to Host-matched services (SNI needs a domain);
+		// Hosts is empty for Prefix-matched ones.
+		var cert *tls.Certificate
+		if s.TLSMode == "custom" && s.Host != "" {
+			cert = loadServiceCert(db, s)
 		}
-		// Strip any accidental scheme prefix (http://, https://) that may have
-		// been stored before the sanitizeHost fix was in place.
-		rawHost := s.Host
-		if i := strings.Index(rawHost, "://"); i >= 0 {
-			rawHost = rawHost[i+3:]
-		}
-		host := strings.ToLower(strings.TrimRight(rawHost, "/"))
-		switch s.TLSMode {
-		case "custom":
-			certPath, keyPath := s.TLSCertPath, s.TLSKeyPath
-			if s.CertID > 0 {
-				// Pool cert: look up paths from the certificates table.
-				poolCert, err := db.GetCertificate(s.CertID)
-				if err != nil {
-					log.Printf("pool cert for service %q (cert_id=%d): %v", s.Name, s.CertID, err)
-					continue
-				}
-				certPath, keyPath = poolCert.CertPath, poolCert.KeyPath
+		for _, h := range s.Hosts() {
+			host := NormalizeHost(h)
+			if _, taken := hosts[host]; !taken {
+				hosts[host] = i // first service wins, as the old linear scan did
 			}
-			if certPath == "" || keyPath == "" {
-				continue
+			if cert != nil {
+				certs[host] = cert
 			}
-			cert, err := LoadCertificate(certPath, keyPath)
-			if err != nil {
-				log.Printf("load custom TLS cert for service %q: %v", s.Name, err)
-				continue
+			if s.TLSMode == "auto" {
+				autoHosts[host] = true
 			}
-			certs[host] = cert
-		case "auto":
-			autoHosts[host] = true
 		}
 	}
 
@@ -380,6 +366,7 @@ func (r *Registry) Reload(db *storage.DB) error {
 	r.limiters = newLimiters
 	r.certs = certs
 	r.autoHosts = autoHosts
+	r.hosts = hosts
 	r.mu.Unlock()
 
 	// Stop old janitor goroutines after the swap so in-flight checks still work.
@@ -496,11 +483,8 @@ func (r *Registry) Match(host, path string) *storage.Service {
 		return best
 	}
 
-	for i := range r.list {
-		s := &r.list[i]
-		if s.Host != "" && strings.ToLower(s.Host) == host {
-			return s
-		}
+	if i, ok := r.hosts[host]; ok {
+		return &r.list[i]
 	}
 	return nil
 }
@@ -536,12 +520,95 @@ func (r *Registry) hostMatch(host string, ok func(*storage.Service) bool) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for i := range r.list {
-		if r.list[i].Host != "" && strings.ToLower(r.list[i].Host) == host {
-			return ok(&r.list[i])
-		}
+	if i, found := r.hosts[host]; found {
+		return ok(&r.list[i])
 	}
 	return false
+}
+
+var hostnameRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:[0-9]{1,5})?$`)
+
+// ValidateHosts checks a Host-matched service's hostnames before they are
+// saved: every alias must be a plain hostname, none may repeat Host or each
+// other, none may already belong to another service in list (selfID is the
+// service being edited, 0 for a new one), and canonical must be "" or one of
+// them. It returns the normalized aliases and canonical host.
+func ValidateHosts(selfID int, host string, aliases []string, canonical string, list []storage.Service) ([]string, string, error) {
+	host = NormalizeHost(host)
+	if host == "" {
+		if len(aliases) > 0 || canonical != "" {
+			return nil, "", fmt.Errorf("extra hostnames need a host-matched service")
+		}
+		return nil, "", nil
+	}
+	owner := make(map[string]string)
+	for _, s := range list {
+		if s.ID == selfID {
+			continue
+		}
+		for _, h := range s.Hosts() {
+			owner[NormalizeHost(h)] = s.Name
+		}
+	}
+	seen := map[string]bool{host: true}
+	if name, ok := owner[host]; ok {
+		return nil, "", fmt.Errorf("%s is already used by service %q", host, name)
+	}
+	var out []string
+	for _, a := range aliases {
+		a = NormalizeHost(a)
+		if a == "" {
+			continue
+		}
+		if !hostnameRe.MatchString(a) {
+			return nil, "", fmt.Errorf("%q is not a valid hostname", a)
+		}
+		if seen[a] {
+			return nil, "", fmt.Errorf("%s is listed twice", a)
+		}
+		if name, ok := owner[a]; ok {
+			return nil, "", fmt.Errorf("%s is already used by service %q", a, name)
+		}
+		seen[a] = true
+		out = append(out, a)
+	}
+	if canonical = NormalizeHost(canonical); canonical != "" && !seen[canonical] {
+		return nil, "", fmt.Errorf("redirect target %s is not one of this service's hostnames", canonical)
+	}
+	return out, canonical, nil
+}
+
+// NormalizeHost lowercases a stored host and strips any accidental scheme
+// prefix or trailing slash saved before sanitizeHost existed.
+func NormalizeHost(h string) string {
+	if i := strings.Index(h, "://"); i >= 0 {
+		h = h[i+3:]
+	}
+	return strings.ToLower(strings.TrimRight(strings.TrimSpace(h), "/"))
+}
+
+// loadServiceCert loads a custom-mode service's uploaded or pool certificate,
+// or returns nil (logged) when it has none or it fails to load.
+func loadServiceCert(db *storage.DB, s storage.Service) *tls.Certificate {
+	certPath, keyPath := s.TLSCertPath, s.TLSKeyPath
+	if s.CertID > 0 {
+		// Pool cert: look up paths from the certificates table.
+		poolCert, err := db.GetCertificate(s.CertID)
+		if err != nil {
+			log.Printf("pool cert for service %q (cert_id=%d): %v", s.Name, s.CertID, err)
+			return nil
+		}
+		certPath, keyPath = poolCert.CertPath, poolCert.KeyPath
+	}
+	if certPath == "" || keyPath == "" {
+		return nil
+	}
+	cert, err := LoadCertificate(certPath, keyPath)
+	if err != nil {
+		log.Printf("load custom TLS cert for service %q: %v", s.Name, err)
+		return nil
+	}
+	return cert
 }
 
 // Proxy returns the reverse proxy for the named service.

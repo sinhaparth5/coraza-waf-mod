@@ -221,6 +221,15 @@ func (h *Handler) Handle(c echo.Context) error {
 	appName := unmatchedHostAppName
 	if app != nil {
 		appName = app.Name
+		// Before every other stage: the canonical host runs the same
+		// pipeline, so checking the alias request too would only double it.
+		if target := canonicalRedirect(r, app); target != "" {
+			code := http.StatusMovedPermanently
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+				code = http.StatusPermanentRedirect // keep the method and body
+			}
+			return c.Redirect(code, target)
+		}
 	}
 
 	// Enrich once per request — all lookups are in-process memory reads,
@@ -852,4 +861,31 @@ func (rw *responseWriter) Flush() {
 	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// canonicalRedirect returns the URL to redirect r to when app has a
+// canonical host and r arrived on one of its other names, else "".
+// Prefix-matched services are left alone: they match on any host.
+func canonicalRedirect(r *http.Request, app *storage.Service) string {
+	if app.CanonicalHost == "" || app.Prefix != "" {
+		return ""
+	}
+	host, port := r.Host, ""
+	if h, p, err := net.SplitHostPort(r.Host); err == nil {
+		host, port = h, p
+	}
+	if strings.EqualFold(host, app.CanonicalHost) {
+		return ""
+	}
+	target := app.CanonicalHost
+	if port != "" {
+		target = net.JoinHostPort(target, port)
+	}
+	scheme := "http"
+	// X-Forwarded-Proto covers a TLS-terminating proxy (e.g. Cloudflare
+	// Flexible) in front; spoofing it only misdirects the spoofer's own request.
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	return scheme + "://" + target + r.URL.RequestURI()
 }

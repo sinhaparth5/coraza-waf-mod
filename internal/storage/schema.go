@@ -146,7 +146,9 @@ func (db *DB) schemaStatements() []string {
 			extra_backends   TEXT NOT NULL DEFAULT '',
 			lb_policy        TEXT NOT NULL DEFAULT 'round_robin',
 			health_path      TEXT NOT NULL DEFAULT '',
-			health_interval  INTEGER NOT NULL DEFAULT 0
+			health_interval  INTEGER NOT NULL DEFAULT 0,
+			host_aliases     TEXT NOT NULL DEFAULT '',
+			canonical_host   TEXT NOT NULL DEFAULT ''
 		)`, pk, ts),
 
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS certificates (

@@ -336,6 +336,8 @@ var schemaMigrations = []struct{ table, columnDef string }{
 	{"services", "lb_policy TEXT NOT NULL DEFAULT 'round_robin'"},
 	{"services", "health_path TEXT NOT NULL DEFAULT ''"},
 	{"services", "health_interval INTEGER NOT NULL DEFAULT 0"},
+	{"services", "host_aliases TEXT NOT NULL DEFAULT ''"},
+	{"services", "canonical_host TEXT NOT NULL DEFAULT ''"},
 }
 
 func (db *DB) migrate() error {
@@ -790,6 +792,11 @@ type Service struct {
 	LBPolicy       string // "round_robin" | "least_conn"
 	HealthPath     string // active health check path, e.g. "/healthz"; "" = passive checks only
 	HealthInterval int    // seconds between active checks; 0 = DefaultHealthInterval
+	// HostAliases are extra hostnames routed to this service alongside Host,
+	// e.g. "www.example.com". Kept out of the host column for the same
+	// rollback reason as ExtraBackends.
+	HostAliases   []string
+	CanonicalHost string // "" = serve every name as-is; else Host or one alias, which the others 301 to
 }
 
 // DefaultHealthInterval is the active health check interval used when a
@@ -799,6 +806,22 @@ const DefaultHealthInterval = 10
 // Backends returns every backend URL of the service, Backend first.
 func (s Service) Backends() []string {
 	return append([]string{s.Backend}, s.ExtraBackends...)
+}
+
+// Hosts returns every hostname the service answers to, Host first, or nil
+// for a Prefix-matched service.
+func (s Service) Hosts() []string {
+	if s.Host == "" {
+		return nil
+	}
+	return append([]string{s.Host}, s.HostAliases...)
+}
+
+// SetServiceHosts replaces a service's host aliases and canonical host.
+func (db *DB) SetServiceHosts(id int, aliases []string, canonical string) error {
+	_, err := db.exec(`UPDATE services SET host_aliases = ?, canonical_host = ? WHERE id = ?`,
+		strings.Join(aliases, "\n"), canonical, id)
+	return err
 }
 
 // SetServiceBackends replaces a service's backend list (backends[0] becomes
@@ -1080,14 +1103,17 @@ func (db *DB) SetBotSettings(enabled bool, threshold, ttl int) error {
 
 // serviceColumns is shared by ListServices/GetService so their SELECT list
 // and Scan args can't drift out of sync as columns are added.
-const serviceColumns = `id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled, cache_by_session, session_cookie_name, cache_ttl_floor, cache_ttl_ceiling, cache_grace, cache_keep, allow_large_js_uploads, request_schema, schema_mode, http3_enabled, compress_enabled, extra_backends, lb_policy, health_path, health_interval`
+const serviceColumns = `id, name, host, prefix, backend, created_at, tls_mode, tls_cert_path, tls_key_path, tls_expires_at, rate_limit_rps, rate_limit_burst, bot_mode, cert_id, cache_enabled, cache_by_session, session_cookie_name, cache_ttl_floor, cache_ttl_ceiling, cache_grace, cache_keep, allow_large_js_uploads, request_schema, schema_mode, http3_enabled, compress_enabled, extra_backends, lb_policy, health_path, health_interval, host_aliases, canonical_host`
 
 func (db *DB) scanService(row interface{ Scan(...any) error }) (Service, error) {
 	var s Service
-	var extra string
-	err := row.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled, &s.CacheBySession, &s.SessionCookieName, &s.CacheTTLFloor, &s.CacheTTLCeiling, &s.CacheGrace, &s.CacheKeep, &s.AllowLargeJSUploads, &s.RequestSchema, &s.SchemaMode, &s.HTTP3Enabled, &s.CompressEnabled, &extra, &s.LBPolicy, &s.HealthPath, &s.HealthInterval)
+	var extra, aliases string
+	err := row.Scan(&s.ID, &s.Name, &s.Host, &s.Prefix, &s.Backend, &s.CreatedAt, &s.TLSMode, &s.TLSCertPath, &s.TLSKeyPath, &s.TLSExpiresAt, &s.RateLimitRPS, &s.RateLimitBurst, &s.BotMode, &s.CertID, &s.CacheEnabled, &s.CacheBySession, &s.SessionCookieName, &s.CacheTTLFloor, &s.CacheTTLCeiling, &s.CacheGrace, &s.CacheKeep, &s.AllowLargeJSUploads, &s.RequestSchema, &s.SchemaMode, &s.HTTP3Enabled, &s.CompressEnabled, &extra, &s.LBPolicy, &s.HealthPath, &s.HealthInterval, &aliases, &s.CanonicalHost)
 	if extra != "" {
 		s.ExtraBackends = strings.Split(extra, "\n")
+	}
+	if aliases != "" {
+		s.HostAliases = strings.Split(aliases, "\n")
 	}
 	return s, err
 }

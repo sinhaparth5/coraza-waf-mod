@@ -132,6 +132,10 @@
   var backendsText = document.getElementById('svc-backends');
   var healthPathInput = document.getElementById('svc-health-path');
   var healthIntervalInput = document.getElementById('svc-health-interval');
+  var hostsForm = document.getElementById('svc-hosts-form');
+  var aliasesText = document.getElementById('svc-host-aliases');
+  var canonicalSelect = document.getElementById('svc-canonical-host');
+  var mainHost = '';
   var compressForm = document.getElementById('svc-compress-form');
   var compressToggle = document.getElementById('svc-compress-enabled');
   var schemaForm = document.getElementById('svc-schema-form');
@@ -168,6 +172,23 @@
     btn.addEventListener('click', function () { showTab(btn.dataset.tab); });
   });
 
+  // The redirect target can be the main host or any alias, so its options
+  // follow whatever is currently typed into the aliases box.
+  function syncCanonicalOptions(selected) {
+    var names = [mainHost].concat(aliasesText.value.split('\n').map(function (s) { return s.trim().toLowerCase(); }));
+    while (canonicalSelect.options.length > 1) canonicalSelect.remove(1);
+    names.forEach(function (n) {
+      if (!n || Array.prototype.some.call(canonicalSelect.options, function (o) { return o.value === n; })) return;
+      var opt = document.createElement('option');
+      opt.value = n;
+      opt.textContent = n;
+      canonicalSelect.appendChild(opt);
+    });
+    canonicalSelect.value = selected;
+    if (canonicalSelect.value !== selected) canonicalSelect.value = '';
+  }
+  aliasesText.addEventListener('input', function () { syncCanonicalOptions(canonicalSelect.value); });
+
   function openModal(d) {
     var adminPath = botForm.dataset.adminPath || '/admin';
     nameLabel.textContent = d.name;
@@ -197,6 +218,12 @@
     if (lbRadio) lbRadio.checked = true;
     healthPathInput.value = d.healthPath || '';
     healthIntervalInput.value = parseInt(d.healthInterval) > 0 ? d.healthInterval : '';
+
+    hostsForm.setAttribute('hx-post', adminPath + '/services/hosts/' + d.id);
+    htmx.process(hostsForm);
+    mainHost = (d.host || '').toLowerCase();
+    aliasesText.value = d.aliases || '';
+    syncCanonicalOptions(d.canonical || '');
 
     compressForm.setAttribute('hx-post', adminPath + '/services/compress/' + d.id);
     htmx.process(compressForm);
@@ -235,12 +262,14 @@
     // TLS termination resolves certs by SNI, which needs a domain — the tab
     // only applies to host-matched services.
     overlay.querySelector('.svc-tab-btn[data-tab="tls"]').classList.toggle('hidden', d.hasHost !== '1');
+    // Aliases only make sense next to a Host; Prefix services match any host.
+    overlay.querySelector('.svc-tab-btn[data-tab="hosts"]').classList.toggle('hidden', d.hasHost !== '1');
 
     deleteBtn.setAttribute('hx-delete', '/admin/services/' + d.id);
     deleteBtn.setAttribute('hx-confirm', 'Remove service ' + d.name + '?');
     htmx.process(deleteBtn);
 
-    ['tls-error', 'rl-error', 'bot-error', 'svc-uploads-error', 'svc-http3-error', 'svc-compress-error', 'svc-backends-error', 'svc-schema-error', 'svc-cache-error', 'svc-cache-session-error', 'svc-cache-tuning-error'].forEach(function (id) {
+    ['tls-error', 'rl-error', 'bot-error', 'svc-uploads-error', 'svc-http3-error', 'svc-compress-error', 'svc-backends-error', 'svc-hosts-error', 'svc-schema-error', 'svc-cache-error', 'svc-cache-session-error', 'svc-cache-tuning-error'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.textContent = '';
     });
@@ -289,6 +318,7 @@
   document.body.addEventListener('tls-saved', closeModal);
   document.body.addEventListener('rl-saved', closeModal);
   document.body.addEventListener('backends-saved', closeModal);
+  document.body.addEventListener('hosts-saved', closeModal);
   document.body.addEventListener('htmx:afterRequest', function (e) {
     var elt = e.detail.elt;
     if ((elt === botForm || elt === uploadsForm || elt === http3Form || elt === compressForm || elt === schemaForm || elt === cacheForm || elt === cacheSessionForm || elt === cacheTuningForm || elt === deleteBtn) && e.detail.successful) closeModal();

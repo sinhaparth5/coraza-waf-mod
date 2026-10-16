@@ -14,6 +14,14 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+### Added
+
+- Extra hostnames per service. In a service's new **Hosts** tab, list other names that should reach it, such as `www.example.com` next to `example.com`, and optionally pick one name the others redirect to (301 for GET and HEAD, 308 otherwise, path and query kept). The extra names share every setting and rule, automatic TLS issues certificates for them too, and the tab includes a short Cloudflare setup checklist. A hostname another service already uses is refused, and the API accepts `host_aliases` and `canonical_host`.
+
+### Fixed
+
+- The service settings modal is wider, so all of its tabs fit on one row.
+
 ## [2.7.0] - 2026-10-15
 
 ### Added

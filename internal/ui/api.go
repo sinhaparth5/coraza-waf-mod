@@ -243,6 +243,9 @@ func (h *Handler) APICreateService(c echo.Context) error {
 	var host, prefix string
 	if req.MatchType == "host" {
 		host = sanitizeHost(req.MatchValue)
+		if _, _, err := services.ValidateHosts(0, host, nil, "", h.registry.List()); err != nil {
+			return apiError(c, http.StatusBadRequest, err.Error())
+		}
 	} else {
 		prefix = req.MatchValue
 	}
@@ -281,6 +284,8 @@ func (h *Handler) APICreateService(c echo.Context) error {
 type apiUpdateServiceRequest struct {
 	Name                *string  `json:"name"`
 	Host                *string  `json:"host"`
+	HostAliases         []string `json:"host_aliases"`   // replaces the whole list, e.g. ["www.example.com"]
+	CanonicalHost       *string  `json:"canonical_host"` // "" = no redirect; else host or an alias
 	Prefix              *string  `json:"prefix"`
 	Backend             *string  `json:"backend"`
 	Backends            []string `json:"backends"` // replaces the whole list, first = primary
@@ -331,8 +336,25 @@ func (h *Handler) APIUpdateService(c echo.Context) error {
 	if name == "" || backend == "" {
 		return apiError(c, http.StatusBadRequest, "name and backend cannot be empty")
 	}
+	aliases, canonical := existing.HostAliases, existing.CanonicalHost
+	if req.HostAliases != nil {
+		aliases = req.HostAliases
+	}
+	if req.CanonicalHost != nil {
+		canonical = *req.CanonicalHost
+	}
+	if host == "" {
+		aliases, canonical = nil, "" // a prefix-matched service has no names to alias
+	}
+	aliases, canonical, err = services.ValidateHosts(id, host, aliases, canonical, h.registry.List())
+	if err != nil {
+		return apiError(c, http.StatusBadRequest, err.Error())
+	}
 
 	if err := h.db.UpdateService(id, name, host, prefix, backend); err != nil {
+		return apiError(c, http.StatusInternalServerError, err.Error())
+	}
+	if err := h.db.SetServiceHosts(id, aliases, canonical); err != nil {
 		return apiError(c, http.StatusInternalServerError, err.Error())
 	}
 	if req.Backend != nil || req.Backends != nil || req.LBPolicy != nil || req.HealthPath != nil || req.HealthInterval != nil {

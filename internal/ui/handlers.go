@@ -376,6 +376,7 @@ func (h *Handler) Register(e *echo.Echo) {
 	g.POST("/services/http3/:id", h.SetServiceHTTP3)
 	g.POST("/services/compress/:id", h.SetServiceCompress)
 	g.POST("/services/backends/:id", h.SetServiceBackends)
+	g.POST("/services/hosts/:id", h.SetServiceHosts)
 	g.POST("/services/schema/:id", h.SetServiceSchema)
 	g.POST("/services/cache/:id", h.SetServiceCache)
 	g.POST("/services/cache-session/:id", h.SetServiceCacheSession)
@@ -1799,6 +1800,9 @@ func (h *Handler) AddService(c echo.Context) error {
 	var host, prefix string
 	if matchType == "host" {
 		host = sanitizeHost(matchValue)
+		if _, _, err := services.ValidateHosts(0, host, nil, "", h.registry.List()); err != nil {
+			return h.wizardError(c, err.Error())
+		}
 	} else {
 		prefix = matchValue
 	}
@@ -2493,6 +2497,36 @@ func (h *Handler) SetServiceBackends(c echo.Context) error {
 		return fail(err.Error())
 	}
 	c.Response().Header().Set("HX-Trigger", "backends-saved")
+	return h.renderPartial(c, "services", "services-rows", h.serviceViews())
+}
+
+// SetServiceHosts saves a host-matched service's extra hostnames (one per
+// line, e.g. www.example.com) and which name the others redirect to.
+func (h *Handler) SetServiceHosts(c echo.Context) error {
+	fail := func(msg string) error {
+		c.Response().Header().Set("HX-Retarget", "#svc-hosts-error")
+		c.Response().Header().Set("HX-Reswap", "innerHTML")
+		return c.String(http.StatusOK, html.EscapeString(msg))
+	}
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id < 1 {
+		return fail("invalid service id")
+	}
+	svc, err := h.db.GetService(id)
+	if err != nil {
+		return fail("service not found")
+	}
+	aliases, canonical, err := services.ValidateHosts(id, svc.Host, strings.Split(c.FormValue("aliases"), "\n"), c.FormValue("canonical"), h.registry.List())
+	if err != nil {
+		return fail(err.Error())
+	}
+	if err := h.db.SetServiceHosts(id, aliases, canonical); err != nil {
+		return fail(err.Error())
+	}
+	if err := h.registry.Reload(h.db); err != nil {
+		return fail(err.Error())
+	}
+	c.Response().Header().Set("HX-Trigger", "hosts-saved")
 	return h.renderPartial(c, "services", "services-rows", h.serviceViews())
 }
 

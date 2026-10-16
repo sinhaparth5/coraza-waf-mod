@@ -275,7 +275,24 @@ func TestServiceSettingHandlers(t *testing.T) {
 		t.Errorf("backends error = %q (retarget %q)", rec.Body.String(), rec.Header().Get("HX-Retarget"))
 	}
 
+	// Hosts tab: a name another service owns is refused in the tab's error box.
+	env.seedService("blog", "blog.example.com")
+	rec = env.do("POST", "/admin/services/hosts/"+id, form("aliases", "blog.example.com"))
+	if rec.Header().Get("HX-Retarget") != "#svc-hosts-error" || !strings.Contains(rec.Body.String(), "blog") {
+		t.Errorf("hosts conflict = %q (retarget %q)", rec.Body.String(), rec.Header().Get("HX-Retarget"))
+	}
+	rec = env.do("POST", "/admin/services/hosts/"+id, form("aliases", "WWW.shop.example.com\n", "canonical", "shop.example.com"))
+	if rec.Header().Get("HX-Trigger") != "hosts-saved" {
+		t.Errorf("hosts save = %d %q", rec.Code, rec.Body.String())
+	}
+	if !env.h.registry.IsServiceHost("www.shop.example.com") {
+		t.Error("alias not routed after save")
+	}
+
 	got, _ := env.db.GetService(svc.ID)
+	if len(got.HostAliases) != 1 || got.HostAliases[0] != "www.shop.example.com" || got.CanonicalHost != "shop.example.com" {
+		t.Errorf("hosts = %v %q", got.HostAliases, got.CanonicalHost)
+	}
 	if got.BotMode != "always" || !got.AllowLargeJSUploads || !got.HTTP3Enabled || !got.CompressEnabled || len(got.ExtraBackends) != 1 || got.LBPolicy != "least_conn" || got.HealthPath != "/healthz" || got.SchemaMode != "enforce" || !got.CacheEnabled ||
 		!got.CacheBySession || got.SessionCookieName != "sid" || got.CacheTTLFloor != 60 || got.CacheTTLCeiling != 600 || got.CacheGrace != 10 {
 		t.Errorf("service = %+v", got)
