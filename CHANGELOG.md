@@ -14,6 +14,8 @@ rather than growing this file forever.
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-10-16
+
 ### Added
 
 - Extra hostnames per service. In a service's new **Hosts** tab, list other names that should reach it, such as `www.example.com` next to `example.com`, and optionally pick one name the others redirect to (301 for GET and HEAD, 308 otherwise, path and query kept). The extra names share every setting and rule, automatic TLS issues certificates for them too, and the tab includes a short Cloudflare setup checklist. A hostname another service already uses is refused, and the API accepts `host_aliases` and `canonical_host`.
@@ -27,25 +29,5 @@ rather than growing this file forever.
 
 - The service settings modal is wider, so all of its tabs fit on one row.
 
-## [2.7.0] - 2026-10-15
-
-### Added
-
-- Response compression, opt-in per service. Turn on **Compress responses** in a service's Cache tab (or set `compress_enabled` through the API) and Palisade compresses text responses over 1 KB (HTML, CSS, JavaScript, JSON, SVG and similar) with zstd or gzip, whichever the browser supports, when the backend didn't already compress them. Images, video, live event streams (SSE) and WebSockets pass through unchanged, streamed responses still arrive chunk by chunk, and responses carry `Vary: Accept-Encoding` so caches keep the variants apart. It doesn't need Varnish.
-- Several backends per service, with load balancing. In a service's new **Backends** tab, list one backend URL per line and choose round robin or least connections. A backend that stops answering leaves the rotation, and GET and HEAD requests that hit it are retried once on another backend, so stopping one of two backends causes no failed page loads. Optionally set a health check path and interval: each backend is then checked on that path and only rejoins once it answers again. Without one, a failed backend sits out for 10 seconds before getting traffic again. Each backend's health shows on the Services page and as `palisade_backend_up` in Prometheus, and the API accepts `backends`, `lb_policy`, `health_path` and `health_interval`.
-- Readable block pages. A browser that is blocked (IP or country rule, firewall rule, rate limit) now sees a page with the status, a short reason, the time and the request ID instead of raw JSON, so a visitor can quote the ID and you can find the exact row in the logs. Rule details are not shown. API clients and anything that doesn't ask for HTML still get JSON, which now also includes `request_id`.
-- Custom WAF rules from the admin UI. The WAF Rules page's dry-run card is now **Custom Rules**: write a `SecRule` (ids 1000000-1999999), dry-run it against recent traffic, then save it globally or for one service and it blocks on the next request, with no restart or shell access. Rules can be edited, switched off and deleted from the list below the card, and are also available at `/api/v1/waf-rules/custom`. A rule is compiled before it is saved, and anything other than `SecRule`/`SecAction` (such as `Include` or `SecRuleEngine`) is refused.
-
-### Changed
-
-- Palisade now keeps up to 100 idle connections open to each backend instead of Go's default of 2, so busy services reuse connections instead of opening a new TCP (and TLS) connection for most requests. In a test of 10 rounds of 20 concurrent requests, new backend connections dropped from 182 to 20.
-
-### Security
-
-- CI now runs govulncheck on every push and pull request, and weekly. It fails when Palisade's code reaches a known vulnerability in a dependency or in the Go standard library.
-- Updated the bundled OWASP Core Rule Set from 4.0.0 (February 2024) to 4.25.0, bringing in more than a year and a half of new detections and false-positive fixes. The CRS is now a versioned dependency, so Dependabot proposes each new CRS release automatically, and a new baseline test checks on every update that common attacks are still blocked and ordinary traffic still passes.
-- Builds now require Go 1.27.2 or later, which fixes 12 Go standard-library vulnerabilities reachable from Palisade (HTTP/2, `net/http`, `crypto/tls`, `html/template`, `net/textproto`).
-- Updated dependencies to their latest patch releases, including libinjection-go 0.3.5 (the WAF's SQL injection and XSS detector) and `golang.org/x/net` 0.61.0.
-
-[Unreleased]: https://github.com/sinhaparth5/palisade-waf/compare/v2.7.0...main
-[2.7.0]: https://github.com/sinhaparth5/palisade-waf/compare/v2.6.0...v2.7.0
+[Unreleased]: https://github.com/sinhaparth5/palisade-waf/compare/v2.8.0...main
+[2.8.0]: https://github.com/sinhaparth5/palisade-waf/compare/v2.7.0...v2.8.0
